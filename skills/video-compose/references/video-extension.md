@@ -75,7 +75,7 @@ If every answer is "no" for a given pair (two unrelated scenes), parallel is fin
 
 Each `generate_video.js` call takes 2–4 min wall-clock — but it runs in the background, so the chat stays interactive. Sequence:
 
-1. Tell the user one short sentence: *"Rendering scene 1 in the background — about 3 min."* Fire `node "$PAI_REPO_ROOT/server/scripts/generate_video.js" …` for clip A. Save the `backgroundTaskId` (the hook auto-backgrounds the call — see `.claude/hooks/require_background_for_generate.js`).
+1. Tell the user one short sentence: *"Rendering scene 1 in the background — about 3 min."* Fire `node "$PAI_REPO_ROOT/server/scripts/generate_video.js" …` for clip A. Keep the bash id for the poll in step 2.
 2. `BashOutput`-poll the task until the `{ ok: true, output_url, ... }` JSON line lands. Read the JSON, add the `video_result` node for clip A to `./workflow.json`.
 3. Tell the user *"Scene 1 ready, kicking off scene 2."* Fire the CLI for clip B with `--reference-video-url <video_A_url>`. Poll, add node, repeat.
 

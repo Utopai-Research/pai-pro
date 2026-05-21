@@ -13,7 +13,7 @@ node "$PAI_REPO_ROOT/server/scripts/generate_image.js" --prompt "..." [--aspect-
 
 `$PAI_REPO_ROOT` is exported by the viewer — see CLAUDE.md § "Media CLIs / Invocation path".
 
-Calls go via `--stage` — see CLAUDE.md § "Draft gate". Run synchronously; the CLI exits in <1s after writing the sidecar.
+Calls go via `--stage` — see CLAUDE.md § "Draft gate". **Pass `run_in_background: true` on the Bash call and poll with BashOutput** — the PreToolUse hook blocks foreground attempts (each parallel-staged variant needs the flag too).
 
 `--label` defaults to the truncated prompt (≤30 chars) if omitted; pass an explicit one when you have a better caption.
 
