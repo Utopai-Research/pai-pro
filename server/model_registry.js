@@ -51,6 +51,7 @@ function imageCostBySize(params = {}) {
   const size = String(params.image_size || params.imageSize || "2K").toLowerCase();
   if (size === "1k") return 0.07;
   if (size === "2k") return 0.10;
+  if (size === "4k") return 0.15;
   return 0.10; // 2K default
 }
 
@@ -58,7 +59,7 @@ function imageCostBySize(params = {}) {
 function videoCostByResAndDuration(params = {}) {
   const res = String(params.resolution || "720p").toLowerCase();
   const dur = Number(params.duration) || 15;
-  const perSec = res === "1080p" ? 0.44 : 0.20; // 720p baseline; 480p unsupported here
+  const perSec = res === "1080p" ? 0.44 : res === "480p" ? 0.08 : 0.20;
   return +(dur * perSec).toFixed(3);
 }
 

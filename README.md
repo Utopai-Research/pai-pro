@@ -105,7 +105,7 @@ PAI_KEY=PAI_…                        # image + video + voice + asset upload
 
 Get a key (and watch your live balance) at <https://pai-pro.utopaistudios.com/>. See `.env.example` for the full template with comments.
 
-> **Costs are real.** Per call: image ~$0.07–0.10 / voice $0.01 per 500 chars / asset upload $0.01 per ref / video several dollars depending on duration + resolution. CLIs only fire when you explicitly ask for media; chat suggestions don't burn credits.
+> **Costs are real.** Per call: image ~$0.07–0.15 / voice $0.01 per 500 chars / asset upload $0.01 per ref / video several dollars depending on duration + resolution. CLIs only fire when you explicitly ask for media; chat suggestions don't burn credits.
 
 ### First session
 

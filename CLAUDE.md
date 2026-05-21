@@ -49,8 +49,8 @@ Do not write `node server/scripts/...` (no such directory under your cwd) and do
 
 | CLI | Skill | Provider | Model (PAI raw model name) | Notes |
 |---|---|---|---|---|
-| `generate_image.js` | `/image-compose` | PAI Lite | `image-generation` | ~10–30s. ~$0.07 @ 1K / $0.10 @ 2K. Standard image tier — drafts, illustrative, stylized. |
-| `generate_video.js` | `/video-compose` | PAI Lite | `video-generation` | ~2–4 min. ~$0.20/sec @ 720p, ~$0.44/sec @ 1080p + ~$0.01/ref preupload. Real money — only after explicit ask. Refs must be publicly fetchable URLs. |
+| `generate_image.js` | `/image-compose` | PAI Lite | `image-generation` | ~10–30s. ~$0.07 @ 1K / $0.10 @ 2K / $0.15 @ 4K. Standard image tier — drafts, illustrative, stylized. |
+| `generate_video.js` | `/video-compose` | PAI Lite | `video-generation` | ~2–4 min. ~$0.08/sec @ 480p, ~$0.20/sec @ 720p, ~$0.44/sec @ 1080p + ~$0.01/ref preupload. Real money — only after explicit ask. Refs must be publicly fetchable URLs. |
 | `generate_voice.js` | `/voice-compose` | PAI Lite | `tts` | ~5–15s. $0.01 per 500 input characters (rounded up). Creates an `audio_result` node (subtype `voice`). With `--source-node-id`, also emits a `derived` edge from that source → audio (typically a character image; may also be a shot note for written V.O.). Without it, the audio node stands alone. |
 | `split_image.js` | (no skill) | n/a (local sharp) | n/a | Slice an `image_result` into cols×rows. `--url`, `--cols`, `--rows`, `--source-node-id`. cols·rows ≤ 64. Synchronous, ~1s. |
 | `switch_project.js` | (see Projects below) | n/a | n/a | Flip the active-project symlinks. |
