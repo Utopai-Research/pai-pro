@@ -3,6 +3,8 @@ name: voice-compose
 description: Designs and attaches voices to characters on the filmmaking canvas via the local generate_voice.js CLI, following canvas-aware conventions for voice description, sample text, and attachment to the target node. Use when the user asks to give a character a voice; design a voice, sample, or read; preview how a character sounds; or generate a standalone narration / voice-over track that isn't tied to a specific character.
 ---
 
+**Background by default.** Every `generate_voice.js` Bash call must pass `run_in_background: true` and be polled with BashOutput — the PreToolUse hook blocks foreground attempts (including parallel bulk-voice calls; each one needs the flag).
+
 ## Patterns
 
 Pick the one that fits. When unsure, read `./workflow.json` first to see which character the voice attaches to.
@@ -30,7 +32,7 @@ Triggers: "give / design a voice for [character]", "what does [character] sound 
   - a characteristic line from an imagined scene,
   - a brief self-introduction in their voice ("I've been working this beat for twenty years…"),
   - or a catchphrase.
-- Calls go via `--stage` — see CLAUDE.md § "Draft gate". Run synchronously; the CLI exits in <1s after writing the sidecar. Bulk asks: one Bash call per target in a single turn, each becoming its own draft card.
+- Calls go via `--stage` — see CLAUDE.md § "Draft gate". Bulk asks: one Bash call per target in a single turn, each becoming its own draft card.
 - The real `audio_result` (subtype `voice`, with `source_id` + derived edge to the source image) is minted only after the user fires the draft.
 
 ### 2. Standalone voice / narration / V.O.
