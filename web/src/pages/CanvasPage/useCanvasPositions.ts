@@ -445,10 +445,7 @@ export function useCanvasPositions({
       // keeps them alive across unload. Once these land, refresh sees
       // the position in the sidecar and PR #112's server handoff has
       // a position to copy onto the final node at addBatch time.
-      //
-      // Goes through persistPendingSerialized so a spiral PATCH that
-      // arrives late (network reorder, retry) can't clobber a user
-      // drag PATCH on the same pad — both share the per-id queue.
+      // Through the queue so a late spiral PATCH can't clobber a drag.
       for (const pp of pendingPlacements) {
         const p = persistPendingSerialized(pp.id, pp.position)
         inFlightByNodeRef.current.set(pp.id, p)
@@ -611,15 +608,10 @@ export function useCanvasPositions({
     [projectId],
   )
 
-  // Pending-pad position persist — serialized through the same
-  // inFlightByNodeRef queue as workflow nodes so a spiral-persist PATCH
-  // and a user drag PATCH on the same pad id never race. One retry on
-  // failure: keepalive PATCHes can be dropped silently under burst load
-  // (3 parallel CLIs each fire a spiral PATCH, the user's drag joins the
-  // queue right after), and the only signal today is a console.warn.
+  // Pending-pad sibling of persistOneSerialized; the retry catches
+  // dropped keepalive PATCHes when bursts saturate the browser cap.
   const persistPendingSerialized = useCallback(
     async (jobId: string, pos: { x: number; y: number }): Promise<void> => {
-      if (projectId === null) return
       const prev = inFlightByNodeRef.current.get(jobId)
       if (prev !== undefined) {
         try {
@@ -734,15 +726,12 @@ export function useCanvasPositions({
       // sidecar (NOT canvas_positions.json — those are keyed by stable
       // workflow ids; pending ids vanish when the CLI completes, and
       // the sidecar lifecycle gives us free cleanup). The PATCH route
-      // accepts `position` regardless of stage. Routed through the
-      // shared in-flight queue so a concurrent spiral-persist PATCH
-      // can't overtake the drag — and through saveStatus so a dropped
-      // keepalive PATCH (which would otherwise log a console.warn and
-      // vanish) surfaces in the pill.
+      // accepts `position` regardless of stage.
       if (node.type === 'pending_generation') {
+        lastPlacedRef.current = node.id
         saveStatus?.beginPersist()
-        let pendingFailed = false
-        let pendingErr: string | undefined
+        let failed = false
+        let errMsg: string | undefined
         try {
           const p = persistPendingSerialized(node.id, {
             x: node.position.x,
@@ -756,14 +745,13 @@ export function useCanvasPositions({
           })
           await p
         } catch (err) {
-          pendingFailed = true
-          pendingErr = err instanceof Error ? err.message : 'pending persist failed'
+          failed = true
+          errMsg = err instanceof Error ? err.message : 'pending persist failed'
           console.warn(
-            `[canvas:${projectId ?? '<null>'}] pending position persist failed for ${node.id}: ${pendingErr}`,
+            `[canvas:${projectId ?? '<null>'}] pending position persist failed for ${node.id}: ${errMsg}`,
           )
         } finally {
-          saveStatus?.endPersist(pendingFailed, pendingErr)
-          lastPlacedRef.current = node.id
+          saveStatus?.endPersist(failed, errMsg)
           draggingIdsRef.current.delete(node.id)
         }
         return
@@ -851,11 +839,19 @@ export function useCanvasPositions({
       const persistTargets = targets.filter((n) => n.type !== 'pending_generation')
 
       for (const n of pendingTargets) {
-        setPendingPosition(projectId, n.id, { x: n.position.x, y: n.position.y }).catch((err) => {
-          console.warn(
-            `[canvas:${projectId ?? '<null>'}] pending position persist failed for ${n.id}: ${err instanceof Error ? err.message : String(err)}`,
-          )
-        })
+        const p = persistPendingSerialized(n.id, { x: n.position.x, y: n.position.y })
+        inFlightByNodeRef.current.set(n.id, p)
+        void p
+          .catch((err) => {
+            console.warn(
+              `[canvas:${projectId ?? '<null>'}] pending position persist failed for ${n.id}: ${err instanceof Error ? err.message : String(err)}`,
+            )
+          })
+          .finally(() => {
+            if (inFlightByNodeRef.current.get(n.id) === p) {
+              inFlightByNodeRef.current.delete(n.id)
+            }
+          })
       }
 
       if (persistTargets.length === 0) {
@@ -898,7 +894,7 @@ export function useCanvasPositions({
         draggingIdsRef.current.delete(n.id)
       }
     },
-    [persistOneSerialized, saveStatus],
+    [persistOneSerialized, persistPendingSerialized, saveStatus, projectId],
   )
 
   const onTidy = useCallback(async (): Promise<void> => {

@@ -6,14 +6,9 @@ import { EMPTY_POSITIONS } from "./readers.js";
 import { kickReelPrebuild } from "./reel_cache.js";
 import { withProjectMutationLock, writeCanvasPositions } from "./writers.js";
 
-// Burst N parallel CLIs each write a separate `.pending/<jobId>.json`
-// sidecar; chokidar fires N add events in close succession; without
-// debouncing, each event triggers its own pending-generations broadcast,
-// and the client's placement effect runs once per broadcast with stale
-// rfNodesRef — three pads can end up spiral-placed at (0,0) before any
-// of them sees the others. Coalescing into one broadcast lets the
-// client's gridPackBatch lay them out as a unit, the same way pasted
-// images do.
+// Coalesce burst pending-sidecar writes (N parallel CLIs → N chokidar
+// add events) into one broadcast so the client's placement effect sees
+// all pads in a single pass and routes them through gridPackBatch.
 export const PENDING_BROADCAST_DEBOUNCE_MS = 100;
 
 export function statusForKlass(klass) {
@@ -44,10 +39,8 @@ export function createBroadcasters({ io, projects }) {
     });
   }
 
-  // Leading-delay debounce: the first call schedules a timer; subsequent
-  // calls within the window are coalesced into that same timer. When it
-  // fires, the broadcast carries the CURRENT pendingGenerations state,
-  // which by then includes every write that landed during the window.
+  // Leading-delay debounce: first call schedules the timer, subsequent
+  // calls within the window no-op; the emit on fire reads current state.
   function broadcastPending(id) {
     if (pendingBroadcastTimers.has(id)) return;
     const timer = setTimeout(() => {

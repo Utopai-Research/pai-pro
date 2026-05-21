@@ -321,15 +321,11 @@ test("pending_job_id on non-addBatch op (addNode) → ignored, no handoff", asyn
 // ─── burst-write debounce: 3 parallel sidecars → single pending state ──
 
 test("3 parallel sidecar writes are picked up and exposed via bundle", async () => {
-  // Write three sidecars back-to-back, the same shape three parallel
-  // generate_*.js CLIs would produce. After chokidar's awaitWriteFinish
-  // settles and the debounced broadcast fires, the project bundle's
-  // pending_generations list must carry all three entries — i.e., no
-  // event was dropped by the coalescing.
+  // Coalescing must not drop entries — all three sidecars surface.
   const seeds = await Promise.all([
-    seedRunningPending({ kind: "image", text: undefined, position: undefined }),
-    seedRunningPending({ kind: "image", text: undefined, position: undefined }),
-    seedRunningPending({ kind: "image", text: undefined, position: undefined }),
+    seedRunningPending({ kind: "image" }),
+    seedRunningPending({ kind: "image" }),
+    seedRunningPending({ kind: "image" }),
   ]);
   const ids = seeds.map((s) => s.jobId);
 

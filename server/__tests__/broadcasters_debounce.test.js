@@ -1,16 +1,6 @@
-// Unit tests for the pending-generations broadcast debounce.
-//
-// Burst N parallel CLIs each write their own `.pending/<jobId>.json`
-// sidecar — chokidar fires N add events back-to-back, and without
-// coalescing the client gets N separate `pending-generations` events.
-// The browser's placement effect runs once per event with stale
-// rfNodesRef, so three pads can land at (0,0) before any of them sees
-// the others. PENDING_BROADCAST_DEBOUNCE_MS collapses the burst into a
-// single emit carrying the final state.
-//
-// Pure unit-test against the broadcasters factory — no viewer subprocess,
-// no chokidar — so this stays fast (under 500ms) and pinpoints regressions
-// to the debounce itself rather than upstream timing.
+// Unit tests for the pending-generations broadcast debounce. Pure
+// factory-level — no viewer, no chokidar — so regressions point at the
+// debounce itself rather than upstream timing.
 
 import test from "node:test";
 import assert from "node:assert/strict";

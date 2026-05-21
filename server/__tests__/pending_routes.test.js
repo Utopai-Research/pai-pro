@@ -254,12 +254,8 @@ test("writePending preserves position across stage transitions", async () => {
 });
 
 test("5x concurrent position PATCHes serialize cleanly under the project lock", async () => {
-  // Spiral-persist + user drag can both fire PATCH /pending/:jobId on
-  // the same id within milliseconds. The route wraps each in
-  // withProjectMutationLock, so even pathological concurrency must
-  // produce a well-formed sidecar at the end — no torn JSON, no lost
-  // updates of OTHER fields, and the surviving position is one of
-  // the values we wrote (whichever the lock serialized last).
+  // Spiral-persist + drag can both PATCH the same id within ms; the
+  // lock must produce a well-formed sidecar with one of the writes won.
   const { jobId } = await seedDraft();
   const positions = [
     { x: 10, y: 10 },
