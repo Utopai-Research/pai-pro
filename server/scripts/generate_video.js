@@ -3,13 +3,13 @@
 // (model id: video-generation). Synchronous from the caller's POV —
 // typical wall-clock is 2-4 min, so plan accordingly.
 //
-// Refs: PAI's `video-generation-assets` endpoint fetches every reference URL
-// server-side for moderation and requires a publicly-fetchable URL.
-// If a ref resolves to a local viewer URL (i.e., mirrored on disk),
-// buildProviderRefs rewrites the host to the cloudflared tunnel origin
-// via .tunnel_url. If `.tunnel_url` is missing the call fails with
-// bad_args. Pass a public --reference-image-url /
-// --reference-audio-url / --reference-video-url to bypass entirely.
+// Refs: every ref is a canvas node id (--ref-source-id for image / video
+// sources, --ref-audio-source-id for audio sources). buildProviderRefs
+// resolves each source's local_path and rewrites the host to the
+// cloudflared tunnel origin via .tunnel_url, so PAI's
+// video-generation-assets endpoint can fetch the bytes server-side.
+// External URLs are mirrored onto the canvas first via mirror_url.js;
+// no separate URL-passthrough flag.
 
 import path from "node:path";
 import fs from "node:fs/promises";
@@ -26,7 +26,7 @@ import {
   readNodeType,
 } from "../local_mirror.js";
 import { postNodeAddBatch } from "./_mutate_helper.js";
-import { buildReferences, isBypassEnabled, newJobId, writePending, removePending, removePendingSync } from "./_pending.js";
+import { isBypassEnabled, newJobId, writePending, removePending, removePendingSync } from "./_pending.js";
 import { VIDEO_LIMITS } from "./_limits.js";
 
 const rawArgv = process.argv.slice(2);
@@ -41,9 +41,6 @@ const args = parseArgs({
   // "I'll add SFX in post", or detail-SFX skepticism are NOT triggers —
   // audio is the baseline. See video-compose/SKILL.md § "Hard defaults".
   "no-audio":              { type: "boolean", default: false },
-  "reference-image-url":   { type: "string", multiple: true, default: [] },
-  "reference-audio-url":   { type: "string", multiple: true, default: [] },
-  "reference-video-url":   { type: "string", multiple: true, default: [] },
   // canvas-mutate integration
   label:                   { type: "string" },
   "ref-source-id":         { type: "string", multiple: true, default: [] },
@@ -59,22 +56,12 @@ const args = parseArgs({
   "existing-job-id":       { type: "string" },
 });
 
-const refImages = args["reference-image-url"] || [];
-const refAudios = args["reference-audio-url"] || [];
-const refVideos = args["reference-video-url"] || [];
 const audSrcIds = Array.isArray(args["ref-audio-source-id"]) ? args["ref-audio-source-id"] : [];
 const refSourcesArg = Array.isArray(args["ref-source-id"]) ? args["ref-source-id"] : [];
 
-// Sent values surfaced in {limits, sent} failure JSON. Counts are explicit
-// URL refs only; --ref-source-id items list separately.
+// Sent values surfaced in {limits, sent} failure JSON.
 function buildSent() {
   return {
-    image_refs: refImages.length,
-    audio_refs: refAudios.length + audSrcIds.length,
-    video_refs: refVideos.length,
-    image_urls: refImages,
-    audio_urls: refAudios,
-    video_urls: refVideos,
     ref_source_ids: refSourcesArg,
     audio_source_ids: audSrcIds,
     source_node_id: args["source-node-id"] || null,
@@ -94,13 +81,8 @@ if (!args.prompt) {
   process.exit(2);
 }
 
-// Fast-fail count violations — same {limits, sent} shape as deeper provider failures.
-const overCaps = [];
-if (refImages.length > VIDEO_LIMITS.max_image_refs) overCaps.push(`image_refs ${refImages.length} > ${VIDEO_LIMITS.max_image_refs}`);
-if ((refAudios.length + audSrcIds.length) > VIDEO_LIMITS.max_audio_refs) overCaps.push(`audio_refs ${refAudios.length + audSrcIds.length} > ${VIDEO_LIMITS.max_audio_refs}`);
-if (refVideos.length > VIDEO_LIMITS.max_video_refs) overCaps.push(`video_refs ${refVideos.length} > ${VIDEO_LIMITS.max_video_refs}`);
-if (overCaps.length) {
-  fail("bad_args", `reference cap exceeded: ${overCaps.join("; ")}`);
+if (audSrcIds.length > VIDEO_LIMITS.max_audio_refs) {
+  fail("bad_args", `reference cap exceeded: audio_refs ${audSrcIds.length} > ${VIDEO_LIMITS.max_audio_refs}`);
   process.exit(2);
 }
 
@@ -108,19 +90,11 @@ const jobId = args["existing-job-id"] || newJobId();
 const durationPlanned = Number(args.duration) || 15;
 const plannedModel = getDefault("video").id;
 
-// Asset preupload through PAI's video-generation-assets costs ~$0.01 per ref. Add to
-// the staged cost so the agent's preview reflects the true freeze. Count
-// includes URL refs and source-id refs across all three kinds, deduped —
-// a ref passed both as a --reference-*-url and via --ref-source-id
-// resolves to one upload, not two.
+// Asset preupload through PAI's video-generation-assets costs ~$0.01 per
+// ref. Count canvas source-ids once each across image + video + audio refs.
 function countUniqueRefs() {
-  const urls = new Set([
-    ...refImages,
-    ...refAudios,
-    ...refVideos,
-  ]);
   const sids = new Set([...refSourcesArg, ...audSrcIds]);
-  return urls.size + sids.size;
+  return sids.size;
 }
 
 if (args.stage && !(await isBypassEnabled())) {
@@ -137,12 +111,10 @@ if (args.stage && !(await isBypassEnabled())) {
     stage: "draft",
     prompt: args.prompt,
     aspectRatio: args["aspect-ratio"],
-    references: buildReferences({ images: refImages, videos: refVideos, audios: refAudios }),
-    // refSourcesArg is the agent's --ref-source-id list (image + video
-    // refs by canvas node id); audSrcIds is --ref-audio-source-id.
-    // Capturing both lets the projection draw dashed edges for audio
-    // refs that arrive as source-ids (otherwise URL matching in
-    // projection misses them, since the URL is only resolved at fire).
+    // --ref-source-id (image + video) and --ref-audio-source-id (audio)
+    // both feed the same source-id channel for the projection's dashed
+    // edges — match the edges postNodeAddBatch will emit on the final.
+    sourceNodeId: args["source-node-id"] || null,
     referenceSourceIds: [...refSourcesArg, ...audSrcIds],
     model: plannedModel,
     resolution: args.resolution,
@@ -164,7 +136,8 @@ await writePending({
   kind: "video",
   prompt: args.prompt,
   aspectRatio: args["aspect-ratio"],
-  references: buildReferences({ images: refImages, videos: refVideos, audios: refAudios }),
+  sourceNodeId: args["source-node-id"] || null,
+  referenceSourceIds: [...refSourcesArg, ...audSrcIds],
   model: plannedModel,
   resolution: args.resolution,
   duration: durationPlanned,
@@ -175,23 +148,41 @@ try {
   const durationInt = durationPlanned;
   const projectId = args["project-id"] || (await readActiveProject());
 
-  // PAI's `video-generation-assets` endpoint fetches the URL server-side → must be
-  // public. Partition --ref-source-id list into image / video buckets by
-  // node type. Audio refs come from --ref-audio-source-id (explicit) plus
-  // --reference-audio-url. Unknown ids in --ref-source-id are dropped
-  // here; postNodeAddBatch still emits derived edges for every ref id
-  // (image, video, and audio).
+  // Partition --ref-source-id list into image / video buckets by node
+  // type, with an explicit reject for wrong-typed ids so the agent gets
+  // a clear bad_args instead of a silent drop (was Bug 2 in the URL
+  // audit). Audio refs come from --ref-audio-source-id (separate flag).
   const imgSrcIds = [];
   const vidSrcIds = [];
+  const badSrcIds = [];
   for (const sid of refSourcesArg) {
     const t = await readNodeType({ nodeId: sid, projectId });
     if (t === "image_result") imgSrcIds.push(sid);
     else if (t === "video_result") vidSrcIds.push(sid);
+    else badSrcIds.push({ id: sid, type: t ?? "missing" });
+  }
+  if (badSrcIds.length) {
+    const desc = badSrcIds.map((b) => `${b.id} (type=${b.type})`).join(", ");
+    fail("bad_args", `--ref-source-id rejected: ${desc}. Image / video sources only; for audio use --ref-audio-source-id.`);
+    // Set exitCode + throw so the finally block can clean up the sidecar
+    // (process.exit() would skip async cleanup).
+    exitCode = 2;
+    throw new Error("bad_args: wrong-typed ref-source-id");
   }
 
-  const resolvedImages = await buildProviderRefs({ urls: refImages, sourceIds: imgSrcIds, projectId });
-  const resolvedAudios = await buildProviderRefs({ urls: refAudios, sourceIds: audSrcIds, projectId });
-  const resolvedVideos = await buildProviderRefs({ urls: refVideos, sourceIds: vidSrcIds, projectId });
+  // Fast-fail per-kind cap violations now that types are known.
+  const overCaps = [];
+  if (imgSrcIds.length > VIDEO_LIMITS.max_image_refs) overCaps.push(`image_refs ${imgSrcIds.length} > ${VIDEO_LIMITS.max_image_refs}`);
+  if (vidSrcIds.length > VIDEO_LIMITS.max_video_refs) overCaps.push(`video_refs ${vidSrcIds.length} > ${VIDEO_LIMITS.max_video_refs}`);
+  if (overCaps.length) {
+    fail("bad_args", `reference cap exceeded: ${overCaps.join("; ")}`);
+    exitCode = 2;
+    throw new Error("bad_args: ref cap exceeded");
+  }
+
+  const resolvedImages = await buildProviderRefs({ sourceIds: imgSrcIds, projectId });
+  const resolvedAudios = await buildProviderRefs({ sourceIds: audSrcIds, projectId });
+  const resolvedVideos = await buildProviderRefs({ sourceIds: vidSrcIds, projectId });
 
   let assetIds = { images: [], audios: [], videos: [] };
   if (resolvedImages.length || resolvedAudios.length || resolvedVideos.length) {
@@ -253,13 +244,11 @@ try {
       // PAI's signed GCS URL (~24h TTL). Surfaced for future re-download
       // paths; the canvas URL itself is always derived from local_path.
       provider_output_url: videoUrl,
-      ...(refImages.length ? { reference_image_urls: refImages } : {}),
-      ...(refAudios.length ? { reference_audio_urls: refAudios } : {}),
-      ...(refVideos.length ? { reference_video_urls: refVideos } : {}),
     },
   };
-  // Merge audio source ids into ref-source-id so postNodeAddBatch emits
-  // a derived edge for each audio ref too (audio → new video_result).
+  // Merge audio source-ids into the --ref-source-id list so
+  // postNodeAddBatch emits one derived edge per ref (image + video +
+  // audio sources all feed the same edge channel).
   const argsForMutate = {
     ...args,
     "ref-source-id": [...refSourcesArg, ...audSrcIds],
@@ -299,9 +288,6 @@ try {
     poll_seconds: durationSeconds,
     generated_at: generatedAt,
   };
-  if (refImages.length) payload.reference_image_urls = refImages;
-  if (refAudios.length) payload.reference_audio_urls = refAudios;
-  if (refVideos.length) payload.reference_video_urls = refVideos;
   if (mutResult) Object.assign(payload, mutResult);
 
   emitSuccess(payload);

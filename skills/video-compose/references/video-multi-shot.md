@@ -32,11 +32,11 @@ When script shot notes exist on canvas (from `script-compose`), the 4-section ti
 
 When a storyboard mosaic exists on canvas (source `image_result` carries `metadata.task_type: "storyboard_mosaic"` and `metadata.grid: "NxM"`), render the entire mosaic as **one 15s video** — every panel becomes one SHOT block in the timeline. The mosaic itself is passed as a reference image (the video model reads the panels visually and follows their order); the mosaic is **not** cropped, and the render is never split into multiple videos per mosaic.
 
-- **Pass the mosaic via `--reference-image-url <mosaic.image_url>`** alongside the character / location refs originally used to author it. The corner number badges and grid layout make the panel sequence machine-legible.
+- **Pass the mosaic via `--ref-source-id <mosaic.id>`** alongside the character / location refs originally used to author it. The corner number badges and grid layout make the panel sequence machine-legible.
 - **Open the prompt with an explicit directive.** *"Multi-shot sequence built from the storyboard panels in @Image1. Follow the storyboard sequence in panel-number order (cell 1 top-left → cell N×M bottom-right; left-to-right, row-by-row)."* Without this directive, the model may interpret panels out of order.
 - **Beat length is constrained by panel count.** 2×2 ≈ 3.75s/panel, 3×3 ≈ 1.67s/panel, 4×4 ≈ 0.94s/panel. Distribute across the 15s budget — beats can vary slightly within the budget if the storyboard implies a rhythm (e.g. slower setup, faster action), but the total stays at 15s.
 - **Per-panel timeline content.** Read the mosaic node's `data.prompt` field — it carries the per-panel briefs in its `[PANEL LIST]` section. Each brief becomes one SHOT block; tag each block with `(panel N)` so the panel-to-shot mapping stays legible.
-- **Identity continuity.** Re-use the character / location image refs that authored the mosaic (read them from the mosaic node's incoming `kind: "derived"` edges, or its `data.metadata.ref_image_urls`). The mosaic locked identity across cells; the video inherits that lock.
+- **Identity continuity.** Re-use the character / location image refs that authored the mosaic (read them from the mosaic node's incoming `kind: "derived"` edges). The mosaic locked identity across cells; the video inherits that lock.
 - **Grid ceiling.** 4×4 (16 panels at ~0.94s each) is the practical ceiling — past that, beats are too short to register. Warn the user before rendering a 5×5+ mosaic.
 - **Don't drop panels by default.** Use every panel. If the user wants only a subset, SUGGEST `split_image(mosaic, cols, rows)` so they can pick tiles by id and re-ask. Splitting is the explicit cherry-pick gesture — never something the agent does unprompted to make the math nicer.
 
@@ -93,7 +93,7 @@ Energy arc: open on a controlled push-in, settle into texture and model, peak on
 
 **2. A 3×3 storyboard mosaic rendered as one 15s video:**
 
-A 3×3 storyboard mosaic on canvas (authored from `@Image2`, a detective character ref). 9 panels distributed across 15s (~1.67s each). Refs attached: `--reference-image-url <mosaic.image_url> --reference-image-url <detective.image_url>` → `@Image1` is the storyboard, `@Image2` is the detective.
+A 3×3 storyboard mosaic on canvas (authored from `@Image2`, a detective character ref). 9 panels distributed across 15s (~1.67s each). Refs attached: `--ref-source-id <mosaic.id> --ref-source-id <detective.id>` → `@Image1` is the storyboard, `@Image2` is the detective.
 
 ```
 Multi-shot sequence built from the storyboard panels in @Image1. Follow the storyboard sequence in panel-number order (cell 1 top-left → cell 9 bottom-right; left-to-right, row-by-row). Preserve composition, character identity, and lighting state as established by the storyboard — but render with real camera behavior and grounded motion. The character in @Image2 is the detective.

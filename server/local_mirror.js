@@ -208,76 +208,48 @@ function makeBadArgs(message) {
 }
 
 /**
- * Build the array of refs to hand to a provider. Every provider that
- * accepts refs (image-generation's fileData.fileUri, video-generation-assets'
- * CreateAsset URL) requires a publicly-fetchable URL — server-side
- * fetch, can't reach localhost.
+ * Build the array of refs to hand to a provider. Every ref is a canvas
+ * node id — we look up its `local_path` and rewrite the host onto the
+ * cloudflared tunnel origin so PAI's server-side fetch can reach it.
  *
- * Resolution per index:
- *   1. sourceId → readNodeLocalPath → tunnel URL via .tunnel_url
- *   2. url starts with "data:" → throw bad_args
- *   3. url → pass through as external public URL
+ * External URLs are not accepted here. The agent mirrors them onto the
+ * canvas first via `mirror_url.js`, which mints a `subtype: "reference"`
+ * node, and then references that node like any other canvas source.
  *
  * @param {Object}    opts
- * @param {string[]}  opts.urls       parallel array of --reference-*-url
- * @param {string[]}  opts.sourceIds  parallel array of --ref-source-id
+ * @param {string[]}  opts.sourceIds  list of --ref-source-id values
  * @param {string}    [opts.projectId]
- * @returns {Promise<string[]>}       provider-ready URL list
+ * @returns {Promise<string[]>}       provider-ready tunnel URLs
  */
-export async function buildProviderRefs({
-  urls = [],
-  sourceIds = [],
-  projectId,
-}) {
-  const len = Math.max(urls.length, sourceIds.length);
+export async function buildProviderRefs({ sourceIds = [], projectId } = {}) {
   const out = [];
-  for (let i = 0; i < len; i++) {
+  for (let i = 0; i < sourceIds.length; i++) {
     const sid = sourceIds[i];
-    const url = urls[i];
-
-    if (sid) {
-      // Refuse archived sources before the provider call — the CLAUDE.md
-      // rule tells the agent to filter archived; this is the
-      // system-boundary backstop.
-      if (await readNodeArchived({ nodeId: sid, projectId })) {
-        throw makeBadArgs(
-          `Ref ${i + 1}: node ${sid} is archived. Pick a live node, or ask the user to restore it.`,
-        );
-      }
-      const lp = await readNodeLocalPath({ nodeId: sid, projectId });
-      if (!lp) {
-        throw makeBadArgs(
-          `Ref ${i + 1}: node ${sid} has no local_path. Asset nodes must carry local_path; if this is an old workflow.json shape, regenerate the asset.`,
-        );
-      }
-      const tunnelUrl = tunnelUrlForLocalPath({ localPath: lp, projectId: projectId || await readActiveProject() });
-      if (!tunnelUrl) {
-        throw makeBadArgs(
-          `No tunnel configured for ref ${i + 1}. Run ./start.sh (auto-launches cloudflared) `
-          + `or pass a public --reference-image-url / --reference-audio-url / --reference-video-url.`,
-        );
-      }
-      out.push(tunnelUrl);
-      continue;
-    }
-
-    if (!url) continue;
-    if (url.startsWith("data:")) {
+    if (!sid) continue;
+    // Refuse archived sources before the provider call — the CLAUDE.md
+    // rule tells the agent to filter archived; this is the
+    // system-boundary backstop.
+    if (await readNodeArchived({ nodeId: sid, projectId })) {
       throw makeBadArgs(
-        `Ref ${i + 1} is a data: URI — providers fetch server-side and can't read inline payloads. `
-        + `Pass a publicly-fetchable URL via --reference-image-url / --reference-audio-url / --reference-video-url.`,
+        `Ref ${i + 1}: node ${sid} is archived. Pick a live node, or ask the user to restore it.`,
       );
     }
-    // Loopback hosts are server-side-unreachable. Without this guard PAI
-    // returns 200 with no image and the failure surfaces as a misleading
-    // `content_filtered` instead of an actionable bad_args.
-    if (/^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(?:[:/]|$)/i.test(url)) {
+    const lp = await readNodeLocalPath({ nodeId: sid, projectId });
+    if (!lp) {
       throw makeBadArgs(
-        `Ref ${i + 1} (${url}) points at localhost — providers fetch server-side and can't reach your machine. `
-        + `For canvas nodes use --ref-source-id <node_id>; for external assets use a publicly-fetchable URL.`,
+        `Ref ${i + 1}: node ${sid} has no local_path. Asset nodes must carry local_path; if this is an old workflow.json shape, regenerate the asset.`,
       );
     }
-    out.push(url);
+    const tunnelUrl = tunnelUrlForLocalPath({
+      localPath: lp,
+      projectId: projectId || await readActiveProject(),
+    });
+    if (!tunnelUrl) {
+      throw makeBadArgs(
+        `No tunnel configured for ref ${i + 1}. Run ./start.sh (auto-launches cloudflared).`,
+      );
+    }
+    out.push(tunnelUrl);
   }
   return out;
 }

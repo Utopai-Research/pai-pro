@@ -86,11 +86,6 @@ export async function readPendingEntry(id, jobId) {
       stage,
       prompt: typeof parsed.prompt === "string" ? parsed.prompt : "",
       aspect_ratio: typeof parsed.aspect_ratio === "string" ? parsed.aspect_ratio : "16:9",
-      references: Array.isArray(parsed.references)
-        ? parsed.references
-            .filter((r) => r && typeof r === "object" && typeof r.url === "string")
-            .map((r) => ({ kind: r.kind === "video" || r.kind === "audio" ? r.kind : "image", url: r.url }))
-        : [],
       created_at: parsed.created_at || null,
     };
     if (typeof parsed.model === "string" && parsed.model !== "") out.model = parsed.model;
@@ -112,11 +107,14 @@ export async function readPendingEntry(id, jobId) {
         && typeof parsed.position.y === "number" && Number.isFinite(parsed.position.y)) {
       out.position = { x: parsed.position.x, y: parsed.position.y };
     }
-    // Source-id refs captured at stage time. The projection uses these
-    // to draw dashed visual edges from the source canvas node into the
-    // pending pad (URL matching alone misses --ref-source-id refs).
+    // Lineage captured at stage time. The projection uses these to
+    // draw dashed visual edges from each source canvas node into the
+    // pending pad, matching the solid edges the final node will have.
     if (Array.isArray(parsed.reference_source_ids)) {
       out.reference_source_ids = parsed.reference_source_ids.filter((v) => typeof v === "string" && v !== "");
+    }
+    if (typeof parsed.source_node_id === "string" && parsed.source_node_id !== "") {
+      out.source_node_id = parsed.source_node_id;
     }
     return out;
   } catch (e) {

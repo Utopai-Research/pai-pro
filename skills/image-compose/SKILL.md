@@ -8,7 +8,7 @@ description: Generates or edits images on the filmmaking canvas via the local ge
 All patterns below shell out to:
 
 ```
-node "$PAI_REPO_ROOT/server/scripts/generate_image.js" --prompt "..." [--aspect-ratio 16:9] [--image-size 2K] [--ref-image-url URL ...] [--label "..."] [--subtype <character|location|edit|reference|split>] [--name "..."] [--role "..."] [--description "..."] [--source-node-id <id>] [--ref-source-id <id> ...]
+node "$PAI_REPO_ROOT/server/scripts/generate_image.js" --prompt "..." [--aspect-ratio 16:9] [--image-size 2K] [--label "..."] [--subtype <character|location|edit|reference|split>] [--name "..."] [--role "..."] [--description "..."] [--source-node-id <id>] [--ref-source-id <id> ...]
 ```
 
 `$PAI_REPO_ROOT` is exported by the viewer — see CLAUDE.md § "Media CLIs / Invocation path".
@@ -17,7 +17,9 @@ Calls go via `--stage` — see CLAUDE.md § "Draft gate". **Pass `run_in_backgro
 
 `--label` defaults to the truncated prompt (≤30 chars) if omitted; pass an explicit one when you have a better caption.
 
-When references are passed, refer to them in the prompt positionally as `@Image1`, `@Image2`, … in URL-passing order — same convention as the video skill. **The corresponding `--ref-source-id <node-id>` must accompany each `--ref-image-url`** (same positional order); that's how the CLI knows which source nodes to draw provenance edges from.
+When references are passed, refer to them in the prompt positionally as `@Image1`, `@Image2`, … in `--ref-source-id` order. The CLI emits one `derived` edge per `--ref-source-id`.
+
+External URLs (a pasted CDN link, a moodboard image) must be mirrored onto the canvas first via `mirror_url.js --url <URL>` — the returned `node_id` then plugs into `--ref-source-id` like any other canvas source. There is no separate URL-passthrough flag.
 
 If a canvas note authored this image (a shot note rendered as a still, a script note designing a character / location), pass `--source-node-id <note_id>` — see CLAUDE.md § "Authorship edges".
 
@@ -31,7 +33,7 @@ Pick the one that fits. When unsure, read `./workflow.json` first to see what's 
 
 Triggers: "design / create / introduce / cast a character / protagonist / antagonist / hero / villain / lead / portrait / headshot".
 
-- `node "$PAI_REPO_ROOT/server/scripts/generate_image.js" --prompt "..." --aspect-ratio 9:16 --image-size 2K --subtype character --name "Detective Morris" --role "..." --description "..."` — **no `--ref-image-url`**. A character is an identity anchor, not a derivative.
+- `node "$PAI_REPO_ROOT/server/scripts/generate_image.js" --prompt "..." --aspect-ratio 9:16 --image-size 2K --subtype character --name "Detective Morris" --role "..." --description "..."` — **no refs**. A character is an identity anchor, not a derivative.
 - Prompt template:
   > `[style] character portrait of [NAME], [role]. [age, build, wardrobe, distinguishing features]. Front-facing medium close-up, eye-level, looking directly at camera, neutral expression. Plain neutral background, soft even lighting. No dramatic shadows, no stylized lighting, no side profile, no multiple views.`
 - Inherit the project's style if one is already established on the canvas; otherwise default to realistic. Name the character if the user didn't ("Detective Morris", "The Prospector").
@@ -41,7 +43,7 @@ Triggers: "design / create / introduce / cast a character / protagonist / antago
 
 Triggers: "establish / design / picture [LOCATION]", or "yes" to a `script-compose` parse offer listing locations.
 
-- `node "$PAI_REPO_ROOT/server/scripts/generate_image.js" --prompt "..." --aspect-ratio 16:9 --image-size 2K --subtype location --name "Causeway" --description "..."` — **no `--ref-image-url`**. A location is a setting anchor, not a derivative.
+- `node "$PAI_REPO_ROOT/server/scripts/generate_image.js" --prompt "..." --aspect-ratio 16:9 --image-size 2K --subtype location --name "Causeway" --description "..."` — **no refs**. A location is a setting anchor, not a derivative.
 - Prompt template:
   > `[style] establishing still of [LOCATION NAME]. [visual brief — architecture, lighting, atmosphere]. Wide shot, eye-level, no characters present.`
 - Keep the frame empty of characters — locations are reusable references for later scenes. Inherit project style if one exists.
@@ -52,8 +54,8 @@ Triggers: "establish / design / picture [LOCATION]", or "yes" to a `script-compo
 
 Triggers: "change / edit / swap / replace / add / remove / tweak / what-if", OR "make a turnaround / 3D version / alternate style / variation" — applied to an image already on the canvas.
 
-- Identify the source node (usually the most recent `image_result`, or one the user named). Grab `source.id`, `source.image_url`, `source.metadata.aspect_ratio`.
-- `node "$PAI_REPO_ROOT/server/scripts/generate_image.js" --prompt "..." --aspect-ratio <source ratio> --image-size <source size or 2K> --ref-image-url <source.image_url> --subtype edit --source-node-id <source.id> --ref-source-id <source.id>`.
+- Identify the source node (usually the most recent `image_result`, or one the user named). Grab `source.id` and `source.metadata.aspect_ratio`.
+- `node "$PAI_REPO_ROOT/server/scripts/generate_image.js" --prompt "..." --aspect-ratio <source ratio> --image-size <source size or 2K> --subtype edit --source-node-id <source.id> --ref-source-id <source.id>`.
 - Prompt as a **transformation**, not a full re-description:
   > `<concrete change>. Preserve everything else.`
 
@@ -67,9 +69,9 @@ Triggers: "change / edit / swap / replace / add / remove / tweak / what-if", OR 
 
 Triggers: "put [character] in [setting]", "a shot of [X] and [Y]", "[character] does [action] in [location]" — when at least one canvas character is involved.
 
-- Identify each character involved — any `image_result` of that person (up to 16). Collect each one's `image_url` and `id`.
-- `node "$PAI_REPO_ROOT/server/scripts/generate_image.js" --prompt "..." --aspect-ratio <fit the shot> --image-size 2K --ref-image-url <char1.image_url> --ref-image-url <char2.image_url> ... --ref-source-id <char1.id> --ref-source-id <char2.id> ...` (same positional order).
-- Prompt: the full scene description. Name each character by their role so the generator binds identity to role.
+- Identify each character involved — any `image_result` of that person (up to 16). Collect each one's `id`.
+- `node "$PAI_REPO_ROOT/server/scripts/generate_image.js" --prompt "..." --aspect-ratio <fit the shot> --image-size 2K --ref-source-id <char1.id> --ref-source-id <char2.id> ...`.
+- Prompt: the full scene description. Name each character by their role so the generator binds identity to role. Refer to them in the prompt as `@Image1`, `@Image2`, … in `--ref-source-id` order.
 - **No `--subtype`** — a scene is neither a character nor an edit. CLI emits one derived edge per `--ref-source-id`.
 
 ### 5. Standalone still
@@ -90,7 +92,7 @@ Triggers: user asks for a storyboard, mosaic, NxN / N×M grid, shot list, covera
   - "3x3 portrait storyboard" → `9:16`
   - "vertical 2x4 mosaic" → `9:16`
 - **Default grid**: 2×2 unless the user specified another. Announce in chat one short line before each call ("Generating a 2×2 mosaic for <location>" or "Generating a 2×2 mosaic.") — don't paste the prompt.
-- **Optional refs**: if a character / location reference is on the canvas, pass it via `--ref-image-url` + matching `--ref-source-id` (≤16 each) so identity stays locked across cells and the provenance edges land. The script-analyzed case (shot notes + locations on the canvas) triggers one-mosaic-per-location iteration with required ref ordering — see `references/storyboard-mosaic.md`.
+- **Optional refs**: if a character / location reference is on the canvas, pass it via `--ref-source-id` (≤16) so identity stays locked across cells and the provenance edges land. The script-analyzed case (shot notes + locations on the canvas) triggers one-mosaic-per-location iteration with required ref ordering — see `references/storyboard-mosaic.md`.
 - **Grid size limit**: standard-tier layout fidelity degrades fast past ~4 cells. If the user asks for `3×3` or larger, warn first: "grids past 2×2 lose layout fidelity on the standard tier — consider a smaller grid or per-panel generation."
 
 **For the canvas pre-flight, per-location iteration logic, no-location nudge, verbatim prompt template, and default 9-panel coverage when no script slice exists**: see [references/storyboard-mosaic.md](references/storyboard-mosaic.md).

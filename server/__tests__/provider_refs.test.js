@@ -1,46 +1,41 @@
-// Boundary checks for the --ref-*-url form of provider refs.
-// PAI fetches server-side, so loopback URLs are unreachable; rejecting
-// at the boundary avoids a downstream `content_filtered` (200 no image).
+// Boundary checks for buildProviderRefs after the URL-passthrough removal.
+// External URLs are mirrored onto the canvas first via mirror_url.js;
+// generation CLIs only accept --ref-source-id (canvas node ids).
+//
+// Source-id resolution reads workflow.json + .tunnel_url out of the real
+// repo's PROJECT_ROOT/projects/<id>/ (the module derives PROJECT_ROOT
+// from its own location), so happy-path tunnel resolution requires
+// either a fixture project or an integration test through the CLI.
+// These unit tests focus on the bad_args boundary cases that don't
+// need a configured tunnel or workflow.
 
 import test from "node:test";
 import assert from "node:assert/strict";
 
 import { buildProviderRefs } from "../local_mirror.js";
 
-test("buildProviderRefs: rejects http://localhost:* URLs with bad_args", async () => {
+test("buildProviderRefs with empty sourceIds returns []", async () => {
+  const out = await buildProviderRefs({ sourceIds: [] });
+  assert.deepEqual(out, []);
+});
+
+test("buildProviderRefs with no args returns []", async () => {
+  const out = await buildProviderRefs();
+  assert.deepEqual(out, []);
+});
+
+test("buildProviderRefs with unknown sourceId → bad_args (no local_path)", async () => {
   await assert.rejects(
-    () => buildProviderRefs({ urls: ["http://localhost:3000/foo.png"], sourceIds: [] }),
+    () => buildProviderRefs({ sourceIds: ["image_does_not_exist"], projectId: "nonexistent_project" }),
     (err) => {
       assert.equal(err.klass, "bad_args");
-      assert.match(err.message, /localhost/i);
-      assert.match(err.message, /--ref-source-id/);
+      assert.match(err.message, /local_path/);
       return true;
     },
   );
 });
 
-test("buildProviderRefs: rejects 127.0.0.1 and [::1] URLs", async () => {
-  for (const url of ["http://127.0.0.1:7488/x", "http://[::1]/y"]) {
-    await assert.rejects(
-      () => buildProviderRefs({ urls: [url], sourceIds: [] }),
-      (err) => err.klass === "bad_args",
-      `expected bad_args for ${url}`,
-    );
-  }
-});
-
-test("buildProviderRefs: passes public URLs through unchanged", async () => {
-  const urls = [
-    "https://example.trycloudflare.com/projects/x/assets/images/image_1.png",
-    "https://cdn.example.com/foo.jpg",
-  ];
-  const out = await buildProviderRefs({ urls, sourceIds: [] });
-  assert.deepEqual(out, urls);
-});
-
-test("buildProviderRefs: still rejects data: URIs (regression guard)", async () => {
-  await assert.rejects(
-    () => buildProviderRefs({ urls: ["data:image/png;base64,iVBORw0KGgo="], sourceIds: [] }),
-    (err) => err.klass === "bad_args" && /data:/i.test(err.message),
-  );
+test("buildProviderRefs skips empty / falsy ids", async () => {
+  const out = await buildProviderRefs({ sourceIds: ["", null, undefined], projectId: "nonexistent_project" });
+  assert.deepEqual(out, []);
 });

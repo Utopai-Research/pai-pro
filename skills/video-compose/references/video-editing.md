@@ -96,7 +96,7 @@ User: *"Re-render the detective interrogation clip in golden-hour light."*
 Re-render @Video1 in warm golden-hour light, with low-angle sun streaming through the blinds and long shadows across the desk. Preserve composition, motion, and subject.
 ```
 
-Adjacent ref attached: `--reference-image-url <detective.image_url>` — locks the detective's face through the regrade.
+Adjacent ref attached: `--ref-source-id <detective.id>` — locks the detective's face through the regrade.
 
 ## Fallback branch
 

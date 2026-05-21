@@ -21,8 +21,8 @@ Before generating, read `./workflow.json` and identify:
 
 Decide how many mosaics to emit:
 
-- **No shot notes (script not analyzed yet).** Behave as the bare mosaic pattern: ONE 2×2 mosaic. Refs are optional — pass any characters / user-uploaded images on the canvas via repeated `--ref-image-url` flags (≤16) for identity lock; if the canvas is empty of refs, pass none.
-- **Shot notes exist + ≥1 location node.** ONE mosaic PER LOCATION. Group shots by which location they happen at (slug lines, body context, location names). For each group: refs = `[location.image_url, …each character appearing in the group's shots]` capped at 16; `[SCRIPT SLICE]` = verbatim shot-note bodies in shot-number order.
+- **No shot notes (script not analyzed yet).** Behave as the bare mosaic pattern: ONE 2×2 mosaic. Refs are optional — pass any characters / user-uploaded images on the canvas via repeated `--ref-source-id` flags (≤16) for identity lock; if the canvas is empty of refs, pass none.
+- **Shot notes exist + ≥1 location node.** ONE mosaic PER LOCATION. Group shots by which location they happen at (slug lines, body context, location names). For each group: refs = `[location.id, …each character.id appearing in the group's shots]` capped at 16; `[SCRIPT SLICE]` = verbatim shot-note bodies in shot-number order.
 - **Shot notes exist + 0 location nodes.** ONE mosaic. Say in chat first: `"Storyboard works best with location stills — want me to design them first? I can also storyboard from the script directly."` Unless the user accepts the offer, proceed with a single 2×2 mosaic using the script + character refs.
 
 Default grid: 2×2 unless the user specified otherwise. Before each `generate_image.js` call, announce in chat: `"Generating a 2×2 mosaic for <location_name>"` (per-location case) or `"Generating a 2×2 mosaic."` (single-mosaic case). Don't paste the prompt; one short line.

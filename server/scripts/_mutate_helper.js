@@ -90,9 +90,10 @@ function sleep(ms) {
 
 /**
  * addBatch with one new node + derived edges: one from --source-node-id
- * (authorship, if set), one per --ref-source-id (byte refs). Dups
- * between the two are dropped. Returns the canvas_mutation fragment for
- * the CLI's success payload, or null when --no-canvas-write was passed.
+ * (authorship, if set), one per --ref-source-id (byte refs). Same-id
+ * dups between the two are dropped so the final node has one edge per
+ * logical relationship. Returns the canvas_mutation fragment for the
+ * CLI's success payload, or null when --no-canvas-write was passed.
  * Pass `pendingJobId` to enable server-side position handoff.
  */
 export async function postNodeAddBatch({ args, type, data, actor, tmpPath, pendingJobId }) {

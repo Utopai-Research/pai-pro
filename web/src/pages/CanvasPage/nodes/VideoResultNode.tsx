@@ -10,35 +10,12 @@ import {
 import { useNodeActions } from '../NodeActionsContext'
 import { NodeHead, useZoomedOut, ZoomedOutPlaceholder } from './_shared'
 import type { MediaRef } from '../MediaExpandOverlay'
-import { mergeMediaRefs } from '../projection'
 
 // `derived_refs` is added by projection.ts — refs to source nodes that
 // reached this one via `--ref-source-id` (canvas `derived` edges).
-// `metadata.reference_*_urls` covers the `--reference-*-url` paths.
 type VideoResultRenderData = Partial<VideoResultData> & {
   state?: NodeState
   derived_refs?: MediaRef[]
-}
-
-/**
- * Per canvas schema, video metadata persists explicit reference_*
- * arrays (image / video / audio). Folded together with derived-edge
- * refs so `--ref-source-id` provenance also lights up the REFERENCES
- * section of the expand overlay.
- */
-function collectVideoRefs(d: VideoResultRenderData): MediaRef[] {
-  const md = d.metadata ?? {}
-  const fromMetadata: MediaRef[] = []
-  for (const u of md.reference_image_urls ?? []) {
-    if (typeof u === 'string' && u !== '') fromMetadata.push({ kind: 'image', url: u })
-  }
-  for (const u of md.reference_video_urls ?? []) {
-    if (typeof u === 'string' && u !== '') fromMetadata.push({ kind: 'video', url: u })
-  }
-  for (const u of md.reference_audio_urls ?? []) {
-    if (typeof u === 'string' && u !== '') fromMetadata.push({ kind: 'audio', url: u })
-  }
-  return mergeMediaRefs(fromMetadata, d.derived_refs ?? [])
 }
 
 export function VideoResultNode({ id, data, selected }: NodeProps): JSX.Element {
@@ -77,7 +54,7 @@ export function VideoResultNode({ id, data, selected }: NodeProps): JSX.Element 
       label,
       meta,
       prompt: d.prompt,
-      references: collectVideoRefs(d),
+      references: d.derived_refs ?? [],
       nodeType: 'video_result',
       metadata: d.metadata,
       duration: d.duration,

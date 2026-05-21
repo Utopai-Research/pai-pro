@@ -148,29 +148,11 @@ async function migrateProject(projectId, { dryRun, force }) {
     }
   }
 
-  // Embedded URLs in metadata reference arrays / source_url use the old
-  // filename — rewrite them to the renamed targets.
+  // Embedded source_url uses the old filename — rewrite to the renamed target.
   let urlRewriteCount = 0;
-  const METADATA_URL_ARRAYS = [
-    "ref_image_urls",
-    "reference_image_urls",
-    "reference_video_urls",
-    "reference_audio_urls",
-  ];
   for (const node of doc.nodes) {
     const md = node?.data?.metadata;
     if (!md || typeof md !== "object") continue;
-    for (const key of METADATA_URL_ARRAYS) {
-      const arr = md[key];
-      if (!Array.isArray(arr)) continue;
-      for (let i = 0; i < arr.length; i++) {
-        const repl = urlRewrites.get(arr[i]);
-        if (repl) {
-          arr[i] = repl;
-          urlRewriteCount += 1;
-        }
-      }
-    }
     const replUrl = urlRewrites.get(md.source_url);
     if (replUrl) {
       md.source_url = replUrl;
