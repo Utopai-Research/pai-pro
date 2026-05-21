@@ -1,3 +1,5 @@
+[![Utopai Studios](assets/banner.png)](https://www.utopaistudios.com/)
+
 # pai-pro
 
 **Local AI filmmaking canvas, driven by Claude Code.** Built by [Utopai Studios](https://www.utopaistudios.com/).
