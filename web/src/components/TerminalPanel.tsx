@@ -1,7 +1,7 @@
 /**
  * TerminalPanel — embedded xterm.js connected to the server's node-pty
  * bridge. Auto-spawns `claude` 500ms post-connect (server side; see
- * server/local_viewer.js pty:spawn handler).
+ * server/services/socket.js pty:spawn handler).
  *
  * Wires:
  *   socket.emit('pty:spawn', { projectId })              on mount
@@ -98,13 +98,9 @@ export function TerminalPanel({ projectId }: TerminalPanelProps): JSX.Element {
       // Skip 0-width measurements — container is display:none on inactive tab.
       const rect = entries[0]?.contentRect
       if (!rect || rect.width < 1 || rect.height < 1) return
-      try {
-        fit.fit()
-        if (term.cols < 10 || term.rows < 3) return
-        socket.emit('pty:resize', { cols: term.cols, rows: term.rows })
-      } catch {
-        /* fit can throw if container is briefly 0×0 during layout */
-      }
+      fit.fit()
+      if (term.cols < 10 || term.rows < 3) return
+      socket.emit('pty:resize', { cols: term.cols, rows: term.rows })
     })
     ro.observe(container)
 

@@ -22,10 +22,9 @@
 // terminal looks like it never went away.
 //
 // ptys: projectId -> {
-//   pty,                      // node-pty handle
+//   pty,                      // node-pty handle (carries its own cols/rows)
 //   buffer,                   // rolling stdout (last PTY_BUFFER_CAP bytes) for replay
 //   subscribers,              // Set<socket.id> currently attached
-//   cols, rows,               // current pty dimensions
 // }
 
 import {
@@ -121,10 +120,7 @@ function registerSocketPtyHandlers({ socket, io, projects, nodePty }) {
       // Match the pty's dimensions to what THIS client expects so the
       // first frame after replay isn't wrapped wrong. If multiple tabs
       // are attached, the most-recent resize wins — same as tmux.
-      if (typeof cols === "number" && typeof rows === "number") {
-        try { existing.pty.resize(cols, rows); } catch {}
-        existing.cols = cols; existing.rows = rows;
-      }
+      try { existing.pty.resize(cols, rows); } catch {}
       socket.emit("pty:spawned", { pid: existing.pty.pid, attached: true });
       if (existing.buffer) socket.emit("pty:output", existing.buffer);
       return;
@@ -172,7 +168,6 @@ function registerSocketPtyHandlers({ socket, io, projects, nodePty }) {
       pty,
       buffer: "",
       subscribers: new Set([socket.id]),
-      cols, rows,
     };
     ptys.set(projectId, entry);
     socketAttach.set(socket.id, projectId);
@@ -241,7 +236,6 @@ function registerSocketPtyHandlers({ socket, io, projects, nodePty }) {
     // Reject obviously-bad sizes — client may emit while xterm container is hidden.
     if (cols < 10 || rows < 3) return;
     try { entry.pty.resize(cols, rows); } catch {}
-    entry.cols = cols; entry.rows = rows;
   });
 
   // Closing a tab leaves the pty running so it survives reattach;
