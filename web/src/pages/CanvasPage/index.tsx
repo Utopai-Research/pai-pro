@@ -408,19 +408,26 @@ function CanvasPageInner(): JSX.Element | null {
       archiveHistoryRef.current.push([...ids])
       const archivedAt = new Date().toISOString()
       void Promise.all(
-        ids.map((id) =>
-          mutateCanvas(projectId, 'updateNode', {
-            id,
-            patch: { archived: true, archived_at: archivedAt },
-          }).catch((err) => {
+        ids.map((id) => {
+          // For video_result nodes, atomically clear shot_id alongside the
+          // archive flag so the clip vanishes from BOTH timeline and reel
+          // in a single mutation. Without this, archived clips can leak
+          // into "Available clips" (no shot_id) or stay in "On reel" /
+          // master MP4 (had shot_id). Restore brings them back off-reel;
+          // user re-drags onto reel if they want a specific slot.
+          const node = rfNodes.find((n) => n.id === id)
+          const patch = node?.type === 'video_result'
+            ? { archived: true, archived_at: archivedAt, shot_id: null }
+            : { archived: true, archived_at: archivedAt }
+          return mutateCanvas(projectId, 'updateNode', { id, patch }).catch((err) => {
             console.warn(
               `[canvas:${projectId}] archive ${id} failed: ${err instanceof Error ? err.message : String(err)}`,
             )
-          }),
-        ),
+          })
+        }),
       )
     },
-    [projectId],
+    [projectId, rfNodes],
   )
 
   useEffect(() => {

@@ -14,6 +14,10 @@ export function selectReel(state) {
   return (state?.nodes || [])
     .filter((n) =>
       n.type === "video_result" &&
+      // Defense-in-depth: client's archive path also clears shot_id, so an
+      // archived clip should never reach this filter with shot_id set. This
+      // line guards against any future archive code path that forgets.
+      n.data?.archived !== true &&
       typeof n.data?.local_path === "string" &&
       n.data.local_path &&
       typeof n.data?.shot_id === "number"

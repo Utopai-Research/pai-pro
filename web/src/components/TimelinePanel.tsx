@@ -71,7 +71,13 @@ export function TimelinePanel({
   workflow,
 }: TimelinePanelProps): JSX.Element {
   const { reel, available } = useMemo(() => {
-    const all = (workflow?.nodes ?? []).filter(isVideoNode)
+    // Defense-in-depth: exclude archived video nodes. The canonical archive
+    // path also clears `shot_id` in the same mutation (see CanvasPage's
+    // archiveNodes), so this filter is belt-and-suspenders against any
+    // future archive code path that forgets to clear shot_id atomically.
+    const all = (workflow?.nodes ?? [])
+      .filter(isVideoNode)
+      .filter((n) => n.data.archived !== true)
     const onReel = all
       .filter(
         (n) =>
