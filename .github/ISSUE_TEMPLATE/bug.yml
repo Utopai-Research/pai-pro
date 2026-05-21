@@ -1,0 +1,60 @@
+name: Bug Report
+description: Report a bug in PAI Pro
+title: "bug: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug.
+
+        > This form is for **bugs only**. For questions, feature ideas, or general discussion, please use [Discussions](https://github.com/Utopai-Research/pai-pro/discussions) instead.
+        > For security vulnerabilities, use [private vulnerability reporting](https://github.com/Utopai-Research/pai-pro/security/advisories/new) — please do not file security issues here.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: A clear and concise description of the bug.
+      placeholder: Tell us what you saw.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: How to reproduce
+      description: Steps that reliably trigger the bug.
+      placeholder: |
+        1. Go to '...'
+        2. Click on '....'
+        3. Observe '....'
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect?
+      placeholder: What should have happened instead?
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: |
+        OS, Docker version, agent (Claude Code / Cursor / Codex) + version. `docker --version` and the agent's `--version` flag are usually enough.
+      placeholder: |
+        - OS: macOS 14.5 / Windows 11 / Ubuntu 24.04
+        - Docker: Docker version 28.4.0
+        - Agent: Claude Code 2.x.x
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: |
+        If the bug surfaced in the viewer or a generation CLI, paste the relevant tail of `docker logs pai-canvas` (or whatever the bug-relevant log source is). Use code fences for readability.
+      render: shell

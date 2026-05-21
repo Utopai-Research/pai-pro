@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Feature request or discussion
+    url: https://github.com/Utopai-Research/pai-pro/discussions
+    about: Suggest an idea, ask a question, or share what you've built.
+  - name: Security vulnerability
+    url: https://github.com/Utopai-Research/pai-pro/security/advisories/new
+    about: Report a security issue privately to the maintainers.
