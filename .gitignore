@@ -64,8 +64,10 @@ session*.txt
 .tunnel_url
 .tunnel_url.log
 
-# Docs — kept local only; not tracked.
-docs/
+# Docs: top-level docs/*.md tracked publicly; only maintainer-local
+# proposals + bug reports stay gitignored.
+docs/proposals/
+docs/reports/
 
 # Local-only tech debt audits.
 TECH_DEBT_AUDIT.md
