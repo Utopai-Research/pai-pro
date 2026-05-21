@@ -142,8 +142,13 @@ if (IS_PROD) {
   });
 }
 
+// Verbose boot log behind DEBUG=1. Default output is a single friendly
+// "ready, open this URL" block printed at the end of httpServer.listen.
+// Set DEBUG=1 in .env to get the full URL table + watcher state.
+const DEBUG = process.env.DEBUG === "1";
+
 async function boot() {
-  console.log(`[viewer] booting (port=${PORT}) …`);
+  if (DEBUG) console.log(`[viewer] booting (port=${PORT}) …`);
   await primeProjects(projects);
   await watchProjects({ projects, io, broadcasters });
 
@@ -154,7 +159,7 @@ async function boot() {
     if (fallback) {
       active = fallback.meta.id;
       await writeActive(active);
-      console.log(`[viewer] .active_project was missing — defaulted to ${active}`);
+      if (DEBUG) console.log(`[viewer] .active_project was missing — defaulted to ${active}`);
     }
   }
 
@@ -168,18 +173,27 @@ async function boot() {
   const publicBase = `http://localhost:${hostPort ?? PORT}`;
 
   httpServer.listen(PORT, BIND, () => {
-    console.log(`pai-pro viewer listening on ${BIND}:${PORT} (NODE_ENV=${process.env.NODE_ENV ?? "development"})`);
-    if (hostPort) {
-      console.log(`  (container port ${PORT} → host port ${hostPort} via docker-compose)`);
+    if (DEBUG) {
+      console.log(`[viewer] listening on ${BIND}:${PORT} (NODE_ENV=${process.env.NODE_ENV ?? "development"})`);
+      if (hostPort) {
+        console.log(`[viewer]   container port ${PORT} → host port ${hostPort}`);
+      }
+      console.log(`[viewer]   ${publicBase}/        ${IS_PROD ? "frontend" : "health JSON"}`);
+      console.log(`[viewer]   ${publicBase}/healthz health`);
+      console.log(`[viewer]   ${publicBase}/projects projects list`);
+      console.log(`[viewer]   active project: ${active ?? "(none)"}`);
+      console.log(`[viewer]   pty bridge:     ${nodePty ? "ready" : "disabled (node-pty not installed)"}`);
+      console.log(`[viewer]   watching ${PROJECTS_DIR}`);
     }
-    console.log(`  ${publicBase}/                         ${IS_PROD ? "frontend (SPA)" : "health JSON"}`);
-    console.log(`  ${publicBase}/healthz                  health (always JSON)`);
-    console.log(`  ${publicBase}/projects                 list`);
-    console.log(`  ws://localhost:${hostPort ?? PORT}/                           Socket.IO`);
-    console.log(`  active project: ${active ?? "(none)"}`);
-    console.log(`  pty bridge:     ${nodePty ? "ready" : "disabled (node-pty not installed)"}`);
-    console.log(`  static dir:     ${IS_PROD ? STATIC_DIR : "(disabled — dev mode)"}`);
-    console.log(`  watching ${PROJECTS_DIR}`);
+
+    // Friendly ready block — always printed. Blank lines top + bottom
+    // visually separate it from build / startup chatter so the user
+    // can spot it at the bottom of `docker compose up`.
+    console.log("");
+    console.log("✨ PAI Pro is ready.");
+    console.log("");
+    console.log(`    Open in your browser:  ${publicBase}`);
+    console.log("");
   });
 }
 

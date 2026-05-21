@@ -50,7 +50,7 @@ elif command -v cloudflared >/dev/null 2>&1; then
     --logfile "${CF_LOG}" \
     --no-autoupdate \
     >/dev/null 2>&1 &
-  echo "[entrypoint] tunnel: cloudflared spawned (pid $!), polling for URL…"
+  [ "${DEBUG:-}" = "1" ] && echo "[entrypoint] tunnel: cloudflared spawned (pid $!), polling for URL…"
   # Poll asynchronously so the viewer can boot in parallel; video gen
   # will fail with a clear bad_args until the tunnel lands.
   (
@@ -58,7 +58,12 @@ elif command -v cloudflared >/dev/null 2>&1; then
       URL=$(grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' "${CF_LOG}" 2>/dev/null | head -1)
       if [ -n "${URL}" ]; then
         printf '%s\n' "${URL}" > /repo/.tunnel_url
-        echo "[entrypoint] tunnel: URL ready after ${i}s — ${URL}"
+        # Tunnel URL is always written to .tunnel_url.log for debugging
+        # tunnel issues, regardless of DEBUG. Only show in stdout if
+        # DEBUG=1 — the URL is internal infrastructure and looks like an
+        # instruction to click if it appears in user-facing output.
+        echo "[$(date -Iseconds)] tunnel URL: ${URL}" >> /repo/.tunnel_url.log
+        [ "${DEBUG:-}" = "1" ] && echo "[entrypoint] tunnel: URL ready after ${i}s — ${URL}"
         exit 0
       fi
       sleep 1
