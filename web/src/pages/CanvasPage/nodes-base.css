@@ -740,18 +740,3 @@
 .node.note > .media-expand-btn { top: 36px; }
 .node.note > .media-download-btn { top: 36px; }
 
-/* Default browser scrollbar looks chunky against the card; replace
-   with a 6px translucent thumb. */
-.node.note .node-body {
-  scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
-}
-.node.note .node-body::-webkit-scrollbar { width: 6px; }
-.node.note .node-body::-webkit-scrollbar-track { background: transparent; }
-.node.note .node-body::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.12);
-  border-radius: 3px;
-}
-.node.note .node-body::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.22);
-}

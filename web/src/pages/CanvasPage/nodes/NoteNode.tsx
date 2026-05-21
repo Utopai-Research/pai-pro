@@ -57,7 +57,7 @@ export function NoteNodeRenderer({ id, data, selected }: NodeProps): JSX.Element
       <Handle type="target" position={target} />
       <NodeHead label={`@${id}`} state={state} hideStateChip />
       <div
-        className="node-body"
+        className="node-body scrollbar-subtle"
         onDoubleClick={canExpand ? expandNote : undefined}
         style={{
           padding: '12px',

@@ -42,7 +42,7 @@ export function RailExpandedPanel({
   return (
     <div className="flex h-full flex-1 flex-col overflow-hidden bg-[#0a0a0a]">
       <Header kind={kind} live={liveCount} archived={archivedCount} onHide={onHide} />
-      <div className="asset-rail-scroll flex-1 overflow-y-auto px-2 pb-3">
+      <div className="scrollbar-subtle flex-1 overflow-y-auto px-2 pb-3">
         {items.map((item, idx) => (
           <Fragment key={item.id}>
             {idx === firstArchivedIndex && liveCount > 0 ? (
