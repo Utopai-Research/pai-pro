@@ -252,3 +252,42 @@ test("writePending preserves position across stage transitions", async () => {
   const after = await readSidecar(jobId);
   assert.deepEqual(after.position, { x: 50, y: 60 }, "position must survive writePending");
 });
+
+test("5x concurrent position PATCHes serialize cleanly under the project lock", async () => {
+  // Spiral-persist + user drag can both fire PATCH /pending/:jobId on
+  // the same id within milliseconds. The route wraps each in
+  // withProjectMutationLock, so even pathological concurrency must
+  // produce a well-formed sidecar at the end — no torn JSON, no lost
+  // updates of OTHER fields, and the surviving position is one of
+  // the values we wrote (whichever the lock serialized last).
+  const { jobId } = await seedDraft();
+  const positions = [
+    { x: 10, y: 10 },
+    { x: 20, y: 20 },
+    { x: 30, y: 30 },
+    { x: 40, y: 40 },
+    { x: 50, y: 50 },
+  ];
+  const results = await Promise.all(
+    positions.map((position) =>
+      fetch(`${baseUrl}/projects/${TEST_PROJECT_ID}/pending/${jobId}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ position }),
+      }).then((r) => r.status),
+    ),
+  );
+  for (const s of results) {
+    assert.equal(s, 200, "every concurrent PATCH must succeed under the lock");
+  }
+  const after = await readSidecar(jobId);
+  const candidates = positions.map((p) => JSON.stringify(p));
+  assert.ok(
+    candidates.includes(JSON.stringify(after.position)),
+    `final position must be one of the writes; got ${JSON.stringify(after.position)}`,
+  );
+  // Sidecar must still be well-formed: prompt, stage, argv all intact.
+  assert.equal(after.stage, "draft");
+  assert.equal(after.prompt, "a test cat");
+  assert.ok(Array.isArray(after.argv));
+});

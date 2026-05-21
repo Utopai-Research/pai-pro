@@ -318,6 +318,38 @@ test("pending_job_id on non-addBatch op (addNode) → ignored, no handoff", asyn
   );
 });
 
+// ─── burst-write debounce: 3 parallel sidecars → single pending state ──
+
+test("3 parallel sidecar writes are picked up and exposed via bundle", async () => {
+  // Write three sidecars back-to-back, the same shape three parallel
+  // generate_*.js CLIs would produce. After chokidar's awaitWriteFinish
+  // settles and the debounced broadcast fires, the project bundle's
+  // pending_generations list must carry all three entries — i.e., no
+  // event was dropped by the coalescing.
+  const seeds = await Promise.all([
+    seedRunningPending({ kind: "image", text: undefined, position: undefined }),
+    seedRunningPending({ kind: "image", text: undefined, position: undefined }),
+    seedRunningPending({ kind: "image", text: undefined, position: undefined }),
+  ]);
+  const ids = seeds.map((s) => s.jobId);
+
+  const start = Date.now();
+  while (Date.now() - start < 3000) {
+    const r = await fetch(`${baseUrl}/projects/${TEST_PROJECT_ID}`);
+    if (r.ok) {
+      const b = await r.json();
+      const pending = Array.isArray(b.pending_generations) ? b.pending_generations : [];
+      const have = new Set(pending.map((e) => e.id));
+      if (ids.every((id) => have.has(id))) {
+        // All three present — pass.
+        return;
+      }
+    }
+    await new Promise((r) => setTimeout(r, 50));
+  }
+  throw new Error(`bundle did not surface all three pending entries within 3s; ids=${JSON.stringify(ids)}`);
+});
+
 // ─── concurrent /positions PATCH after handoff ──────────────────────────
 
 test("handoff write coexists with concurrent /positions PATCH (entry survives)", async () => {

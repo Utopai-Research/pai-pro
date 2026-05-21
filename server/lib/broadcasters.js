@@ -6,6 +6,16 @@ import { EMPTY_POSITIONS } from "./readers.js";
 import { kickReelPrebuild } from "./reel_cache.js";
 import { withProjectMutationLock, writeCanvasPositions } from "./writers.js";
 
+// Burst N parallel CLIs each write a separate `.pending/<jobId>.json`
+// sidecar; chokidar fires N add events in close succession; without
+// debouncing, each event triggers its own pending-generations broadcast,
+// and the client's placement effect runs once per broadcast with stale
+// rfNodesRef — three pads can end up spiral-placed at (0,0) before any
+// of them sees the others. Coalescing into one broadcast lets the
+// client's gridPackBatch lay them out as a unit, the same way pasted
+// images do.
+export const PENDING_BROADCAST_DEBOUNCE_MS = 100;
+
 export function statusForKlass(klass) {
   if (klass === "validation" || klass === "bad_args") return 400;
   if (klass === "not_found") return 404;
@@ -14,6 +24,8 @@ export function statusForKlass(klass) {
 }
 
 export function createBroadcasters({ io, projects }) {
+  const pendingBroadcastTimers = new Map();
+
   function broadcastCanvas(id) {
     const p = projects.get(id);
     io.to(id).emit("canvas-state", { projectId: id, state: p?.canvasState ?? null });
@@ -32,12 +44,21 @@ export function createBroadcasters({ io, projects }) {
     });
   }
 
+  // Leading-delay debounce: the first call schedules a timer; subsequent
+  // calls within the window are coalesced into that same timer. When it
+  // fires, the broadcast carries the CURRENT pendingGenerations state,
+  // which by then includes every write that landed during the window.
   function broadcastPending(id) {
-    const p = projects.get(id);
-    io.to(id).emit("pending-generations", {
-      projectId: id,
-      state: Array.from(p?.pendingGenerations?.values() ?? []),
-    });
+    if (pendingBroadcastTimers.has(id)) return;
+    const timer = setTimeout(() => {
+      pendingBroadcastTimers.delete(id);
+      const p = projects.get(id);
+      io.to(id).emit("pending-generations", {
+        projectId: id,
+        state: Array.from(p?.pendingGenerations?.values() ?? []),
+      });
+    }, PENDING_BROADCAST_DEBOUNCE_MS);
+    pendingBroadcastTimers.set(id, timer);
   }
 
   // Copy the dragged pending position onto the freshly-minted node.
