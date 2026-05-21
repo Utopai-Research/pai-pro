@@ -6,6 +6,11 @@ import { EMPTY_POSITIONS } from "./readers.js";
 import { kickReelPrebuild } from "./reel_cache.js";
 import { withProjectMutationLock, writeCanvasPositions } from "./writers.js";
 
+// Coalesce burst pending-sidecar writes (N parallel CLIs → N chokidar
+// add events) into one broadcast so the client's placement effect sees
+// all pads in a single pass and routes them through gridPackBatch.
+export const PENDING_BROADCAST_DEBOUNCE_MS = 100;
+
 export function statusForKlass(klass) {
   if (klass === "validation" || klass === "bad_args") return 400;
   if (klass === "not_found") return 404;
@@ -14,6 +19,8 @@ export function statusForKlass(klass) {
 }
 
 export function createBroadcasters({ io, projects }) {
+  const pendingBroadcastTimers = new Map();
+
   function broadcastCanvas(id) {
     const p = projects.get(id);
     io.to(id).emit("canvas-state", { projectId: id, state: p?.canvasState ?? null });
@@ -32,12 +39,19 @@ export function createBroadcasters({ io, projects }) {
     });
   }
 
+  // Leading-delay debounce: first call schedules the timer, subsequent
+  // calls within the window no-op; the emit on fire reads current state.
   function broadcastPending(id) {
-    const p = projects.get(id);
-    io.to(id).emit("pending-generations", {
-      projectId: id,
-      state: Array.from(p?.pendingGenerations?.values() ?? []),
-    });
+    if (pendingBroadcastTimers.has(id)) return;
+    const timer = setTimeout(() => {
+      pendingBroadcastTimers.delete(id);
+      const p = projects.get(id);
+      io.to(id).emit("pending-generations", {
+        projectId: id,
+        state: Array.from(p?.pendingGenerations?.values() ?? []),
+      });
+    }, PENDING_BROADCAST_DEBOUNCE_MS);
+    pendingBroadcastTimers.set(id, timer);
   }
 
   // Copy the dragged pending position onto the freshly-minted node.
