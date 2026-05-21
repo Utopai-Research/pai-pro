@@ -96,7 +96,10 @@ function backfillProjectAssets(p) {
 // Wire the pty:* handlers onto a single socket. The fresh-spawn vs.
 // re-attach branch is the heart of tmux-style persistence.
 function registerSocketPtyHandlers({ socket, io, projects, nodePty }) {
-  socket.on("pty:spawn", ({ projectId, cols = 80, rows = 24 } = {}) => {
+  socket.on("pty:spawn", ({ projectId, cols: rawCols, rows: rawRows } = {}) => {
+    // Reject 0/<10 cols — client may emit before xterm has fit a visible container.
+    const cols = (typeof rawCols === "number" && rawCols >= 10) ? rawCols : 80;
+    const rows = (typeof rawRows === "number" && rawRows >= 3)  ? rawRows : 24;
     if (!nodePty) {
       socket.emit("pty:error", "node-pty not available; rebuild server with native deps");
       return;
@@ -235,6 +238,8 @@ function registerSocketPtyHandlers({ socket, io, projects, nodePty }) {
     if (!projectId) return;
     const entry = ptys.get(projectId);
     if (!entry || typeof cols !== "number" || typeof rows !== "number") return;
+    // Reject obviously-bad sizes — client may emit while xterm container is hidden.
+    if (cols < 10 || rows < 3) return;
     try { entry.pty.resize(cols, rows); } catch {}
     entry.cols = cols; entry.rows = rows;
   });

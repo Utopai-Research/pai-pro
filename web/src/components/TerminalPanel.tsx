@@ -4,7 +4,7 @@
  * server/local_viewer.js pty:spawn handler).
  *
  * Wires:
- *   socket.emit('pty:spawn', { projectId, cols, rows })  on mount
+ *   socket.emit('pty:spawn', { projectId })              on mount
  *   socket.emit('pty:input', data)                       on keystroke
  *   socket.emit('pty:resize', { cols, rows })            on container resize
  *
@@ -71,11 +71,11 @@ export function TerminalPanel({ projectId }: TerminalPanelProps): JSX.Element {
     term.loadAddon(fit)
     term.loadAddon(new WebLinksAddon())
     term.open(container)
-    fit.fit()
+    // Don't fit here — if mounted inside display:none container, width is 0 and cols collapses to ~1.
     termRef.current = term
 
     const socket = getSocket()
-    socket.emit('pty:spawn', { projectId, cols: term.cols, rows: term.rows })
+    socket.emit('pty:spawn', { projectId })
 
     const dataDisp = term.onData((data) => {
       socket.emit('pty:input', data)
@@ -94,9 +94,13 @@ export function TerminalPanel({ projectId }: TerminalPanelProps): JSX.Element {
     socket.on('pty:error', onError)
     socket.on('pty:exit', onExit)
 
-    const ro = new ResizeObserver(() => {
+    const ro = new ResizeObserver((entries) => {
+      // Skip 0-width measurements — container is display:none on inactive tab.
+      const rect = entries[0]?.contentRect
+      if (!rect || rect.width < 1 || rect.height < 1) return
       try {
         fit.fit()
+        if (term.cols < 10 || term.rows < 3) return
         socket.emit('pty:resize', { cols: term.cols, rows: term.rows })
       } catch {
         /* fit can throw if container is briefly 0×0 during layout */
