@@ -746,7 +746,7 @@ export function TimelinePanel({
         </div>
       ) : null}
 
-      <div className="flex-1 overflow-y-auto">
+      <div className="scrollbar-subtle flex-1 overflow-y-auto">
         {/* Reel section: the whole grid is one drop target. Position is
             taken from the cursor's left/right half of whichever card
             it's over; empty trailing space falls through to "append". */}

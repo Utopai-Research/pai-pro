@@ -116,7 +116,7 @@ export function ChatHistoryPanel({
 
   return (
     <div className="flex h-full w-full flex-col overflow-hidden">
-      <div className="flex-1 overflow-y-auto px-4 py-3">
+      <div className="scrollbar-subtle flex-1 overflow-y-auto px-4 py-3">
         <div className="mx-auto max-w-2xl space-y-4">
           {messages.map((m, i) => (
             <MessageRow key={m.uuid ?? `${i}-${m.timestamp ?? ''}`} message={m} />

@@ -69,3 +69,29 @@
     linear-gradient(to bottom, hsl(var(--border)) 1px, transparent 1px);
   background-size: 24px 24px;
 }
+
+/* Shared scrollbar styling for dark-theme scrollable surfaces.
+   Matches the note-card body and Asset Rail scrollbars so panels
+   like Chat History and the Timeline don't fall back to the bright
+   OS-default scrollbar. */
+.scrollbar-subtle {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+}
+.scrollbar-subtle::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.scrollbar-subtle::-webkit-scrollbar-track {
+  background: transparent;
+}
+.scrollbar-subtle::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 3px;
+}
+.scrollbar-subtle::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.22);
+}
+.scrollbar-subtle::-webkit-scrollbar-corner {
+  background: transparent;
+}
