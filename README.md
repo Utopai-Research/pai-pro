@@ -1,4 +1,4 @@
-[![Utopai Studios](assets/banner.png)](https://www.utopaistudios.com/)
+<a href="https://www.utopaistudios.com/" target="_blank" rel="noopener noreferrer"><img src="assets/banner.png" alt="Utopai Studios"></a>
 
 # pai-pro — local AI filmmaking canvas for your coding agent
 
