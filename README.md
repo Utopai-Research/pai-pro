@@ -1,8 +1,8 @@
 <div align="center">
 
-# pai-pro
+# PAI-Pro
 
-**The local AI filmmaking canvas for your coding agent.**
+**The local AI filmmaking studio, driven from your coding agent.**
 
 [![Utopai Studios](https://img.shields.io/badge/Utopai_Studios-4285F4?style=flat&logoColor=white)](https://www.utopaistudios.com/)
 [![Follow @UtopaiStudios](https://img.shields.io/badge/Follow-%40UtopaiStudios-000000?style=flat&logo=x&logoColor=white)](https://x.com/UtopaiStudios)
