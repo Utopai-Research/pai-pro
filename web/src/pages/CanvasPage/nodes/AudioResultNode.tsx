@@ -9,6 +9,7 @@ import { Handle, Position } from '@xyflow/react'
 import type { AudioResultData } from '@/types/canvas'
 import { formatAudioTime, notifyPaused, notifyPlaying } from '../audioPlayback'
 import { type NodeState } from '../nodeData'
+import { useIsInSelectedFrame } from './_shared'
 
 type AudioResultRenderData = Partial<AudioResultData> & { state?: NodeState }
 
@@ -55,9 +56,11 @@ export function AudioResultNode({ id, data, selected }: NodeProps): JSX.Element 
       ? `${formatAudioTime(currentTime)} / ${formatAudioTime(duration)}`
       : formatAudioTime(currentTime)
 
+  const isGroupSelected = useIsInSelectedFrame(id)
+
   return (
     <div
-      className={`node audio_result${selected ? ' selected' : ''}`}
+      className={`node audio_result${selected ? ' selected' : ''}${isGroupSelected ? ' is-group-selected' : ''}`}
       data-state={state}
       data-subtype={subtype}
     >

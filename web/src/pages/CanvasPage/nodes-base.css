@@ -76,7 +76,12 @@
   border-color: var(--line-2);
   transform: translateY(-1px);
 }
-.node.selected {
+/* `.is-group-selected`: member nodes of a selected group_frame share
+   the selection outline without flipping the RF `selected` flag (which
+   would pop the per-node SelectionToolbar on top of the frame's own
+   action buttons). See useIsInSelectedFrame in nodes/_shared.tsx. */
+.node.selected,
+.node.is-group-selected {
   border-color: #ffffff;
   box-shadow: 0 0 6px rgba(255, 255, 255, 0.32);
 }

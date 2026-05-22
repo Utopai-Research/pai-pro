@@ -22,7 +22,7 @@ import {
   type NodeState,
 } from '../nodeData'
 import { useNodeActions } from '../NodeActionsContext'
-import { ImageWithFade, NodeHead, useZoomedOut, ZoomedOutPlaceholder } from './_shared'
+import { ImageWithFade, NodeHead, useIsInSelectedFrame, useZoomedOut, ZoomedOutPlaceholder } from './_shared'
 import type { MediaRef } from '../MediaExpandOverlay'
 import { mergeMediaRefs } from '../projection'
 
@@ -90,11 +90,12 @@ export function ImageResultNode({ id, data, selected }: NodeProps): JSX.Element 
     })
   }
   const zoomedOut = useZoomedOut()
+  const isGroupSelected = useIsInSelectedFrame(id)
   const target = Position.Left, source = Position.Right
 
   return (
     <div
-      className={`node image_result${selected ? ' selected' : ''}`}
+      className={`node image_result${selected ? ' selected' : ''}${isGroupSelected ? ' is-group-selected' : ''}`}
       data-state={state}
       data-subtype={subtype ?? 'image'}
       style={{ width: size.w }}

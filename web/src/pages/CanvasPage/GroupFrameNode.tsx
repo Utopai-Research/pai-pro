@@ -14,13 +14,14 @@
 import './group-frame.css'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { NodeProps, OnResizeEnd } from '@xyflow/react'
-import { NodeResizer } from '@xyflow/react'
+import { NodeResizer, useReactFlow } from '@xyflow/react'
 import {
   deleteCanvasGroupFrame,
   setCanvasGroupFrame,
   type CanvasGroupFrame,
 } from '@/lib/canvas-stub'
 import { useProject } from '@/contexts/ProjectContext'
+import { useChatComposer } from '@/contexts/ChatComposerContext'
 import { HUE_PRESETS } from './groupFrameHues'
 import { useCanvasSaveStatus } from './saveStatusContext'
 
@@ -41,10 +42,12 @@ export function GroupFrameNode({ id, data, selected }: NodeProps): JSX.Element {
   const d = data as unknown as GroupFrameData
   const { projectId } = useProject()
   const saveStatus = useCanvasSaveStatus()
+  const composer = useChatComposer()
+  const rf = useReactFlow()
   const [editing, setEditing] = useState(false)
   const [titleDraft, setTitleDraft] = useState(d.title)
   const [paletteOpen, setPaletteOpen] = useState(false)
-  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [confirmUngroupOpen, setConfirmUngroupOpen] = useState(false)
   const inputRef = useRef<HTMLInputElement | null>(null)
   const containerRef = useRef<HTMLDivElement | null>(null)
 
@@ -133,14 +136,35 @@ export function GroupFrameNode({ id, data, selected }: NodeProps): JSX.Element {
     [persist],
   )
 
-  const requestDelete = useCallback((): void => {
+  const requestUngroup = useCallback((): void => {
     if (editing) return
     setPaletteOpen(false)
-    setConfirmDelete(true)
+    setConfirmUngroupOpen(true)
   }, [editing])
 
-  const confirmDeleteNow = useCallback(async (): Promise<void> => {
-    setConfirmDelete(false)
+  // Archive state is read imperatively (rf.getNodes) so we don't have
+  // to subscribe to every node change just for the click-time filter.
+  const onReferAll = useCallback(
+    (e: React.MouseEvent): void => {
+      e.stopPropagation()
+      if (composer === null) return
+      const memberSet = new Set(d.memberIds)
+      const tokens = rf
+        .getNodes()
+        .filter(
+          (n) =>
+            memberSet.has(n.id) &&
+            (n.data as { archived?: boolean } | undefined)?.archived !== true,
+        )
+        .map((n) => `@${(n.data as { shortId?: string } | undefined)?.shortId ?? n.id}`)
+      if (tokens.length === 0) return
+      composer.insertAtCursor(tokens.join('  ') + ' ')
+    },
+    [composer, d.memberIds, rf],
+  )
+
+  const confirmUngroup = useCallback(async (): Promise<void> => {
+    setConfirmUngroupOpen(false)
     if (projectId === null) return
     saveStatus?.beginPersist()
     try {
@@ -150,7 +174,7 @@ export function GroupFrameNode({ id, data, selected }: NodeProps): JSX.Element {
       const msg = err instanceof Error ? err.message : String(err)
       saveStatus?.endPersist(true, msg)
       if (import.meta.env.DEV) {
-        console.warn(`[GroupFrameNode:${id}] delete failed`, err)
+        console.warn(`[GroupFrameNode:${id}] ungroup failed`, err)
       }
     }
   }, [projectId, id, saveStatus])
@@ -169,16 +193,16 @@ export function GroupFrameNode({ id, data, selected }: NodeProps): JSX.Element {
         return
       }
       e.preventDefault()
-      requestDelete()
+      requestUngroup()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [selected, requestDelete])
+  }, [selected, requestUngroup])
 
   return (
     <div
       ref={containerRef}
-      className="group-frame"
+      className={`group-frame${selected === true ? ' selected' : ''}`}
       style={{ ['--group-hue' as string]: d.hue }}
       onContextMenu={(e) => {
         const t = e.target as HTMLElement
@@ -186,13 +210,14 @@ export function GroupFrameNode({ id, data, selected }: NodeProps): JSX.Element {
           t.closest('.group-title-button') !== null ||
           t.closest('.group-title-input') !== null ||
           t.closest('.group-palette') !== null ||
-          t.closest('.group-confirm') !== null
+          t.closest('.group-confirm') !== null ||
+          t.closest('.group-frame-action-btn') !== null
         ) {
           return
         }
         e.preventDefault()
         e.stopPropagation()
-        requestDelete()
+        requestUngroup()
       }}
     >
       {selected === true ? (
@@ -205,42 +230,74 @@ export function GroupFrameNode({ id, data, selected }: NodeProps): JSX.Element {
           onResizeEnd={onResizeEnd}
         />
       ) : null}
-      {editing ? (
-        <input
-          ref={inputRef}
-          className="group-title group-title-input"
-          type="text"
-          value={titleDraft}
-          maxLength={TITLE_MAX_LENGTH}
-          onChange={(e) => setTitleDraft(e.target.value)}
-          onBlur={commitTitle}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              e.preventDefault()
-              commitTitle()
-            } else if (e.key === 'Escape') {
-              e.preventDefault()
-              setEditing(false)
-              setTitleDraft(d.title)
-            }
-          }}
-          onClick={(e) => e.stopPropagation()}
-          onMouseDown={(e) => e.stopPropagation()}
-        />
-      ) : (
-        <button
-          type="button"
-          className="group-title group-title-button"
-          onClick={togglePalette}
-          onDoubleClick={(e) => {
-            e.stopPropagation()
-            startEditing()
-          }}
-          title={d.title !== '' ? `${d.title} — double-click to rename, click for color` : 'double-click to rename, click for color'}
-        >
-          {d.title !== '' ? d.title : <span className="group-title-empty">untitled</span>}
-        </button>
-      )}
+      <div className="group-title-row">
+        {editing ? (
+          <input
+            ref={inputRef}
+            className="group-title group-title-input"
+            type="text"
+            value={titleDraft}
+            maxLength={TITLE_MAX_LENGTH}
+            onChange={(e) => setTitleDraft(e.target.value)}
+            onBlur={commitTitle}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault()
+                commitTitle()
+              } else if (e.key === 'Escape') {
+                e.preventDefault()
+                setEditing(false)
+                setTitleDraft(d.title)
+              }
+            }}
+            onClick={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
+          />
+        ) : (
+          <button
+            type="button"
+            className="group-title group-title-button"
+            onClick={togglePalette}
+            onDoubleClick={(e) => {
+              e.stopPropagation()
+              startEditing()
+            }}
+            title={d.title !== '' ? `${d.title} — double-click to rename, click for color` : 'double-click to rename, click for color'}
+          >
+            {d.title !== '' ? d.title : <span className="group-title-empty">untitled</span>}
+          </button>
+        )}
+        {!editing && !confirmUngroupOpen ? (
+          <>
+            <button
+              type="button"
+              className="group-frame-action-btn group-frame-action-btn-text"
+              onClick={(e) => {
+                e.stopPropagation()
+                requestUngroup()
+              }}
+              onDoubleClick={(e) => e.stopPropagation()}
+              title="Ungroup — frame removed, nodes stay where they are"
+            >
+              Ungroup
+            </button>
+            <button
+              type="button"
+              className="group-frame-action-btn"
+              onClick={onReferAll}
+              onDoubleClick={(e) => e.stopPropagation()}
+              disabled={composer === null}
+              title={
+                composer === null
+                  ? 'Chat composer not ready'
+                  : 'Insert @-mentions for all live members into chat'
+              }
+            >
+              📎
+            </button>
+          </>
+        ) : null}
+      </div>
       {paletteOpen && !editing ? (
         <div className="group-palette" onClick={(e) => e.stopPropagation()}>
           {HUE_PRESETS.map((opt) => (
@@ -256,7 +313,7 @@ export function GroupFrameNode({ id, data, selected }: NodeProps): JSX.Element {
           ))}
         </div>
       ) : null}
-      {confirmDelete ? (
+      {confirmUngroupOpen ? (
         <div
           className="group-confirm"
           onClick={(e) => e.stopPropagation()}
@@ -264,7 +321,7 @@ export function GroupFrameNode({ id, data, selected }: NodeProps): JSX.Element {
           onContextMenu={(e) => e.preventDefault()}
         >
           <span className="group-confirm-msg">
-            Delete{' '}
+            Ungroup{' '}
             <strong>
               {d.title !== '' ? `"${d.title}"` : 'this frame'}
             </strong>
@@ -276,7 +333,7 @@ export function GroupFrameNode({ id, data, selected }: NodeProps): JSX.Element {
             <button
               type="button"
               className="group-confirm-cancel"
-              onClick={() => setConfirmDelete(false)}
+              onClick={() => setConfirmUngroupOpen(false)}
             >
               Cancel
             </button>
@@ -284,10 +341,10 @@ export function GroupFrameNode({ id, data, selected }: NodeProps): JSX.Element {
               type="button"
               className="group-confirm-confirm"
               onClick={() => {
-                void confirmDeleteNow()
+                void confirmUngroup()
               }}
             >
-              Delete
+              Ungroup
             </button>
           </div>
         </div>

@@ -7,7 +7,7 @@ import { VIEWER_URL } from '@/lib/socket'
 import type { NoteSubtype } from '@/types/canvas'
 import { downloadHref, NOTE_BODY_MAX_HEIGHT, type NodeState } from '../nodeData'
 import { useNodeActions } from '../NodeActionsContext'
-import { NodeHead } from './_shared'
+import { NodeHead, useIsInSelectedFrame } from './_shared'
 
 interface NoteRenderData {
   label?: string
@@ -47,9 +47,10 @@ export function NoteNodeRenderer({ id, data, selected }: NodeProps): JSX.Element
   const downloadName = `${label || id || 'note'}.md`
 
   const target = Position.Left, source = Position.Right
+  const isGroupSelected = useIsInSelectedFrame(id)
   return (
     <div
-      className={`node note${selected ? ' selected' : ''}`}
+      className={`node note${selected ? ' selected' : ''}${isGroupSelected ? ' is-group-selected' : ''}`}
       data-state={state}
       data-subtype={subtype ?? 'note'}
       style={{ width: 280 }}

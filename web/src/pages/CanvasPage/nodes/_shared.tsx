@@ -131,6 +131,20 @@ export function useZoomedOut(): boolean {
   return useStore((s) => s.transform[2] < ZOOM_THRESHOLD)
 }
 
+// True when this node is a member of a currently-selected group_frame.
+// Boolean selector → re-renders only on flip, not on every store tick.
+export function useIsInSelectedFrame(nodeId: string): boolean {
+  return useStore((s) => {
+    for (const n of s.nodes) {
+      if (n.type !== 'group_frame') continue
+      if (n.selected !== true) continue
+      const memberIds = (n.data as { memberIds?: string[] } | undefined)?.memberIds
+      if (memberIds !== undefined && memberIds.includes(nodeId)) return true
+    }
+    return false
+  })
+}
+
 export function ZoomedOutPlaceholder(): JSX.Element {
   return (
     <div

@@ -8,7 +8,7 @@ import {
   type NodeState,
 } from '../nodeData'
 import { useNodeActions } from '../NodeActionsContext'
-import { NodeHead, useZoomedOut, ZoomedOutPlaceholder } from './_shared'
+import { NodeHead, useIsInSelectedFrame, useZoomedOut, ZoomedOutPlaceholder } from './_shared'
 import type { MediaRef } from '../MediaExpandOverlay'
 import { mergeMediaRefs } from '../projection'
 
@@ -85,11 +85,12 @@ export function VideoResultNode({ id, data, selected }: NodeProps): JSX.Element 
   }
 
   const zoomedOut = useZoomedOut()
+  const isGroupSelected = useIsInSelectedFrame(id)
   const target = Position.Left, source = Position.Right
 
   return (
     <div
-      className={`node video_result${selected ? ' selected' : ''}`}
+      className={`node video_result${selected ? ' selected' : ''}${isGroupSelected ? ' is-group-selected' : ''}`}
       data-state={state}
       style={{ width: size.w }}
     >
