@@ -34,8 +34,9 @@
    the backdrop) and children need to opt back in to receive events. */
 .group-title-row {
   position: absolute;
-  left: 0;
+  left: 50%;
   top: -28px;
+  transform: translateX(-50%);
   display: flex;
   align-items: center;
   gap: 6px;
