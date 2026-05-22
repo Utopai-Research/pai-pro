@@ -14,7 +14,7 @@
 import './group-frame.css'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { NodeProps, OnResizeEnd } from '@xyflow/react'
-import { NodeResizer, useReactFlow } from '@xyflow/react'
+import { NodeResizer, useReactFlow, useStore } from '@xyflow/react'
 import {
   deleteCanvasGroupFrame,
   setCanvasGroupFrame,
@@ -44,6 +44,7 @@ export function GroupFrameNode({ id, data, selected }: NodeProps): JSX.Element {
   const saveStatus = useCanvasSaveStatus()
   const composer = useChatComposer()
   const rf = useReactFlow()
+  const zoom = useStore((s) => s.transform[2])
   const [editing, setEditing] = useState(false)
   const [titleDraft, setTitleDraft] = useState(d.title)
   const [paletteOpen, setPaletteOpen] = useState(false)
@@ -230,7 +231,10 @@ export function GroupFrameNode({ id, data, selected }: NodeProps): JSX.Element {
           onResizeEnd={onResizeEnd}
         />
       ) : null}
-      <div className="group-title-row">
+      <div
+        className="group-title-row"
+        style={{ ['--inv-zoom' as string]: 1 / zoom }}
+      >
         {editing ? (
           <input
             ref={inputRef}
@@ -293,7 +297,7 @@ export function GroupFrameNode({ id, data, selected }: NodeProps): JSX.Element {
                   : 'Insert @-mentions for all live members into chat'
               }
             >
-              📎 Refer
+              <span className="group-frame-action-icon">📎</span> Refer
             </button>
           </>
         ) : null}

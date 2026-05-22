@@ -246,18 +246,22 @@
   pointer-events: auto;
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 4px 12px;
+  gap: calc(8px * var(--inv-zoom, 1));
+  padding: calc(4px * var(--inv-zoom, 1)) calc(12px * var(--inv-zoom, 1));
   background: oklch(1 0 0 / 0.06);
   border: 1px solid oklch(1 0 0 / 0.22);
   border-radius: 999px;
   color: oklch(0.98 0 0);
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: calc(10.5px * var(--inv-zoom, 1));
   line-height: 1;
   cursor: pointer;
   opacity: 0;
   transition: opacity 140ms ease, background 150ms ease, border-color 150ms ease;
+}
+.group-frame-action-icon {
+  font-size: calc(14px * var(--inv-zoom, 1));
+  line-height: 1;
 }
 .group-frame.selected .group-frame-action-btn {
   opacity: 1;
