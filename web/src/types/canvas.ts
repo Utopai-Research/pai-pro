@@ -50,7 +50,6 @@ export interface ImageResultMetadata extends NodeMetadataBase {
   model?: string
   aspect_ratio?: string
   image_size?: string
-  ref_image_urls?: string[]
   grid?: string
   /** video-generation-assets asset id once the preupload landed. Persisted by
    * server/services/asset_sync.js on paiAssetEvents 'update' (active).
@@ -114,9 +113,6 @@ export interface VideoResultMetadata extends NodeMetadataBase {
   aspect_ratio?: string
   resolution?: string
   generate_audio?: boolean
-  reference_image_urls?: string[]
-  reference_audio_urls?: string[]
-  reference_video_urls?: string[]
   /** See ImageResultMetadata.asset_id. */
   asset_id?: string
   asset_rejected_reason?: string
@@ -241,7 +237,6 @@ export interface PendingGeneration {
   stage: 'running' | 'failed' | 'draft'
   prompt: string
   aspect_ratio: string
-  references: Array<{ kind: 'image' | 'video' | 'audio'; url: string }>
   created_at: string | null
   /** Wire-side model id (e.g. "image-generation"); absent if the
    * CLI couldn't resolve a model before writing the sidecar. */
@@ -263,9 +258,15 @@ export interface PendingGeneration {
   position?: { x: number; y: number }
   /** Captured `--ref-source-id` / `--ref-audio-source-id` values from
    * the staged invocation. Projection uses these to draw dashed
-   * visual edges from source canvas nodes into the pending pad
-   * (URL matching in `references` only covers --reference-*-url refs). */
+   * visual edges from source canvas nodes into the pending pad and to
+   * resolve into the chip preview list. */
   reference_source_ids?: string[]
+  /** Captured `--source-node-id` (the authorship parent for this
+   * generation). Projection also draws a dashed edge from this node to
+   * the pending pad so the user sees every edge the final node will
+   * end up with. Deduped against `reference_source_ids` upstream so
+   * the same node never produces two dashed edges. */
+  source_node_id?: string
 }
 
 /** Bundle the viewer returns for `GET /projects/:id`. */

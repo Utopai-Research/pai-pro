@@ -17,8 +17,6 @@ Behaviors that production-judgment instinct will silently flip when they aren't 
 ```
 node "$PAI_REPO_ROOT/server/scripts/generate_video.js" --prompt "..." [--duration 15] [--aspect-ratio 16:9]
   [--resolution 1080p] [--no-audio]
-  [--reference-image-url URL ...] [--reference-audio-url URL ...]
-  [--reference-video-url URL ...]
   [--label "..."] [--ref-source-id <id> ...] [--ref-audio-source-id <audio_id> ...]
   [--source-node-id <id>] [--shot-id <N>]
 ```
@@ -29,17 +27,19 @@ Calls go via `--stage` — see CLAUDE.md § "Draft gate".
 
 `--label` defaults to the truncated prompt (≤30 chars) if omitted. Pass
 `--ref-source-id <id>` once per `image_result` / `video_result` source
-node whose `image_url` / `video_url` you provided via
-`--reference-image-url` / `--reference-video-url` (same positional
-order — that's how the CLI emits derived edges). Pass
+node you want as a byte ref — the CLI resolves each source's
+`local_path`, hands the tunnel URL to PAI's `video-generation-assets`
+endpoint, and emits one `derived` edge per ref. Pass
 `--ref-audio-source-id <audio_id>` once per canvas `audio_result` node
-you want as an audio ref — the CLI resolves the audio's
-`local_path`, hands it to PAI's `video-generation-assets` endpoint via the tunnel, and emits a derived edge
-from the audio node → the new video. When a canvas note authored the
-clip (most commonly a shot note being rendered), pass
-`--source-node-id <note_id>` — see CLAUDE.md § "Authorship edges".
-Don't set `--shot-id` unless the user asked for a specific reel
-position; the Timeline UI owns shot_id assignment.
+you want as an audio ref (same wiring; separate flag so the CLI can
+partition by type without reading the workflow). External URLs (a
+pasted CDN link, a still you want as a ref) must be mirrored onto the
+canvas first via `mirror_url.js --url <URL>` — the returned
+`node_id` plugs into `--ref-source-id` like any other canvas source.
+When a canvas note authored the clip (most commonly a shot note being
+rendered), pass `--source-node-id <note_id>` — see CLAUDE.md §
+"Authorship edges". Don't set `--shot-id` unless the user asked for a
+specific reel position; the Timeline UI owns shot_id assignment.
 
 Each clip costs real money even after staging — only stage after the user has explicitly asked for a video.
 
@@ -53,20 +53,20 @@ The same CLI flag can serve different semantic roles depending on how the prompt
 
 | Role | Flag | Wording in prompt |
 |---|---|---|
-| Character identity | `--reference-image-url` | "the character in @Image1" |
-| Location / setting | `--reference-image-url` | "the location shown in @Image1" |
-| Opening frame | `--reference-image-url` | "opening frame @Image1, …" |
-| Closing frame | `--reference-image-url` | "closing on the frame from @Image1" |
-| Source clip — continue | `--reference-video-url` | "Continue from @Video1 — start after its final frame, no frames from @Video1 in the new clip" |
-| Source clip — transform | `--reference-video-url` | "Re-render @Video1 in …" |
-| Camera-move source | `--reference-video-url` | "camera moves match @Video1" |
-| Action source | `--reference-video-url` | "action choreography matches @Video1" |
-| VFX template | `--reference-video-url` | "use the visual-effects template from @Video1" |
-| Voice timbre | `--reference-audio-url` | "voice timbre from @Audio1" |
+| Character identity | `--ref-source-id` (image) | "the character in @Image1" |
+| Location / setting | `--ref-source-id` (image) | "the location shown in @Image1" |
+| Opening frame | `--ref-source-id` (image) | "opening frame @Image1, …" |
+| Closing frame | `--ref-source-id` (image) | "closing on the frame from @Image1" |
+| Source clip — continue | `--ref-source-id` (video) | "Continue from @Video1 — start after its final frame, no frames from @Video1 in the new clip" |
+| Source clip — transform | `--ref-source-id` (video) | "Re-render @Video1 in …" |
+| Camera-move source | `--ref-source-id` (video) | "camera moves match @Video1" |
+| Action source | `--ref-source-id` (video) | "action choreography matches @Video1" |
+| VFX template | `--ref-source-id` (video) | "use the visual-effects template from @Video1" |
+| Voice timbre | `--ref-audio-source-id` | "voice timbre from @Audio1" |
 
 ## Prompt-language conventions
 
-- Reference syntax: `@Image1` / `@Video1` / `@Audio1`, positional, in URL-passing order.
+- Reference syntax: `@Image1` / `@Video1` / `@Audio1`, positional, in `--ref-source-id` / `--ref-audio-source-id` order (image and video refs share the `@Image…` / `@Video…` slot per their source node type).
 - Camera language is **rules, not adjectives** — *"one-take"*, *"steady follow shot"*, *"Iaijutsu draw"* not *"cinematic"*, *"fast"*, *"high-quality"*.
 - Avoid conflicting instructions ("static camera" + "orbit shot").
 - For brand / MV / ad work, end the prompt with a negative line: *"no captions, watermarks, distortion, stretching."*
@@ -86,33 +86,33 @@ Pick the one that fits. When unsure, read `./workflow.json` first to see what's 
 ### 2. Animate a canvas image (I2V)
 
 **Triggers:** "animate this", "make a video of this image", "put motion on this still" — applied to a specific canvas `image_result` (character, location, or otherwise).
-**Source:** the named `image_result` node — `id` and `image_url`.
-**Call:** `node "$PAI_REPO_ROOT/server/scripts/generate_video.js" --prompt "..." --reference-image-url <image_url>`.
-**Edges:** `{ from: <source.id>, to: video_<N>, kind: "derived" }`.
-**Anchor sub-variants:** opening-frame (default — *"opening frame @Image1, …"*) and closing-frame (*"closing on the frame from @Image1"*) — both pass the image as `--reference-image-url`; the anchor direction lives in the prompt wording, since the upstream model exposes no separate last-frame param.
+**Source:** the named `image_result` node — just `id`.
+**Call:** `node "$PAI_REPO_ROOT/server/scripts/generate_video.js" --prompt "..." --ref-source-id <image.id>`.
+**Edges:** `{ from: <source.id>, to: video_<N>, kind: "derived" }` — emitted by the CLI.
+**Anchor sub-variants:** opening-frame (default — *"opening frame @Image1, …"*) and closing-frame (*"closing on the frame from @Image1"*) — both pass the image as `--ref-source-id`; the anchor direction lives in the prompt wording, since the upstream model exposes no separate last-frame param.
 **For slot-by-slot construction and the opening- vs closing-frame phrasing:** see [`references/video-single-shot.md`](references/video-single-shot.md).
 
 ### 3. Compose with canvas characters / locations
 
 **Triggers:** "a video of [character]", "put [character] in [setting]", "[character] does [action]" — when at least one canvas character or location is involved.
 **Source:** character / location `image_result` nodes (cap from §Reference caps).
-**Call:** `node "$PAI_REPO_ROOT/server/scripts/generate_video.js" --prompt "..." --reference-image-url <char1.image_url> --reference-image-url <char2.image_url> ...`.
-**Edges:** `{ from: <char.id>, to: video_<N>, kind: "derived" }` — one per character / location referenced.
+**Call:** `node "$PAI_REPO_ROOT/server/scripts/generate_video.js" --prompt "..." --ref-source-id <char1.id> --ref-source-id <char2.id> ...`.
+**Edges:** `{ from: <char.id>, to: video_<N>, kind: "derived" }` — one per `--ref-source-id`.
 **For single-shot composition and adjacent-role wording:** see [`references/video-single-shot.md`](references/video-single-shot.md). **For ≥2 internal shots in one render:** see [`references/video-multi-shot.md`](references/video-multi-shot.md).
 
 ### 4. Extend a canvas clip
 
 **Triggers:** "continue from this", "extend this clip by Ns", "what happens after", "scene 2 follows scene 1" — applied to an existing canvas `video_result`.
-**Source:** any canvas `video_result` node — agent-generated *or* user-uploaded (both expose `id` and `video_url`; `data.metadata.source` is `"pai"` for generated and `"user_upload"` for dropped).
-**Call:** `node "$PAI_REPO_ROOT/server/scripts/generate_video.js" --prompt "..." --reference-video-url <video_url>`.
+**Source:** any canvas `video_result` node — agent-generated *or* user-uploaded (`data.metadata.source` is `"pai"` for generated and `"user_upload"` for dropped).
+**Call:** `node "$PAI_REPO_ROOT/server/scripts/generate_video.js" --prompt "..." --ref-source-id <source_video.id>`.
 **Edges:** `{ from: <source_video.id>, to: video_<N>, kind: "derived" }`.
 **For the continuity prefix, sub-intent decision tree, and sequencing across multiple linked calls:** see [`references/video-extension.md`](references/video-extension.md).
 
 ### 5. Edit a canvas clip
 
 **Triggers:** "re-render in golden hour", "restyle as anime", "add rain", "remove the passerby", "swap the product", "change the wardrobe color", "rewrite what happens" — applied to an existing canvas `video_result`. Creative edits go through `generate_video.js`, not local `ffmpeg` (which is reserved for mechanical ops).
-**Source:** any canvas `video_result` node — agent-generated *or* user-uploaded (both expose `id` and `video_url`).
-**Call:** `node "$PAI_REPO_ROOT/server/scripts/generate_video.js" --prompt "..." --reference-video-url <video_url>`.
+**Source:** any canvas `video_result` node — agent-generated *or* user-uploaded.
+**Call:** `node "$PAI_REPO_ROOT/server/scripts/generate_video.js" --prompt "..." --ref-source-id <source_video.id>`.
 **Edges:** `{ from: <source_video.id>, to: video_<N>, kind: "derived" }`.
 **For the Restyle / Partial / Replace / Re-plot decision tree and per-mode templates:** see [`references/video-editing.md`](references/video-editing.md).
 
@@ -131,7 +131,7 @@ Pick the one that fits. When unsure, read `./workflow.json` first to see what's 
 ### 7. Multi-shot / brand / ad / MV
 
 **Triggers:** ≥2 distinct shots inside one render, ad / music-video / brand framing, durations ≥10s with multiple movements.
-**Call:** `node "$PAI_REPO_ROOT/server/scripts/generate_video.js" --prompt "..." [--reference-image-url ...] [--reference-audio-url ...] [--reference-video-url ...]`.
+**Call:** `node "$PAI_REPO_ROOT/server/scripts/generate_video.js" --prompt "..." [--ref-source-id <image|video.id> ...] [--ref-audio-source-id <audio.id> ...]`.
 **Edges:** as per the underlying pattern (3, 4, 5) for any refs attached.
 **For the 4-section scaffold (timeline / effects inventory / density map / energy arc) and how to populate the timeline from canvas script shot notes or storyboard mosaic panels:** see [`references/video-multi-shot.md`](references/video-multi-shot.md).
 

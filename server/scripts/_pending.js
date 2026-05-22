@@ -28,18 +28,6 @@ function pendingPath(jobId) {
   return path.join(pendingDir(), `${jobId}.json`);
 }
 
-// Build the references array the canvas component expects. The image
-// generators take --ref-image-url; the video generator takes
-// --reference-{image,audio,video}-url. Both shapes resolve to the same
-// `{ kind, url }` items here, in the order: images, videos, audios.
-export function buildReferences({ images = [], videos = [], audios = [] } = {}) {
-  const out = [];
-  for (const url of images) if (typeof url === "string" && url) out.push({ kind: "image", url });
-  for (const url of videos) if (typeof url === "string" && url) out.push({ kind: "video", url });
-  for (const url of audios) if (typeof url === "string" && url) out.push({ kind: "audio", url });
-  return out;
-}
-
 export function newJobId() {
   return "pending_" + crypto.randomUUID().replace(/-/g, "");
 }
@@ -64,13 +52,14 @@ export async function isBypassEnabled(cwd = process.cwd()) {
 // "running"; pass "draft" for a captured call awaiting user approval,
 // in which case `argv` + `script` + `costUsd` carry the replay context.
 //
-// `position` and `referenceSourceIds` are sticky — when a CLI calls
-// writePending against an existing sidecar (e.g., draft → running on
-// fire), the previous values survive even if the caller didn't pass
-// them. That lets the browser-side drag position persist across the
-// stage transition and across refreshes.
+// `position`, `referenceSourceIds`, and `sourceNodeId` are sticky —
+// when a CLI calls writePending against an existing sidecar (e.g.,
+// draft → running on fire), the previous values survive even if the
+// caller didn't pass them. That lets the browser-side drag position
+// persist across the stage transition and lets the lineage captured at
+// stage time carry through to the running phase.
 export async function writePending({
-  jobId, kind, prompt, aspectRatio, references = [],
+  jobId, kind, prompt, aspectRatio,
   model, imageSize, resolution, duration,
   stage = "running",
   costUsd,
@@ -79,6 +68,7 @@ export async function writePending({
   text,
   position,
   referenceSourceIds,
+  sourceNodeId,
 }) {
   if (!jobId || !kind || !prompt) return;
   const payload = {
@@ -87,7 +77,6 @@ export async function writePending({
     stage,                         // "running" | "draft" | "failed"
     prompt: String(prompt),
     aspect_ratio: aspectRatio || "16:9",
-    references,                    // [{ kind: "image"|"video"|"audio", url }]
     created_at: new Date().toISOString(),
   };
   if (typeof model === "string" && model !== "") payload.model = model;
@@ -104,14 +93,19 @@ export async function writePending({
   if (Array.isArray(referenceSourceIds)) {
     payload.reference_source_ids = referenceSourceIds.filter((s) => typeof s === "string" && s !== "");
   }
+  if (typeof sourceNodeId === "string" && sourceNodeId !== "") {
+    payload.source_node_id = sourceNodeId;
+  }
   const dir = pendingDir();
   try {
     await fsp.mkdir(dir, { recursive: true });
     // Preserve sticky fields not explicitly passed by reading the prior
     // sidecar (if any). Lets draft→running transitions keep the
-    // user-dragged position and the staged source-id refs without each
-    // CLI's fire path having to thread them through.
-    if (payload.position === undefined || payload.reference_source_ids === undefined) {
+    // user-dragged position and the staged lineage without each CLI's
+    // fire path having to thread them through.
+    if (payload.position === undefined
+        || payload.reference_source_ids === undefined
+        || payload.source_node_id === undefined) {
       try {
         const prev = JSON.parse(await fsp.readFile(pendingPath(jobId), "utf8"));
         if (payload.position === undefined && prev?.position &&
@@ -120,6 +114,9 @@ export async function writePending({
         }
         if (payload.reference_source_ids === undefined && Array.isArray(prev?.reference_source_ids)) {
           payload.reference_source_ids = prev.reference_source_ids.filter((s) => typeof s === "string" && s !== "");
+        }
+        if (payload.source_node_id === undefined && typeof prev?.source_node_id === "string" && prev.source_node_id !== "") {
+          payload.source_node_id = prev.source_node_id;
         }
       } catch { /* no prior sidecar, or unreadable — fresh write */ }
     }

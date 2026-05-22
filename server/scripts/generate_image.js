@@ -6,8 +6,8 @@
 // The CLI resolves to that node's mirrored local file and rewrites the
 // viewer URL's host to the cloudflared tunnel origin (via .tunnel_url),
 // so PAI's `image-generation` can fetch the bytes server-side. For
-// external URLs, --ref-image-url URL is passed through to the provider
-// as-is. data: URIs are rejected at the boundary — pass a public URL.
+// external URLs, the agent runs mirror_url.js first to mint a canvas
+// reference node, then references that node's id via --ref-source-id.
 //
 // `./start.sh` auto-launches `cloudflared tunnel` and writes the public
 // URL to .tunnel_url. If .tunnel_url is missing the call fails with
@@ -15,7 +15,7 @@
 //
 // Output (stdout, one line):
 //   { ok: true, output_url, model, aspect_ratio, image_size,
-//     local_path?, ref_image_urls?, duration_seconds, cost_usd, generated_at,
+//     local_path?, duration_seconds, cost_usd, generated_at,
 //     canvas_mutation? }
 //   { ok: false, klass, message, retryAfterSec? }
 
@@ -30,7 +30,7 @@ import {
   readActiveProject,
 } from "../local_mirror.js";
 import { postNodeAddBatch } from "./_mutate_helper.js";
-import { buildReferences, isBypassEnabled, newJobId, writePending, removePending, removePendingSync } from "./_pending.js";
+import { isBypassEnabled, newJobId, writePending, removePending, removePendingSync } from "./_pending.js";
 import { getDefault, getCost } from "../model_registry.js";
 import { kickPreupload } from "./_preupload_hook.js";
 import { IMAGE_LIMITS } from "./_limits.js";
@@ -41,12 +41,11 @@ const args = parseArgs({
   prompt:         { type: "string", short: "p" },
   "aspect-ratio": { type: "string", default: "16:9" },
   "image-size":   { type: "string", default: "2K" },
-  "ref-image-url": { type: "string", multiple: true, default: [] },
   // canvas-mutate integration
   label:           { type: "string" },
   subtype:         { type: "string" }, // character | location | edit | reference | split
   "source-node-id": { type: "string" }, // authorship edge — see CLAUDE.md
-  "ref-source-id": { type: "string", multiple: true, default: [] }, // parallel to --ref-image-url
+  "ref-source-id": { type: "string", multiple: true, default: [] },
   "project-id":    { type: "string" },
   "request-id":    { type: "string" },
   "no-canvas-write": { type: "boolean" },
@@ -58,13 +57,10 @@ const args = parseArgs({
   "existing-job-id": { type: "string" },
 });
 
-const refUrls    = Array.isArray(args["ref-image-url"]) ? args["ref-image-url"] : [];
 const refSources = Array.isArray(args["ref-source-id"]) ? args["ref-source-id"] : [];
 
 function buildSent() {
   return {
-    image_refs: refUrls.length,
-    image_urls: refUrls,
     ref_source_ids: refSources,
     aspect_ratio: args["aspect-ratio"],
     image_size: args["image-size"],
@@ -80,8 +76,8 @@ if (!args.prompt) {
   process.exit(2);
 }
 
-if (refUrls.length > IMAGE_LIMITS.max_image_refs) {
-  fail("bad_args", `reference cap exceeded: image_refs ${refUrls.length} > ${IMAGE_LIMITS.max_image_refs}`);
+if (refSources.length > IMAGE_LIMITS.max_image_refs) {
+  fail("bad_args", `reference cap exceeded: image_refs ${refSources.length} > ${IMAGE_LIMITS.max_image_refs}`);
   process.exit(2);
 }
 const jobId = args["existing-job-id"] || newJobId();
@@ -95,7 +91,7 @@ if (args.stage && !(await isBypassEnabled())) {
     stage: "draft",
     prompt: args.prompt,
     aspectRatio: args["aspect-ratio"],
-    references: buildReferences({ images: refUrls }),
+    sourceNodeId: args["source-node-id"] || null,
     referenceSourceIds: refSources,
     model: plannedModel,
     imageSize: args["image-size"],
@@ -116,7 +112,8 @@ await writePending({
   kind: "image",
   prompt: args.prompt,
   aspectRatio: args["aspect-ratio"],
-  references: buildReferences({ images: refUrls }),
+  sourceNodeId: args["source-node-id"] || null,
+  referenceSourceIds: refSources,
   model: plannedModel,
   imageSize: args["image-size"],
 });
@@ -126,7 +123,6 @@ try {
   const projectId = args["project-id"] || (await readActiveProject());
 
   const resolvedRefs = await buildProviderRefs({
-    urls: refUrls,
     sourceIds: refSources,
     projectId,
   });
@@ -157,7 +153,6 @@ try {
       aspect_ratio: args["aspect-ratio"],
       image_size: args["image-size"],
       generated_at: isoNow(),
-      ...(refUrls.length ? { ref_image_urls: refUrls } : {}),
     },
     ...(args.subtype ? { subtype: args.subtype } : {}),
     ...(args.name ? { name: args.name } : {}),
@@ -199,7 +194,6 @@ try {
     cost_usd: result.costUsd ?? null,
     generated_at: data.metadata.generated_at,
   };
-  if (refUrls.length) payload.ref_image_urls = refUrls;
   if (mutResult) Object.assign(payload, mutResult);
 
   emitSuccess(payload);

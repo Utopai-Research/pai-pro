@@ -67,8 +67,8 @@ If every answer is "no" for a given pair (two unrelated scenes), parallel is fin
 **Why the check exists:**
 
 - **Prompt-independence ≠ creative independence.** B's prompt may be writable without reading A's output, but B's rendered geometry / lighting / subject pose depends on A's actual final frame. If A doesn't exist yet, you can't pin B to it.
-- **Prompt text alone does not pin the frame.** The continuity prefix shapes description; the frame-level pin comes from the attached `--reference-video-url`. Without the URL, the model renders something that *describes* the same room but doesn't *match* it pixel-wise.
-- **<15s reference cap.** Two consecutive 10s clips can't be parallelized via shared refs — combined ref length is 20s, over the cap. Serialize: render A first, then pass A's `video_url` to B (10s <15s ✓).
+- **Prompt text alone does not pin the frame.** The continuity prefix shapes description; the frame-level pin comes from the attached `--ref-source-id` to the source video. Without it, the model renders something that *describes* the same room but doesn't *match* it pixel-wise.
+- **<15s reference cap.** Two consecutive 10s clips can't be parallelized via shared refs — combined ref length is 20s, over the cap. Serialize: render A first, then pass A's id to B (10s <15s ✓).
 - **"Same way" = chain shape.** When the user says "do the next N scenes the same way" after a chain, the structure being repeated is the chain itself, not the per-call shape. Don't collapse "same way" into firing parallel calls.
 
 ## How serialization runs
@@ -77,7 +77,7 @@ Each `generate_video.js` call takes 2–4 min wall-clock — but it runs in the 
 
 1. Tell the user one short sentence: *"Rendering scene 1 in the background — about 3 min."* Fire `node "$PAI_REPO_ROOT/server/scripts/generate_video.js" …` for clip A. Keep the bash id for the poll in step 2.
 2. `BashOutput`-poll the task until the `{ ok: true, output_url, ... }` JSON line lands. Read the JSON, add the `video_result` node for clip A to `./workflow.json`.
-3. Tell the user *"Scene 1 ready, kicking off scene 2."* Fire the CLI for clip B with `--reference-video-url <video_A_url>`. Poll, add node, repeat.
+3. Tell the user *"Scene 1 ready, kicking off scene 2."* Fire the CLI for clip B with `--ref-source-id <video_A.id>`. Poll, add node, repeat.
 
 The user can interrupt with new instructions between any of these steps — the previous turn's background jobs continue running, and you can poll them later. For long chains, surface the total wall-clock cost upfront (see "Long sequences" below).
 
@@ -94,20 +94,20 @@ For a long chain (≥4 linked clips), serial rendering adds ~3 min wall-clock pe
 Scene A ends with a traveler stepping off a train onto a platform. Scene B opens on the same platform with a station attendant noticing the new arrival.
 
 **Bad (parallel):**
-- Same turn: two `generate_video.js` calls — one for scene A, one for scene B with `--reference-image-url <traveler> --reference-image-url <attendant>`.
+- Same turn: two `generate_video.js` calls — one for scene A, one for scene B with `--ref-source-id <traveler.id> --ref-source-id <attendant.id>`.
 - Scene B's prompt names the platform but has no frame anchor from scene A. Mismatched cut.
 
 **Good (serial):**
-- Step 1: `node "$PAI_REPO_ROOT/server/scripts/generate_video.js" --prompt "<scene A prompt>" --reference-image-url <traveler.image_url>` → wait → read JSON → add `video_A` node.
-- Step 2: `node "$PAI_REPO_ROOT/server/scripts/generate_video.js" --prompt "<scene B prompt>" --reference-image-url <traveler.image_url> --reference-image-url <attendant.image_url> --reference-video-url <video_A.video_url>`. Prefix: *"Continue from @Video1 — maintain visual continuity with the final frame (platform at dusk, traveler mid-stride stepping off the train). The character in @Image1 is the traveler; the character in @Image2 is the attendant watching from the booth. …"*.
+- Step 1: `node "$PAI_REPO_ROOT/server/scripts/generate_video.js" --prompt "<scene A prompt>" --ref-source-id <traveler.id>` → wait → read JSON → add `video_A` node.
+- Step 2: `node "$PAI_REPO_ROOT/server/scripts/generate_video.js" --prompt "<scene B prompt>" --ref-source-id <traveler.id> --ref-source-id <attendant.id> --ref-source-id <video_A.id>`. Prefix: *"Continue from @Video1 — maintain visual continuity with the final frame (platform at dusk, traveler mid-stride stepping off the train). The character in @Image1 is the traveler; the character in @Image2 is the attendant watching from the booth. …"*.
 
 ## Troubleshooting
 
-- **Mismatched cut on the screen** — was the source video URL actually passed as `--reference-video-url`? Prompt text alone does not pin the frame.
+- **Mismatched cut on the screen** — was the source video id actually passed as `--ref-source-id`? Prompt text alone does not pin the frame.
 - **Echo / stutter at the start of the new clip** — frames from the reference appeared in the new render. The prompt missed the *"start after @Video1's final frame; no frames from @Video1"* direction. Re-render with the no-frame-repeat phrasing in the prefix.
 - **Identity drifts between links** — character image ref needed in addition to the source video ref.
 - **Duration cap exceeded** — sum of audio or video reference durations ≥15s. Trim the ref list before retry.
 
 ## Fallback branch
 
-Extension that doesn't fit forward / backward / chain — e.g. branching from a middle frame, or generating an alternate "what if" version of the same beat: treat as a new I2V from the chosen frame of the source. Extract the frame via `ffmpeg`, upload it (so the URL is publicly reachable for PAI's `video-generation-assets` endpoint), and pass via `--reference-image-url`.
+Extension that doesn't fit forward / backward / chain — e.g. branching from a middle frame, or generating an alternate "what if" version of the same beat: treat as a new I2V from the chosen frame of the source. Extract the frame via `ffmpeg`, drag-drop or upload the frame onto the canvas (so it becomes an `image_result` reference node), then pass that node's id via `--ref-source-id`.

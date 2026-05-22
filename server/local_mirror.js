@@ -145,11 +145,11 @@ export function tunnelUrlForLocalPath({ localPath, projectId }) {
   return `${origin}/projects/${encodeURIComponent(projectId)}/${rel}`;
 }
 
-/**
- * Resolve a canvas node id to one of its data fields by reading the
- * project's workflow.json. Returns null when missing.
- */
-async function readNodeDataField({ nodeId, projectId, field }) {
+// Best-effort read of a single node from the project's workflow.json.
+// Returns null on any miss (no nodeId, unreadable / unparsable file,
+// no nodes array, no matching id). All three readers below funnel
+// through this — one file-read pattern instead of three.
+async function readNodeFromWorkflow({ nodeId, projectId }) {
   if (!nodeId) return null;
   const proj = projectId || await readActiveProject();
   const wfPath = path.join(PROJECT_ROOT, "projects", proj, "workflow.json");
@@ -157,47 +157,27 @@ async function readNodeDataField({ nodeId, projectId, field }) {
   try { raw = await fs.readFile(wfPath, "utf8"); } catch { return null; }
   let doc;
   try { doc = JSON.parse(raw); } catch { return null; }
-  const node = Array.isArray(doc?.nodes) ? doc.nodes.find((n) => n?.id === nodeId) : null;
-  const v = node?.data?.[field];
+  if (!Array.isArray(doc?.nodes)) return null;
+  return doc.nodes.find((n) => n?.id === nodeId) ?? null;
+}
+
+export async function readNodeLocalPath({ nodeId, projectId }) {
+  const node = await readNodeFromWorkflow({ nodeId, projectId });
+  const v = node?.data?.local_path;
   return typeof v === "string" && v ? v : null;
 }
 
-export function readNodeLocalPath({ nodeId, projectId, field = "local_path" }) {
-  return readNodeDataField({ nodeId, projectId, field });
-}
-
-/**
- * Look up a canvas node's `type` field. Returns null on a miss.
- * Used by generate_video.js to partition a flat --ref-source-id list
- * into image/video buckets without requiring positional ordering.
- */
+// Used by generate_video.js to partition a flat --ref-source-id list
+// into image / video buckets and reject wrong-typed refs.
 export async function readNodeType({ nodeId, projectId }) {
-  if (!nodeId) return null;
-  const proj = projectId || await readActiveProject();
-  const wfPath = path.join(PROJECT_ROOT, "projects", proj, "workflow.json");
-  let raw;
-  try { raw = await fs.readFile(wfPath, "utf8"); } catch { return null; }
-  let doc;
-  try { doc = JSON.parse(raw); } catch { return null; }
-  const node = Array.isArray(doc?.nodes) ? doc.nodes.find((n) => n?.id === nodeId) : null;
+  const node = await readNodeFromWorkflow({ nodeId, projectId });
   return typeof node?.type === "string" ? node.type : null;
 }
 
-/**
- * Returns true when the node exists and has data.archived === true.
- * Returns false for missing nodes, missing projects, or unset/false flag.
- * Used by buildProviderRefs + postNodeAddBatch to fail-fast before the
- * provider call when an agent references an archived node.
- */
+// Used by buildProviderRefs + postNodeAddBatch to fail-fast before the
+// provider call when an agent references an archived node.
 export async function readNodeArchived({ nodeId, projectId }) {
-  if (!nodeId) return false;
-  const proj = projectId || await readActiveProject();
-  const wfPath = path.join(PROJECT_ROOT, "projects", proj, "workflow.json");
-  let raw;
-  try { raw = await fs.readFile(wfPath, "utf8"); } catch { return false; }
-  let doc;
-  try { doc = JSON.parse(raw); } catch { return false; }
-  const node = Array.isArray(doc?.nodes) ? doc.nodes.find((n) => n?.id === nodeId) : null;
+  const node = await readNodeFromWorkflow({ nodeId, projectId });
   return node?.data?.archived === true;
 }
 
@@ -208,76 +188,48 @@ function makeBadArgs(message) {
 }
 
 /**
- * Build the array of refs to hand to a provider. Every provider that
- * accepts refs (image-generation's fileData.fileUri, video-generation-assets'
- * CreateAsset URL) requires a publicly-fetchable URL — server-side
- * fetch, can't reach localhost.
+ * Build the array of refs to hand to a provider. Every ref is a canvas
+ * node id — we look up its `local_path` and rewrite the host onto the
+ * cloudflared tunnel origin so PAI's server-side fetch can reach it.
  *
- * Resolution per index:
- *   1. sourceId → readNodeLocalPath → tunnel URL via .tunnel_url
- *   2. url starts with "data:" → throw bad_args
- *   3. url → pass through as external public URL
+ * External URLs are not accepted here. The agent mirrors them onto the
+ * canvas first via `mirror_url.js`, which mints a `subtype: "reference"`
+ * node, and then references that node like any other canvas source.
  *
  * @param {Object}    opts
- * @param {string[]}  opts.urls       parallel array of --reference-*-url
- * @param {string[]}  opts.sourceIds  parallel array of --ref-source-id
+ * @param {string[]}  opts.sourceIds  list of --ref-source-id values
  * @param {string}    [opts.projectId]
- * @returns {Promise<string[]>}       provider-ready URL list
+ * @returns {Promise<string[]>}       provider-ready tunnel URLs
  */
-export async function buildProviderRefs({
-  urls = [],
-  sourceIds = [],
-  projectId,
-}) {
-  const len = Math.max(urls.length, sourceIds.length);
+export async function buildProviderRefs({ sourceIds = [], projectId } = {}) {
   const out = [];
-  for (let i = 0; i < len; i++) {
+  for (let i = 0; i < sourceIds.length; i++) {
     const sid = sourceIds[i];
-    const url = urls[i];
-
-    if (sid) {
-      // Refuse archived sources before the provider call — the CLAUDE.md
-      // rule tells the agent to filter archived; this is the
-      // system-boundary backstop.
-      if (await readNodeArchived({ nodeId: sid, projectId })) {
-        throw makeBadArgs(
-          `Ref ${i + 1}: node ${sid} is archived. Pick a live node, or ask the user to restore it.`,
-        );
-      }
-      const lp = await readNodeLocalPath({ nodeId: sid, projectId });
-      if (!lp) {
-        throw makeBadArgs(
-          `Ref ${i + 1}: node ${sid} has no local_path. Asset nodes must carry local_path; if this is an old workflow.json shape, regenerate the asset.`,
-        );
-      }
-      const tunnelUrl = tunnelUrlForLocalPath({ localPath: lp, projectId: projectId || await readActiveProject() });
-      if (!tunnelUrl) {
-        throw makeBadArgs(
-          `No tunnel configured for ref ${i + 1}. Run ./start.sh (auto-launches cloudflared) `
-          + `or pass a public --reference-image-url / --reference-audio-url / --reference-video-url.`,
-        );
-      }
-      out.push(tunnelUrl);
-      continue;
-    }
-
-    if (!url) continue;
-    if (url.startsWith("data:")) {
+    if (!sid) continue;
+    // Refuse archived sources before the provider call — the CLAUDE.md
+    // rule tells the agent to filter archived; this is the
+    // system-boundary backstop.
+    if (await readNodeArchived({ nodeId: sid, projectId })) {
       throw makeBadArgs(
-        `Ref ${i + 1} is a data: URI — providers fetch server-side and can't read inline payloads. `
-        + `Pass a publicly-fetchable URL via --reference-image-url / --reference-audio-url / --reference-video-url.`,
+        `Ref ${i + 1}: node ${sid} is archived. Pick a live node, or ask the user to restore it.`,
       );
     }
-    // Loopback hosts are server-side-unreachable. Without this guard PAI
-    // returns 200 with no image and the failure surfaces as a misleading
-    // `content_filtered` instead of an actionable bad_args.
-    if (/^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(?:[:/]|$)/i.test(url)) {
+    const lp = await readNodeLocalPath({ nodeId: sid, projectId });
+    if (!lp) {
       throw makeBadArgs(
-        `Ref ${i + 1} (${url}) points at localhost — providers fetch server-side and can't reach your machine. `
-        + `For canvas nodes use --ref-source-id <node_id>; for external assets use a publicly-fetchable URL.`,
+        `Ref ${i + 1}: node ${sid} has no local_path. Asset nodes must carry local_path; if this is an old workflow.json shape, regenerate the asset.`,
       );
     }
-    out.push(url);
+    const tunnelUrl = tunnelUrlForLocalPath({
+      localPath: lp,
+      projectId: projectId || await readActiveProject(),
+    });
+    if (!tunnelUrl) {
+      throw makeBadArgs(
+        `No tunnel configured for ref ${i + 1}. Run ./start.sh (auto-launches cloudflared).`,
+      );
+    }
+    out.push(tunnelUrl);
   }
   return out;
 }

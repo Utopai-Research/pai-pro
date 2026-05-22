@@ -35,12 +35,34 @@ import { IMAGE_CARD_CHROME_PX, NODE_SIZES, sizeForAspect } from './nodeData'
 import { pickSize } from './placement'
 
 /**
- * For each asset node, gather references that arrived as `--ref-source-id`
- * — the agent's canonical canvas-ref path. These leave a `derived` edge
- * but don't populate `metadata.ref_image_urls` (which only covers
- * `--reference-*-url`). The MediaExpandOverlay reads `references` to
- * paint the REFERENCES section, so we synthesize the parallel list from
- * incoming derived edges here.
+ * Index every asset node's renderable ref (kind + URL) by node id.
+ * The URL field is populated on every asset node by `synthesizeAssetUrls`
+ * at the useWorkflow seam, so we just read it here.
+ */
+function buildAssetRefIndex(wfNodes: CanvasNode[]): Map<string, MediaRef> {
+  const out = new Map<string, MediaRef>()
+  for (const n of wfNodes) {
+    const d = n.data as {
+      image_url?: unknown
+      video_url?: unknown
+      audio_url?: unknown
+    }
+    if (n.type === 'image_result' && typeof d.image_url === 'string' && d.image_url !== '') {
+      out.set(n.id, { kind: 'image', url: d.image_url })
+    } else if (n.type === 'video_result' && typeof d.video_url === 'string' && d.video_url !== '') {
+      out.set(n.id, { kind: 'video', url: d.video_url })
+    } else if (n.type === 'audio_result' && typeof d.audio_url === 'string' && d.audio_url !== '') {
+      out.set(n.id, { kind: 'audio', url: d.audio_url })
+    }
+  }
+  return out
+}
+
+/**
+ * For each asset node, gather the inbound canvas refs (sources that
+ * connected to it via a `derived` edge from --ref-source-id /
+ * --source-node-id). MediaExpandOverlay reads `references` to paint the
+ * REFERENCES section; we synthesize the list from those edges.
  *
  * Caller-friendly: also exported as `collectDerivedRefs` for code paths
  * that don't go through the renderer (e.g. CanvasPage's
@@ -50,25 +72,7 @@ function buildDerivedRefsByTarget(
   wfNodes: CanvasNode[],
   wfEdges: WfEdge[],
 ): Map<string, MediaRef[]> {
-  // First pass: index each asset node's renderable ref (kind + URL).
-  // Synthesis lives in synthesizeAssetUrls — the URL field is populated
-  // on every asset node by the useWorkflow seam.
-  const refByNodeId = new Map<string, MediaRef>()
-  for (const n of wfNodes) {
-    const d = n.data as {
-      image_url?: unknown
-      video_url?: unknown
-      audio_url?: unknown
-    }
-    if (n.type === 'image_result' && typeof d.image_url === 'string' && d.image_url !== '') {
-      refByNodeId.set(n.id, { kind: 'image', url: d.image_url })
-    } else if (n.type === 'video_result' && typeof d.video_url === 'string' && d.video_url !== '') {
-      refByNodeId.set(n.id, { kind: 'video', url: d.video_url })
-    } else if (n.type === 'audio_result' && typeof d.audio_url === 'string' && d.audio_url !== '') {
-      refByNodeId.set(n.id, { kind: 'audio', url: d.audio_url })
-    }
-  }
-  // Second pass: for each derived edge, append source's ref to target's list.
+  const refByNodeId = buildAssetRefIndex(wfNodes)
   const out = new Map<string, MediaRef[]>()
   for (const e of wfEdges) {
     if (e.kind !== 'derived') continue
@@ -97,27 +101,6 @@ export function collectDerivedRefs(
   if (workflow === null) return []
   const map = buildDerivedRefsByTarget(workflow.nodes, workflow.edges)
   return map.get(nodeId) ?? []
-}
-
-/**
- * Merge two MediaRef lists, deduping by `url`. Order: a first, then b.
- * Used to fold metadata `ref_image_urls` / `reference_*_urls` together
- * with derived-edge refs.
- */
-export function mergeMediaRefs(a: MediaRef[], b: MediaRef[]): MediaRef[] {
-  const seen = new Set<string>()
-  const out: MediaRef[] = []
-  for (const r of a) {
-    if (seen.has(r.url)) continue
-    seen.add(r.url)
-    out.push(r)
-  }
-  for (const r of b) {
-    if (seen.has(r.url)) continue
-    seen.add(r.url)
-    out.push(r)
-  }
-  return out
 }
 
 // Stable signature used as part of the rfNodeCache key — incoming-edge
@@ -232,7 +215,6 @@ function imageNodeData(n: ImageResultNode, shortId: string, derivedRefs: MediaRe
       model: d.metadata?.model,
       source: d.metadata?.source,
       generated_at: d.metadata?.generated_at,
-      ref_image_urls: d.metadata?.ref_image_urls,
     },
   }
 }
@@ -272,9 +254,6 @@ function videoNodeData(n: VideoResultNode, shortId: string, derivedRefs: MediaRe
       model: d.metadata?.model,
       source: d.metadata?.source,
       generated_at: d.metadata?.generated_at,
-      reference_image_urls: d.metadata?.reference_image_urls,
-      reference_video_urls: d.metadata?.reference_video_urls,
-      reference_audio_urls: d.metadata?.reference_audio_urls,
     },
   }
 }
@@ -292,9 +271,8 @@ export function projectWorkflowToCanvas(
   const wfEdges = input.workflow?.edges ?? []
 
   // Synthesize the REFERENCES list for each asset node from incoming
-  // `derived` edges — so `--ref-source-id` generations (which don't
-  // populate metadata.ref_image_urls) still light up the overlay's
-  // REFERENCES section. See `buildDerivedRefsByTarget` above.
+  // `derived` edges so the overlay's REFERENCES section shows the
+  // source canvas nodes that fed this one. See `buildDerivedRefsByTarget`.
   const derivedRefsByTarget = buildDerivedRefsByTarget(wfNodes, wfEdges)
 
   // Soft-delete: archived nodes (and their edges + all-archived frames)
@@ -337,48 +315,23 @@ export function projectWorkflowToCanvas(
   // the pending pad so the user sees the wiring while the CLI is in
   // flight. Pure visual — never fed into layout.
   //
-  // Two lookups, populated in one pass:
-  //   url → id       — used to match the sidecar's URL refs back to a
-  //                    workflow node id (for dashed edges).
-  //   id → {kind,url} — used to resolve source-id refs back into the
-  //                    overlay's REFERENCES list (@Audio1 / @Image1
-  //                    chip resolution + thumbnail rendering).
-  const urlToNodeId = new Map<string, string>()
-  const idToMediaRef = new Map<string, { kind: 'image' | 'video' | 'audio'; url: string }>()
-  for (const wfNode of wfNodes) {
-    const d = wfNode.data as unknown as {
-      image_url?: unknown
-      video_url?: unknown
-      audio_url?: unknown
-    }
-    if (typeof d.image_url === 'string') {
-      urlToNodeId.set(d.image_url, wfNode.id)
-      idToMediaRef.set(wfNode.id, { kind: 'image', url: d.image_url })
-    } else if (typeof d.video_url === 'string') {
-      urlToNodeId.set(d.video_url, wfNode.id)
-      idToMediaRef.set(wfNode.id, { kind: 'video', url: d.video_url })
-    } else if (typeof d.audio_url === 'string') {
-      urlToNodeId.set(d.audio_url, wfNode.id)
-      idToMediaRef.set(wfNode.id, { kind: 'audio', url: d.audio_url })
-    }
-  }
+  // The same id→MediaRef index resolves source-id refs into the
+  // overlay's REFERENCES list (@Audio1 / @Image1 chip thumbnails).
+  const idToMediaRef = buildAssetRefIndex(wfNodes)
   const pendingVisualEdges: Array<{ from: string; to: string }> = []
   const wfNodeIds = new Set(wfNodes.map((n) => n.id))
   for (const pg of visiblePending) {
     const seen = new Set<string>()
-    // Source-id refs (--ref-source-id / --ref-audio-source-id) — direct
-    // lookup by canvas node id. Catches audio refs that URL matching
-    // would miss (the URL is only resolved at fire time, not at stage).
+    // Authorship parent — dashed edge from --source-node-id into pad.
+    if (typeof pg.source_node_id === 'string' && pg.source_node_id !== ''
+        && wfNodeIds.has(pg.source_node_id)) {
+      pendingVisualEdges.push({ from: pg.source_node_id, to: pg.id })
+      seen.add(pg.source_node_id)
+    }
+    // Byte refs — dashed edge per --ref-source-id (image, video, audio
+    // sources merged in the CLI's lineage derivation).
     for (const srcId of pg.reference_source_ids ?? []) {
       if (!wfNodeIds.has(srcId) || seen.has(srcId)) continue
-      pendingVisualEdges.push({ from: srcId, to: pg.id })
-      seen.add(srcId)
-    }
-    // URL-based refs (--reference-*-url) — match against published URLs
-    // on workflow nodes. Skipped if the same node id was already added.
-    for (const ref of pg.references) {
-      const srcId = urlToNodeId.get(ref.url)
-      if (srcId === undefined || seen.has(srcId)) continue
       pendingVisualEdges.push({ from: srcId, to: pg.id })
       seen.add(srcId)
     }
@@ -491,18 +444,25 @@ export function projectWorkflowToCanvas(
     // sees this non-(0,0) anchor and skips the spiral placement for
     // pendings that already have a home.
     const position = pg.position ?? { x: 0, y: 0 }
-    // Augment references with source-id refs resolved against the
-    // workflow snapshot. Without this, the overlay's REFERENCES
-    // section + @Audio1 / @Image1 chip resolution miss the refs the
-    // agent passed via --ref-source-id / --ref-audio-source-id
-    // (they're only in pg.reference_source_ids, not pg.references).
-    const seenUrls = new Set((pg.references ?? []).map((r) => r.url))
-    const augmentedRefs = [...(pg.references ?? [])]
+    // Resolve source-id refs into the chip-preview list the
+    // pending-pad component consumes. MediaExpandOverlay's REFERENCES
+    // section + @Image1 / @Audio1 chip resolution read this list.
+    // Authorship parent goes first so its slot is stable.
+    const refs: Array<{ kind: 'image' | 'video' | 'audio'; url: string }> = []
+    const seenIds = new Set<string>()
+    if (typeof pg.source_node_id === 'string' && pg.source_node_id !== '') {
+      const r = idToMediaRef.get(pg.source_node_id)
+      if (r !== undefined) {
+        refs.push(r)
+        seenIds.add(pg.source_node_id)
+      }
+    }
     for (const srcId of pg.reference_source_ids ?? []) {
+      if (seenIds.has(srcId)) continue
       const r = idToMediaRef.get(srcId)
-      if (r === undefined || seenUrls.has(r.url)) continue
-      augmentedRefs.push(r)
-      seenUrls.add(r.url)
+      if (r === undefined) continue
+      refs.push(r)
+      seenIds.add(srcId)
     }
     nodes.push({
       id: pg.id,
@@ -513,7 +473,7 @@ export function projectWorkflowToCanvas(
         stage: pg.stage,
         prompt: pg.prompt,
         aspect_ratio: pg.aspect_ratio,
-        references: augmentedRefs,
+        references: refs,
         model: pg.model,
         image_size: pg.image_size,
         resolution: pg.resolution,

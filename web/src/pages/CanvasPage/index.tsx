@@ -50,8 +50,8 @@ import {
   NodeActionsProvider,
   type NodeActionsContextValue,
 } from './NodeActionsContext'
-import { MediaExpandOverlay, type MediaPayload, type MediaRef } from './MediaExpandOverlay'
-import { collectDerivedRefs, mergeMediaRefs } from './projection'
+import { MediaExpandOverlay, type MediaPayload } from './MediaExpandOverlay'
+import { collectDerivedRefs } from './projection'
 import type { CanvasNode, Workflow } from '@/types/canvas'
 import { nodeTypes } from './nodes'
 import type { Viewport } from './placement'
@@ -81,26 +81,20 @@ const DEFAULT_NODE_HEIGHT = 260
  * lands the same shape as dblclick-on-canvas. Handles archived nodes
  * (which aren't in React Flow) the same way as live.
  *
- * `workflow` is needed to surface `--ref-source-id` refs (which only
- * leave a `derived` edge — no metadata entry) alongside the existing
- * `metadata.ref_image_urls` / `reference_*_urls`. Without it the
- * REFERENCES section is empty for canvas-ref generations.
+ * `workflow` is needed to surface `--ref-source-id` refs — the
+ * REFERENCES section is built from the incoming `derived` edges.
  */
 function buildExpandPayload(node: CanvasNode, workflow: Workflow | null): MediaPayload | null {
   const archived = (node.data as { archived?: boolean }).archived === true
   if (node.type === 'image_result') {
     const d = node.data
-    const fromMetadata: MediaRef[] = (d.metadata?.ref_image_urls ?? [])
-      .filter((u): u is string => typeof u === 'string' && u !== '')
-      .map((url) => ({ kind: 'image' as const, url }))
-    const refs = mergeMediaRefs(fromMetadata, collectDerivedRefs(workflow, node.id))
     return {
       id: node.id,
       kind: 'image',
       url: d.image_url ?? null,
       label: d.label,
       prompt: d.prompt,
-      references: refs,
+      references: collectDerivedRefs(workflow, node.id),
       nodeType: 'image_result',
       metadata: d.metadata,
       archived,
@@ -108,24 +102,13 @@ function buildExpandPayload(node: CanvasNode, workflow: Workflow | null): MediaP
   }
   if (node.type === 'video_result') {
     const d = node.data
-    const fromMetadata: MediaRef[] = []
-    for (const u of d.metadata?.reference_image_urls ?? []) {
-      if (typeof u === 'string' && u !== '') fromMetadata.push({ kind: 'image', url: u })
-    }
-    for (const u of d.metadata?.reference_video_urls ?? []) {
-      if (typeof u === 'string' && u !== '') fromMetadata.push({ kind: 'video', url: u })
-    }
-    for (const u of d.metadata?.reference_audio_urls ?? []) {
-      if (typeof u === 'string' && u !== '') fromMetadata.push({ kind: 'audio', url: u })
-    }
-    const refs = mergeMediaRefs(fromMetadata, collectDerivedRefs(workflow, node.id))
     return {
       id: node.id,
       kind: 'video',
       url: d.video_url ?? null,
       label: d.label,
       prompt: d.prompt,
-      references: refs,
+      references: collectDerivedRefs(workflow, node.id),
       nodeType: 'video_result',
       metadata: d.metadata,
       duration: d.duration,

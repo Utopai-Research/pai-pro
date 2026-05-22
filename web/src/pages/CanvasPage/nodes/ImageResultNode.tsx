@@ -24,11 +24,9 @@ import {
 import { useNodeActions } from '../NodeActionsContext'
 import { ImageWithFade, NodeHead, useZoomedOut, ZoomedOutPlaceholder } from './_shared'
 import type { MediaRef } from '../MediaExpandOverlay'
-import { mergeMediaRefs } from '../projection'
 
 // `derived_refs` is added by projection.ts — refs to source nodes that
 // reached this one via `--ref-source-id` (canvas `derived` edges).
-// `metadata.ref_image_urls` covers the `--reference-image-url` path.
 type ImageResultRenderData = Partial<ImageResultData> & {
   state?: NodeState
   derived_refs?: MediaRef[]
@@ -84,7 +82,7 @@ export function ImageResultNode({ id, data, selected }: NodeProps): JSX.Element 
       label,
       meta,
       prompt: d.prompt,
-      references: collectImageRefs(d),
+      references: d.derived_refs ?? [],
       nodeType: 'image_result',
       metadata: d.metadata,
     })
@@ -161,9 +159,3 @@ export function ImageResultNode({ id, data, selected }: NodeProps): JSX.Element 
   )
 }
 
-function collectImageRefs(d: ImageResultRenderData): MediaRef[] {
-  const fromMetadata: MediaRef[] = (d.metadata?.ref_image_urls ?? [])
-    .filter((u): u is string => typeof u === 'string' && u !== '')
-    .map((url) => ({ kind: 'image' as const, url }))
-  return mergeMediaRefs(fromMetadata, d.derived_refs ?? [])
-}
