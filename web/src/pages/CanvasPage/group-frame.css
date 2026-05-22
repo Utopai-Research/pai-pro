@@ -242,48 +242,30 @@
   background: oklch(0.55 0.18 25);
 }
 
-/* Hover-reveal trigger is on `.group-title-row`, not `.group-frame`,
-   because the frame body is `pointer-events: none` and won't fire
-   `:hover`. Style mirrors `.media-expand-btn` in nodes-base.css. */
 .group-frame-action-btn {
   pointer-events: auto;
-  width: 24px;
-  height: 24px;
-  padding: 0;
-  margin: 0;
-  display: grid;
-  place-items: center;
-  border: 0;
-  border-radius: 6px;
-  background: rgba(0, 0, 0, 0.55);
-  color: oklch(0.95 0.005 240);
-  cursor: pointer;
-  font-size: 13px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 12px;
+  background: oklch(1 0 0 / 0.06);
+  border: 1px solid oklch(1 0 0 / 0.22);
+  border-radius: 999px;
+  color: oklch(0.98 0 0);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
   line-height: 1;
-  font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+  cursor: pointer;
   opacity: 0;
-  transition:
-    opacity 140ms ease,
-    background 120ms ease;
+  transition: opacity 140ms ease, background 150ms ease, border-color 150ms ease;
 }
-.group-title-row:hover .group-frame-action-btn,
 .group-frame.selected .group-frame-action-btn {
-  opacity: 0.85;
+  opacity: 1;
 }
 .group-frame-action-btn:hover {
-  opacity: 1;
-  background: rgba(0, 0, 0, 0.72);
+  background: oklch(1 0 0 / 0.12);
 }
 .group-frame-action-btn:disabled {
   cursor: not-allowed;
   opacity: 0.4;
-}
-
-/* Wider text variant for "Ungroup" — same height + visual weight, auto
-   width with horizontal padding so the label fits. */
-.group-frame-action-btn-text {
-  width: auto;
-  padding: 0 8px;
-  font-size: 11.5px;
-  font-weight: 500;
 }

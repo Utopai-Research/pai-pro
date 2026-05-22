@@ -271,7 +271,7 @@ export function GroupFrameNode({ id, data, selected }: NodeProps): JSX.Element {
           <>
             <button
               type="button"
-              className="group-frame-action-btn group-frame-action-btn-text"
+              className="group-frame-action-btn"
               onClick={(e) => {
                 e.stopPropagation()
                 requestUngroup()
@@ -293,7 +293,7 @@ export function GroupFrameNode({ id, data, selected }: NodeProps): JSX.Element {
                   : 'Insert @-mentions for all live members into chat'
               }
             >
-              📎
+              📎 Refer
             </button>
           </>
         ) : null}
