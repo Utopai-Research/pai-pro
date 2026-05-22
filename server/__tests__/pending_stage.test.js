@@ -248,8 +248,7 @@ test("generate_voice.js --stage source_node_id lives in its own field", async (t
   const reply = parseReply(stdout);
   const sidecar = await readSidecar(cwd, reply.job_id);
   assert.strictEqual(sidecar.source_node_id, "image_1");
-  // Voice used to stuff source-node-id into reference_source_ids (a
-  // pre-Lever-A hack). Lives in its own field now; refs is empty
+  // Voice's source_node_id lives in its own field — refs is empty
   // because voice has no --ref-source-id flag.
   assert.deepEqual(sidecar.reference_source_ids, []);
 });

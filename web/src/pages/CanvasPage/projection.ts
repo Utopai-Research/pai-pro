@@ -35,6 +35,30 @@ import { IMAGE_CARD_CHROME_PX, NODE_SIZES, sizeForAspect } from './nodeData'
 import { pickSize } from './placement'
 
 /**
+ * Index every asset node's renderable ref (kind + URL) by node id.
+ * The URL field is populated on every asset node by `synthesizeAssetUrls`
+ * at the useWorkflow seam, so we just read it here.
+ */
+function buildAssetRefIndex(wfNodes: CanvasNode[]): Map<string, MediaRef> {
+  const out = new Map<string, MediaRef>()
+  for (const n of wfNodes) {
+    const d = n.data as {
+      image_url?: unknown
+      video_url?: unknown
+      audio_url?: unknown
+    }
+    if (n.type === 'image_result' && typeof d.image_url === 'string' && d.image_url !== '') {
+      out.set(n.id, { kind: 'image', url: d.image_url })
+    } else if (n.type === 'video_result' && typeof d.video_url === 'string' && d.video_url !== '') {
+      out.set(n.id, { kind: 'video', url: d.video_url })
+    } else if (n.type === 'audio_result' && typeof d.audio_url === 'string' && d.audio_url !== '') {
+      out.set(n.id, { kind: 'audio', url: d.audio_url })
+    }
+  }
+  return out
+}
+
+/**
  * For each asset node, gather the inbound canvas refs (sources that
  * connected to it via a `derived` edge from --ref-source-id /
  * --source-node-id). MediaExpandOverlay reads `references` to paint the
@@ -48,25 +72,7 @@ function buildDerivedRefsByTarget(
   wfNodes: CanvasNode[],
   wfEdges: WfEdge[],
 ): Map<string, MediaRef[]> {
-  // First pass: index each asset node's renderable ref (kind + URL).
-  // Synthesis lives in synthesizeAssetUrls — the URL field is populated
-  // on every asset node by the useWorkflow seam.
-  const refByNodeId = new Map<string, MediaRef>()
-  for (const n of wfNodes) {
-    const d = n.data as {
-      image_url?: unknown
-      video_url?: unknown
-      audio_url?: unknown
-    }
-    if (n.type === 'image_result' && typeof d.image_url === 'string' && d.image_url !== '') {
-      refByNodeId.set(n.id, { kind: 'image', url: d.image_url })
-    } else if (n.type === 'video_result' && typeof d.video_url === 'string' && d.video_url !== '') {
-      refByNodeId.set(n.id, { kind: 'video', url: d.video_url })
-    } else if (n.type === 'audio_result' && typeof d.audio_url === 'string' && d.audio_url !== '') {
-      refByNodeId.set(n.id, { kind: 'audio', url: d.audio_url })
-    }
-  }
-  // Second pass: for each derived edge, append source's ref to target's list.
+  const refByNodeId = buildAssetRefIndex(wfNodes)
   const out = new Map<string, MediaRef[]>()
   for (const e of wfEdges) {
     if (e.kind !== 'derived') continue
@@ -309,24 +315,9 @@ export function projectWorkflowToCanvas(
   // the pending pad so the user sees the wiring while the CLI is in
   // flight. Pure visual — never fed into layout.
   //
-  // Lookup: id → {kind, url}. Used to draw the dashed edges and to
-  // resolve source-id refs back into the overlay's REFERENCES list
-  // (@Audio1 / @Image1 chip resolution + thumbnail rendering).
-  const idToMediaRef = new Map<string, { kind: 'image' | 'video' | 'audio'; url: string }>()
-  for (const wfNode of wfNodes) {
-    const d = wfNode.data as unknown as {
-      image_url?: unknown
-      video_url?: unknown
-      audio_url?: unknown
-    }
-    if (typeof d.image_url === 'string') {
-      idToMediaRef.set(wfNode.id, { kind: 'image', url: d.image_url })
-    } else if (typeof d.video_url === 'string') {
-      idToMediaRef.set(wfNode.id, { kind: 'video', url: d.video_url })
-    } else if (typeof d.audio_url === 'string') {
-      idToMediaRef.set(wfNode.id, { kind: 'audio', url: d.audio_url })
-    }
-  }
+  // The same id→MediaRef index resolves source-id refs into the
+  // overlay's REFERENCES list (@Audio1 / @Image1 chip thumbnails).
+  const idToMediaRef = buildAssetRefIndex(wfNodes)
   const pendingVisualEdges: Array<{ from: string; to: string }> = []
   const wfNodeIds = new Set(wfNodes.map((n) => n.id))
   for (const pg of visiblePending) {

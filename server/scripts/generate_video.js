@@ -149,9 +149,10 @@ try {
   const projectId = args["project-id"] || (await readActiveProject());
 
   // Partition --ref-source-id list into image / video buckets by node
-  // type, with an explicit reject for wrong-typed ids so the agent gets
-  // a clear bad_args instead of a silent drop (was Bug 2 in the URL
-  // audit). Audio refs come from --ref-audio-source-id (separate flag).
+  // type. Wrong-typed ids (audio, note, missing) reject with bad_args
+  // — silent drops would leave the user with a solid edge to a node
+  // the provider never actually received. Audio refs use the
+  // dedicated --ref-audio-source-id flag.
   const imgSrcIds = [];
   const vidSrcIds = [];
   const badSrcIds = [];

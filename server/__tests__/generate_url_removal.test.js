@@ -1,9 +1,8 @@
-// Integration tests for Phase 3 URL-passthrough removal.
+// Integration tests for the URL-passthrough removal:
 //
 // - The legacy --ref-image-url / --reference-{image,audio,video}-url
 //   flags are gone; parseArgs (strict mode) rejects them with bad_args.
-// - generate_video.js's type partition now rejects wrong-typed
-//   --ref-source-id (Bug 2 fix) instead of silently dropping.
+//   External URLs are mirrored onto the canvas first via mirror_url.js.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";

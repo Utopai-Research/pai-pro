@@ -145,11 +145,11 @@ export function tunnelUrlForLocalPath({ localPath, projectId }) {
   return `${origin}/projects/${encodeURIComponent(projectId)}/${rel}`;
 }
 
-/**
- * Resolve a canvas node id to one of its data fields by reading the
- * project's workflow.json. Returns null when missing.
- */
-async function readNodeDataField({ nodeId, projectId, field }) {
+// Best-effort read of a single node from the project's workflow.json.
+// Returns null on any miss (no nodeId, unreadable / unparsable file,
+// no nodes array, no matching id). All three readers below funnel
+// through this — one file-read pattern instead of three.
+async function readNodeFromWorkflow({ nodeId, projectId }) {
   if (!nodeId) return null;
   const proj = projectId || await readActiveProject();
   const wfPath = path.join(PROJECT_ROOT, "projects", proj, "workflow.json");
@@ -157,47 +157,27 @@ async function readNodeDataField({ nodeId, projectId, field }) {
   try { raw = await fs.readFile(wfPath, "utf8"); } catch { return null; }
   let doc;
   try { doc = JSON.parse(raw); } catch { return null; }
-  const node = Array.isArray(doc?.nodes) ? doc.nodes.find((n) => n?.id === nodeId) : null;
-  const v = node?.data?.[field];
+  if (!Array.isArray(doc?.nodes)) return null;
+  return doc.nodes.find((n) => n?.id === nodeId) ?? null;
+}
+
+export async function readNodeLocalPath({ nodeId, projectId }) {
+  const node = await readNodeFromWorkflow({ nodeId, projectId });
+  const v = node?.data?.local_path;
   return typeof v === "string" && v ? v : null;
 }
 
-export function readNodeLocalPath({ nodeId, projectId, field = "local_path" }) {
-  return readNodeDataField({ nodeId, projectId, field });
-}
-
-/**
- * Look up a canvas node's `type` field. Returns null on a miss.
- * Used by generate_video.js to partition a flat --ref-source-id list
- * into image/video buckets without requiring positional ordering.
- */
+// Used by generate_video.js to partition a flat --ref-source-id list
+// into image / video buckets and reject wrong-typed refs.
 export async function readNodeType({ nodeId, projectId }) {
-  if (!nodeId) return null;
-  const proj = projectId || await readActiveProject();
-  const wfPath = path.join(PROJECT_ROOT, "projects", proj, "workflow.json");
-  let raw;
-  try { raw = await fs.readFile(wfPath, "utf8"); } catch { return null; }
-  let doc;
-  try { doc = JSON.parse(raw); } catch { return null; }
-  const node = Array.isArray(doc?.nodes) ? doc.nodes.find((n) => n?.id === nodeId) : null;
+  const node = await readNodeFromWorkflow({ nodeId, projectId });
   return typeof node?.type === "string" ? node.type : null;
 }
 
-/**
- * Returns true when the node exists and has data.archived === true.
- * Returns false for missing nodes, missing projects, or unset/false flag.
- * Used by buildProviderRefs + postNodeAddBatch to fail-fast before the
- * provider call when an agent references an archived node.
- */
+// Used by buildProviderRefs + postNodeAddBatch to fail-fast before the
+// provider call when an agent references an archived node.
 export async function readNodeArchived({ nodeId, projectId }) {
-  if (!nodeId) return false;
-  const proj = projectId || await readActiveProject();
-  const wfPath = path.join(PROJECT_ROOT, "projects", proj, "workflow.json");
-  let raw;
-  try { raw = await fs.readFile(wfPath, "utf8"); } catch { return false; }
-  let doc;
-  try { doc = JSON.parse(raw); } catch { return false; }
-  const node = Array.isArray(doc?.nodes) ? doc.nodes.find((n) => n?.id === nodeId) : null;
+  const node = await readNodeFromWorkflow({ nodeId, projectId });
   return node?.data?.archived === true;
 }
 
