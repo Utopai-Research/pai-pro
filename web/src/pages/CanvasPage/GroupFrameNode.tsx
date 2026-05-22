@@ -48,7 +48,6 @@ export function GroupFrameNode({ id, data, selected }: NodeProps): JSX.Element {
   const [editing, setEditing] = useState(false)
   const [titleDraft, setTitleDraft] = useState(d.title)
   const [paletteOpen, setPaletteOpen] = useState(false)
-  const [confirmUngroupOpen, setConfirmUngroupOpen] = useState(false)
   const inputRef = useRef<HTMLInputElement | null>(null)
   const containerRef = useRef<HTMLDivElement | null>(null)
 
@@ -137,11 +136,22 @@ export function GroupFrameNode({ id, data, selected }: NodeProps): JSX.Element {
     [persist],
   )
 
-  const requestUngroup = useCallback((): void => {
+  const requestUngroup = useCallback(async (): Promise<void> => {
     if (editing) return
     setPaletteOpen(false)
-    setConfirmUngroupOpen(true)
-  }, [editing])
+    if (projectId === null) return
+    saveStatus?.beginPersist()
+    try {
+      await deleteCanvasGroupFrame(projectId, id)
+      saveStatus?.endPersist(false)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      saveStatus?.endPersist(true, msg)
+      if (import.meta.env.DEV) {
+        console.warn(`[GroupFrameNode:${id}] ungroup failed`, err)
+      }
+    }
+  }, [editing, projectId, id, saveStatus])
 
   // Archive state is read imperatively (rf.getNodes) so we don't have
   // to subscribe to every node change just for the click-time filter.
@@ -163,22 +173,6 @@ export function GroupFrameNode({ id, data, selected }: NodeProps): JSX.Element {
     },
     [composer, d.memberIds, rf],
   )
-
-  const confirmUngroup = useCallback(async (): Promise<void> => {
-    setConfirmUngroupOpen(false)
-    if (projectId === null) return
-    saveStatus?.beginPersist()
-    try {
-      await deleteCanvasGroupFrame(projectId, id)
-      saveStatus?.endPersist(false)
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
-      saveStatus?.endPersist(true, msg)
-      if (import.meta.env.DEV) {
-        console.warn(`[GroupFrameNode:${id}] ungroup failed`, err)
-      }
-    }
-  }, [projectId, id, saveStatus])
 
   useEffect(() => {
     if (selected !== true) return undefined
@@ -211,7 +205,6 @@ export function GroupFrameNode({ id, data, selected }: NodeProps): JSX.Element {
           t.closest('.group-title-button') !== null ||
           t.closest('.group-title-input') !== null ||
           t.closest('.group-palette') !== null ||
-          t.closest('.group-confirm') !== null ||
           t.closest('.group-frame-action-btn') !== null
         ) {
           return
@@ -267,7 +260,7 @@ export function GroupFrameNode({ id, data, selected }: NodeProps): JSX.Element {
           {d.title !== '' ? d.title : <span className="group-title-empty">untitled</span>}
         </button>
       )}
-      {!editing && !confirmUngroupOpen ? (
+      {!editing ? (
         <div
           className="group-frame-actions"
           style={{ ['--inv-zoom' as string]: 1 / zoom }}
@@ -313,42 +306,6 @@ export function GroupFrameNode({ id, data, selected }: NodeProps): JSX.Element {
               onClick={() => pickHue(opt.hue)}
             />
           ))}
-        </div>
-      ) : null}
-      {confirmUngroupOpen ? (
-        <div
-          className="group-confirm"
-          onClick={(e) => e.stopPropagation()}
-          onMouseDown={(e) => e.stopPropagation()}
-          onContextMenu={(e) => e.preventDefault()}
-        >
-          <span className="group-confirm-msg">
-            Ungroup{' '}
-            <strong>
-              {d.title !== '' ? `"${d.title}"` : 'this frame'}
-            </strong>
-            ?
-            <br />
-            <span className="group-confirm-sub">Members stay in place.</span>
-          </span>
-          <div className="group-confirm-actions">
-            <button
-              type="button"
-              className="group-confirm-cancel"
-              onClick={() => setConfirmUngroupOpen(false)}
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              className="group-confirm-confirm"
-              onClick={() => {
-                void confirmUngroup()
-              }}
-            >
-              Ungroup
-            </button>
-          </div>
         </div>
       ) : null}
       <div className="group-fill" />
