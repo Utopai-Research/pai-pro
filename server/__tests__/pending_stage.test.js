@@ -153,9 +153,9 @@ test("generate_image.js --stage without --prompt fails bad_args", async (t) => {
   assert.strictEqual(reply.klass, "bad_args");
 });
 
-// --- isBypassEnabled ----------------------------------------------------
+// --- isBypassEnabled + writePending -------------------------------------
 
-import { isBypassEnabled } from "../scripts/_pending.js";
+import { isBypassEnabled, writePending } from "../scripts/_pending.js";
 import { writeFile } from "node:fs/promises";
 
 test("isBypassEnabled true when meta.json has dangerously_skip_draft_gate=true", async (t) => {
@@ -182,4 +182,182 @@ test("isBypassEnabled false when flag missing, false, or meta absent", async (t)
     JSON.stringify({ id: "x", title: "x", dangerously_skip_draft_gate: false }),
   );
   assert.strictEqual(await isBypassEnabled(cwd), false);
+});
+
+// --- sidecar lineage capture (source_node_id + reference_source_ids) ---
+//
+// The pending pad's dashed edges must match the solid edges the final
+// node will end up with. Both fields are captured at writePending time
+// so the projection has everything it needs to draw the wiring before
+// the CLI finishes.
+
+test("generate_image.js --stage captures source_node_id + reference_source_ids", async (t) => {
+  const cwd = await setupCwd();
+  t.after(() => rm(cwd, { recursive: true, force: true }));
+  const { code, stdout } = await runCli({
+    script: "generate_image.js",
+    args: [
+      "--stage", "--prompt", "x",
+      "--source-node-id", "note_5",
+      "--ref-source-id", "image_3",
+      "--ref-source-id", "image_4",
+    ],
+    cwd,
+  });
+  assert.strictEqual(code, 0);
+  const reply = parseReply(stdout);
+  const sidecar = await readSidecar(cwd, reply.job_id);
+  assert.strictEqual(sidecar.source_node_id, "note_5");
+  assert.deepEqual(sidecar.reference_source_ids, ["image_3", "image_4"]);
+});
+
+test("generate_video.js --stage captures source_node_id + merged refs (audio included)", async (t) => {
+  const cwd = await setupCwd();
+  t.after(() => rm(cwd, { recursive: true, force: true }));
+  const { code, stdout } = await runCli({
+    script: "generate_video.js",
+    args: [
+      "--stage", "--prompt", "x",
+      "--source-node-id", "note_2",
+      "--ref-source-id", "image_3",
+      "--ref-audio-source-id", "audio_7",
+    ],
+    cwd,
+  });
+  assert.strictEqual(code, 0);
+  const reply = parseReply(stdout);
+  const sidecar = await readSidecar(cwd, reply.job_id);
+  assert.strictEqual(sidecar.source_node_id, "note_2");
+  assert.deepEqual(sidecar.reference_source_ids, ["image_3", "audio_7"]);
+});
+
+test("generate_voice.js --stage source_node_id lives in its own field", async (t) => {
+  const cwd = await setupCwd();
+  t.after(() => rm(cwd, { recursive: true, force: true }));
+  const { code, stdout } = await runCli({
+    script: "generate_voice.js",
+    args: [
+      "--stage",
+      "--text", "Hello there.",
+      "--prompt", "Calm tenor.",
+      "--source-node-id", "image_1",
+    ],
+    cwd,
+  });
+  assert.strictEqual(code, 0);
+  const reply = parseReply(stdout);
+  const sidecar = await readSidecar(cwd, reply.job_id);
+  assert.strictEqual(sidecar.source_node_id, "image_1");
+  // Voice used to stuff source-node-id into reference_source_ids (a
+  // pre-Lever-A hack). Lives in its own field now; refs is empty
+  // because voice has no --ref-source-id flag.
+  assert.deepEqual(sidecar.reference_source_ids, []);
+});
+
+// --- writePending unit (covers the running-branch sidecar shape) -------
+
+test("writePending persists source_node_id + reference_source_ids", async (t) => {
+  const cwd = await setupCwd();
+  t.after(() => rm(cwd, { recursive: true, force: true }));
+  const originalCwd = process.cwd();
+  process.chdir(cwd);
+  t.after(() => process.chdir(originalCwd));
+
+  await writePending({
+    jobId: "test_job_1",
+    kind: "image",
+    prompt: "x",
+    sourceNodeId: "note_5",
+    referenceSourceIds: ["image_3", "image_4"],
+    model: "image-generation",
+  });
+
+  const sidecar = await readSidecar(cwd, "test_job_1");
+  assert.strictEqual(sidecar.source_node_id, "note_5");
+  assert.deepEqual(sidecar.reference_source_ids, ["image_3", "image_4"]);
+  assert.strictEqual(sidecar.stage, "running");
+});
+
+test("writePending sticky-preserves source_node_id across draft → running", async (t) => {
+  const cwd = await setupCwd();
+  t.after(() => rm(cwd, { recursive: true, force: true }));
+  const originalCwd = process.cwd();
+  process.chdir(cwd);
+  t.after(() => process.chdir(originalCwd));
+
+  await writePending({
+    jobId: "test_job_2",
+    kind: "image",
+    prompt: "x",
+    stage: "draft",
+    sourceNodeId: "note_99",
+    referenceSourceIds: ["image_1"],
+    model: "image-generation",
+  });
+
+  // Running call re-writes without re-passing sourceNodeId — sticky
+  // preservation pulls it from the prior sidecar.
+  await writePending({
+    jobId: "test_job_2",
+    kind: "image",
+    prompt: "x",
+    model: "image-generation",
+  });
+
+  const sidecar = await readSidecar(cwd, "test_job_2");
+  assert.strictEqual(sidecar.source_node_id, "note_99");
+  assert.deepEqual(sidecar.reference_source_ids, ["image_1"]);
+  assert.strictEqual(sidecar.stage, "running");
+});
+
+// --- running-flow smoke (regression: catches stray refs in the
+// non-stage branch that --stage tests don't exercise) -----------------
+
+async function enableBypass(cwd) {
+  await writeFile(
+    join(cwd, "meta.json"),
+    JSON.stringify({ id: "x", title: "x", dangerously_skip_draft_gate: true }),
+  );
+}
+
+test("generate_image.js running flow emits structured failure (no stray refs)", async (t) => {
+  const cwd = await setupCwd();
+  t.after(() => rm(cwd, { recursive: true, force: true }));
+  await enableBypass(cwd);
+  const { code, stdout, stderr } = await runCli({
+    script: "generate_image.js",
+    args: [
+      "--stage", "--prompt", "x",
+      "--ref-source-id", "image_nonexistent",
+      "--project-id", "nonexistent_project_for_test_image",
+    ],
+    cwd,
+  });
+  // Must emit a JSON line on stdout — proves the running-branch
+  // writePending executed without throwing (e.g. ReferenceError on a
+  // stale symbol from a half-applied refactor).
+  assert.strictEqual(code, 1, `expected exit 1; stderr:\n${stderr}`);
+  const reply = parseReply(stdout);
+  assert.strictEqual(reply.ok, false);
+  assert.strictEqual(reply.klass, "bad_args");
+  assert.match(reply.message, /local_path/);
+});
+
+test("generate_video.js running flow emits structured failure (no stray refs)", async (t) => {
+  const cwd = await setupCwd();
+  t.after(() => rm(cwd, { recursive: true, force: true }));
+  await enableBypass(cwd);
+  const { code, stdout, stderr } = await runCli({
+    script: "generate_video.js",
+    args: [
+      "--stage", "--prompt", "x",
+      "--ref-source-id", "video_nonexistent",
+      "--project-id", "nonexistent_project_for_test_video",
+    ],
+    cwd,
+  });
+  assert.strictEqual(code, 2, `expected exit 2 (bad_args); stderr:\n${stderr}`);
+  const reply = parseReply(stdout);
+  assert.strictEqual(reply.ok, false);
+  assert.strictEqual(reply.klass, "bad_args");
 });

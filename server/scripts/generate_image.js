@@ -112,8 +112,8 @@ await writePending({
   kind: "image",
   prompt: args.prompt,
   aspectRatio: args["aspect-ratio"],
-  sourceNodeId: lineage.source_node_id,
-  referenceSourceIds: lineage.ref_source_ids,
+  sourceNodeId: args["source-node-id"] || null,
+  referenceSourceIds: refSources,
   model: plannedModel,
   imageSize: args["image-size"],
 });
