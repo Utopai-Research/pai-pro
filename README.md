@@ -1,8 +1,17 @@
+<div align="center">
+
+# pai-pro
+
+**The local AI filmmaking canvas for your coding agent.**
+
+[![Utopai Studios](https://img.shields.io/badge/Utopai-Studios-2563eb?style=flat-square)](https://www.utopaistudios.com/)
+[![Follow @UtopaiStudios](https://img.shields.io/badge/Follow-%40UtopaiStudios-000000?style=flat-square&logo=x&logoColor=white)](https://x.com/UtopaiStudios)
+
+</div>
+
 [![Utopai Studios](assets/banner.png)](https://www.utopaistudios.com/)
 
-# pai-pro — local AI filmmaking canvas for your coding agent
-
-**Filmmaking skills + a React Flow canvas + an embedded `claude` terminal.** Write a screenplay, design characters, generate clips, lay them out on a timeline — all from inside Claude Code (or Codex / Cursor / Gemini CLI; the skills are agent-agnostic). Local-first: project files live on disk, generated media mirrors alongside, nothing leaves your machine except the actual generation calls. Built by [Utopai Studios](https://www.utopaistudios.com/).
+Filmmaking skills + a React Flow canvas + an embedded `claude` terminal. Write a screenplay, design characters, generate clips, lay them out on a timeline — all from inside Claude Code (or Codex / Cursor / Gemini CLI; the skills are agent-agnostic). Local-first: project files live on disk, generated media mirrors alongside, nothing leaves your machine except the actual generation calls. Built by [Utopai Studios](https://www.utopaistudios.com/).
 
 ## Key capabilities
 
