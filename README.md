@@ -1,17 +1,11 @@
 <div align="center">
 
-<h1>pai-pro</h1>
+# pai-pro
 
-<p>
-  <a href="https://www.utopaistudios.com/">
-    <img src="https://img.shields.io/badge/Utopai_Studios-0A0A0A?style=for-the-badge&logoColor=white" alt="Utopai Studios" />
-  </a>
-  <a href="https://x.com/UtopaiStudios">
-    <img src="https://img.shields.io/badge/Follow_@UtopaiStudios-000000?style=for-the-badge&logo=x&logoColor=white" alt="Follow @UtopaiStudios on X" />
-  </a>
-</p>
+**The local AI filmmaking canvas for your coding agent.**
 
-<p><strong>The local AI filmmaking canvas for your coding agent.</strong></p>
+[![Utopai Studios](https://img.shields.io/badge/Utopai_Studios-4285F4?style=flat&logoColor=white)](https://www.utopaistudios.com/)
+[![Follow @UtopaiStudios](https://img.shields.io/badge/Follow-%40UtopaiStudios-000000?style=flat&logo=x&logoColor=white)](https://x.com/UtopaiStudios)
 
 <a href="https://www.utopaistudios.com/">
   <img src="assets/banner.png" alt="Utopai Studios" width="100%" />
