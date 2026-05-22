@@ -29,22 +29,10 @@
   pointer-events: none;
 }
 
-/* `pointer-events: auto` because the parent `.group-frame` is
-   `pointer-events: none` (so members underneath stay clickable through
-   the backdrop) and children need to opt back in to receive events. */
-.group-title-row {
-  position: absolute;
-  left: 50%;
-  top: -28px;
-  transform: translateX(-50%);
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  pointer-events: auto;
-  max-width: 100%;
-}
-
 .group-title {
+  position: absolute;
+  left: 0;
+  top: -28px;
   font-size: 13px;
   font-weight: 500;
   color: oklch(0.78 0.1 var(--group-hue, 220));
@@ -53,6 +41,15 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.group-frame-actions {
+  position: absolute;
+  left: 50%;
+  top: calc(-32px * var(--inv-zoom, 1));
+  transform: translateX(-50%);
+  display: flex;
+  gap: calc(6px * var(--inv-zoom, 1));
 }
 
 /* PR-C1: title is now interactive (click → palette, dbl-click → edit).

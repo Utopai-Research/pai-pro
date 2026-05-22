@@ -231,77 +231,75 @@ export function GroupFrameNode({ id, data, selected }: NodeProps): JSX.Element {
           onResizeEnd={onResizeEnd}
         />
       ) : null}
-      <div
-        className="group-title-row"
-        style={{ ['--inv-zoom' as string]: 1 / zoom }}
-      >
-        {editing ? (
-          <input
-            ref={inputRef}
-            className="group-title group-title-input"
-            type="text"
-            value={titleDraft}
-            maxLength={TITLE_MAX_LENGTH}
-            onChange={(e) => setTitleDraft(e.target.value)}
-            onBlur={commitTitle}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                e.preventDefault()
-                commitTitle()
-              } else if (e.key === 'Escape') {
-                e.preventDefault()
-                setEditing(false)
-                setTitleDraft(d.title)
-              }
-            }}
-            onClick={(e) => e.stopPropagation()}
-            onMouseDown={(e) => e.stopPropagation()}
-          />
-        ) : (
+      {editing ? (
+        <input
+          ref={inputRef}
+          className="group-title group-title-input"
+          type="text"
+          value={titleDraft}
+          maxLength={TITLE_MAX_LENGTH}
+          onChange={(e) => setTitleDraft(e.target.value)}
+          onBlur={commitTitle}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault()
+              commitTitle()
+            } else if (e.key === 'Escape') {
+              e.preventDefault()
+              setEditing(false)
+              setTitleDraft(d.title)
+            }
+          }}
+          onClick={(e) => e.stopPropagation()}
+          onMouseDown={(e) => e.stopPropagation()}
+        />
+      ) : (
+        <button
+          type="button"
+          className="group-title group-title-button"
+          onClick={togglePalette}
+          onDoubleClick={(e) => {
+            e.stopPropagation()
+            startEditing()
+          }}
+          title={d.title !== '' ? `${d.title} — double-click to rename, click for color` : 'double-click to rename, click for color'}
+        >
+          {d.title !== '' ? d.title : <span className="group-title-empty">untitled</span>}
+        </button>
+      )}
+      {!editing && !confirmUngroupOpen ? (
+        <div
+          className="group-frame-actions"
+          style={{ ['--inv-zoom' as string]: 1 / zoom }}
+        >
           <button
             type="button"
-            className="group-title group-title-button"
-            onClick={togglePalette}
-            onDoubleClick={(e) => {
+            className="group-frame-action-btn"
+            onClick={(e) => {
               e.stopPropagation()
-              startEditing()
+              requestUngroup()
             }}
-            title={d.title !== '' ? `${d.title} — double-click to rename, click for color` : 'double-click to rename, click for color'}
+            onDoubleClick={(e) => e.stopPropagation()}
+            title="Ungroup — frame removed, nodes stay where they are"
           >
-            {d.title !== '' ? d.title : <span className="group-title-empty">untitled</span>}
+            Ungroup
           </button>
-        )}
-        {!editing && !confirmUngroupOpen ? (
-          <>
-            <button
-              type="button"
-              className="group-frame-action-btn"
-              onClick={(e) => {
-                e.stopPropagation()
-                requestUngroup()
-              }}
-              onDoubleClick={(e) => e.stopPropagation()}
-              title="Ungroup — frame removed, nodes stay where they are"
-            >
-              Ungroup
-            </button>
-            <button
-              type="button"
-              className="group-frame-action-btn"
-              onClick={onReferAll}
-              onDoubleClick={(e) => e.stopPropagation()}
-              disabled={composer === null}
-              title={
-                composer === null
-                  ? 'Chat composer not ready'
-                  : 'Insert @-mentions for all live members into chat'
-              }
-            >
-              <span className="group-frame-action-icon">📎</span> Refer
-            </button>
-          </>
-        ) : null}
-      </div>
+          <button
+            type="button"
+            className="group-frame-action-btn"
+            onClick={onReferAll}
+            onDoubleClick={(e) => e.stopPropagation()}
+            disabled={composer === null}
+            title={
+              composer === null
+                ? 'Chat composer not ready'
+                : 'Insert @-mentions for all live members into chat'
+            }
+          >
+            <span className="group-frame-action-icon">📎</span> Refer
+          </button>
+        </div>
+      ) : null}
       {paletteOpen && !editing ? (
         <div className="group-palette" onClick={(e) => e.stopPropagation()}>
           {HUE_PRESETS.map((opt) => (
