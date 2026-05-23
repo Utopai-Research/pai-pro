@@ -83,6 +83,7 @@ COPY skills/ /repo/skills/
 # the container, otherwise the embedded agent fires generations
 # without the draft gate.
 COPY CLAUDE.md /repo/CLAUDE.md
+COPY agent-templates/ /repo/agent-templates/
 COPY .claude/ /repo/.claude/
 
 # Entrypoint.
