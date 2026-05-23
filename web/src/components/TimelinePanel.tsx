@@ -27,9 +27,38 @@
  * affected nodes in one batch via /projects/:id/nodes/batch-data so
  * the server emits a single canvas-state update.
  */
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
+import {
+  DndContext,
+  DragOverlay,
+  KeyboardSensor,
+  MouseSensor,
+  TouchSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type DragStartEvent,
+} from '@dnd-kit/core'
+import {
+  SortableContext,
+  arrayMove,
+  rectSortingStrategy,
+  sortableKeyboardCoordinates,
+} from '@dnd-kit/sortable'
 import { VIEWER_URL } from '@/lib/socket'
 import type { Workflow, VideoResultNode } from '@/types/canvas'
+import SortableClip from './timeline/SortableClip'
+import ClipGhostBody from './timeline/ClipGhostBody'
+
+// Stable shallow-array equality for optimistic-order catch-up checks.
+function arraysEqual(a: string[] | null, b: string[] | null): boolean {
+  if (a === b) return true
+  if (a == null || b == null) return false
+  if (a.length !== b.length) return false
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false
+  return true
+}
 
 interface TimelinePanelProps {
   projectId: string | null
@@ -524,6 +553,9 @@ export function TimelinePanel({
 
   // Compute the insertion slot from a drag event over a reel card.
   // Left half of the card → insert before; right half → insert after.
+  // (Used by the legacy HTML5 card-level handler. Stage 1 of the dnd-kit
+  // migration removes per-card HTML5 handlers from reel cards, so this
+  // is only reached via Available → reel container fallback paths.)
   const slotFromCardEvent = (
     e: React.DragEvent,
     cardIndex: number,
@@ -531,6 +563,120 @@ export function TimelinePanel({
     const r = e.currentTarget.getBoundingClientRect()
     return e.clientX < r.left + r.width / 2 ? cardIndex : cardIndex + 1
   }
+
+  // ---- dnd-kit intra-reel reorder (Stage 1) -------------------------
+  //
+  // Scope: dragging a reel card to a NEW reel slot. Cross-region
+  // drag (Available card → reel, reel → Available) still uses the
+  // existing HTML5 path through reorderTo above; Stage 2 will migrate
+  // those.
+  //
+  // Optimistic-order pattern (handover §5.3): the user sees the new
+  // order instantly via `optimisticOrder` overriding the truth-derived
+  // order; PATCH fires in the background; `useEffect` clears optimistic
+  // when the canvas-state catch-up makes truth match.
+  const [optimisticOrder, setOptimisticOrder] = useState<string[] | null>(null)
+  const [activeDragId, setActiveDragId] = useState<string | null>(null)
+  const dragBaselineRef = useRef<string[] | null>(null)
+
+  // Truth, derived from the live shot_id sort.
+  const truthOrder = useMemo(() => reel.map((n) => n.id), [reel])
+  const effectiveOrder = optimisticOrder ?? truthOrder
+
+  // Clear optimistic when the server-pushed canvas state catches up.
+  useEffect(() => {
+    if (optimisticOrder == null) return
+    if (arraysEqual(optimisticOrder, truthOrder)) setOptimisticOrder(null)
+  }, [truthOrder, optimisticOrder])
+
+  // Reel rendered in `effectiveOrder` instead of raw `reel` so the
+  // user sees the new order the instant they drop, before the round-
+  // trip lands.
+  const effectiveReel = useMemo<VideoResultNode[]>(() => {
+    if (optimisticOrder == null) return reel
+    const byId = new Map(reel.map((n) => [n.id, n]))
+    return optimisticOrder
+      .map((id) => byId.get(id))
+      .filter((n): n is VideoResultNode => Boolean(n))
+  }, [reel, optimisticOrder])
+
+  // Sparse renumber: only PATCH the cards whose shot_id actually
+  // changes. 1-based, matching the existing reorderTo at line ~504.
+  const applyOptimisticOrder = useCallback(
+    (nextIds: string[]) => {
+      if (projectId === null) return
+      if (arraysEqual(nextIds, truthOrder)) {
+        setOptimisticOrder(null)
+        return
+      }
+      setOptimisticOrder(nextIds)
+      const updates: BatchUpdate[] = []
+      nextIds.forEach((id, i) => {
+        const node = reel.find((n) => n.id === id)
+        if (!node) return
+        const want = i + 1
+        if (node.data.shot_id !== want) {
+          updates.push({ nodeId: id, data: { shot_id: want } })
+        }
+      })
+      void patchBatch(projectId, updates).catch(() => {
+        // Rollback on failure; truth-derived order resumes next render.
+        setOptimisticOrder(null)
+      })
+    },
+    [projectId, reel, truthOrder],
+  )
+
+  const sensors = useSensors(
+    useSensor(MouseSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  )
+
+  const handleDragStart = useCallback(
+    (event: DragStartEvent) => {
+      setActiveDragId(String(event.active.id))
+      dragBaselineRef.current = optimisticOrder ?? truthOrder
+    },
+    [optimisticOrder, truthOrder],
+  )
+
+  const handleDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      setActiveDragId(null)
+      const baseline = dragBaselineRef.current
+      dragBaselineRef.current = null
+      const { active, over } = event
+      if (!over || !baseline) {
+        if (baseline) {
+          setOptimisticOrder(arraysEqual(baseline, truthOrder) ? null : baseline)
+        }
+        return
+      }
+      const sourceId = String(active.id)
+      const overId = String(over.id)
+      if (sourceId === overId) return
+      const oldIndex = baseline.indexOf(sourceId)
+      const newIndex = baseline.indexOf(overId)
+      // Only handle intra-reel drags here. Cross-region lands in Stage 2.
+      if (oldIndex < 0 || newIndex < 0) return
+      if (oldIndex !== newIndex) {
+        applyOptimisticOrder(arrayMove(baseline, oldIndex, newIndex))
+      }
+    },
+    [truthOrder, applyOptimisticOrder],
+  )
+
+  const handleDragCancel = useCallback(() => {
+    setActiveDragId(null)
+    dragBaselineRef.current = null
+    // Stage 1 only mutates state on drop, so cancel has nothing to undo.
+  }, [])
+
+  const activeDragNode = useMemo(
+    () => (activeDragId ? reel.find((n) => n.id === activeDragId) ?? null : null),
+    [activeDragId, reel],
+  )
 
   // ---- Stitch + download the reel via the viewer's ffmpeg endpoint ----
   const [downloading, setDownloading] = useState(false)
@@ -803,62 +949,71 @@ export function TimelinePanel({
                 Drag a clip here to start the reel
               </div>
             ) : (
-              <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7">
-                {reel.map((n, i) => {
-                  const isActive =
-                    playlistMode === 'reel' &&
-                    i === activeIdx &&
-                    playlist.length > 0
-                  const slot = dragOver?.kind === 'slot' ? dragOver.index : -1
-                  // Left bar lights for the card sitting at the
-                  // insertion point. Right bar lights only on the last
-                  // card when the insertion point is at reel.length
-                  // (append) — every other "after card i" is the same
-                  // as "before card i+1" and shown there instead, so
-                  // only one bar lights for any given slot.
-                  const dropEdge: 'left' | 'right' | null =
-                    slot === i
-                      ? 'left'
-                      : slot === reel.length && i === reel.length - 1
-                        ? 'right'
-                        : null
-                  return (
-                    <ReelCard
-                      key={n.id}
-                      node={n}
-                      active={isActive}
-                      isPlaying={isActive && playing}
-                      dropEdge={dropEdge}
-                      onClick={() => (isActive ? togglePlay() : playReelFrom(i))}
-                      onAction={() => removeFromReel(n.id)}
-                      actionLabel="Remove"
-                      onDragStart={(e) => onCardDragStart(e, n.id)}
-                      onDragOver={(e) => {
-                        if (e.dataTransfer.types.includes(DRAG_MIME)) {
-                          e.preventDefault()
-                          e.stopPropagation()
-                          setDragOver({
-                            kind: 'slot',
-                            index: slotFromCardEvent(e, i),
-                          })
-                        }
-                      }}
-                      onDragLeave={() => {/* container handler resolves */}}
-                      onDrop={(e) => {
-                        const id = e.dataTransfer.getData(DRAG_MIME)
-                        if (id) {
-                          e.preventDefault()
-                          e.stopPropagation()
-                          void reorderTo(id, {
-                            kind: 'slot',
-                            index: slotFromCardEvent(e, i),
-                          })
-                        }
-                      }}
-                    />
-                  )
-                })}
-              </div>
+              <DndContext
+                sensors={sensors}
+                onDragStart={handleDragStart}
+                onDragEnd={handleDragEnd}
+                onDragCancel={handleDragCancel}
+              >
+                <SortableContext items={effectiveOrder} strategy={rectSortingStrategy}>
+                  <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7">
+                    {effectiveReel.map((n, i) => {
+                      // Active-card tracking follows the playing node's
+                      // id (truth-state), NOT this map's index — during
+                      // an optimistic reorder, the displayed position
+                      // shifts while playback continues on the original
+                      // clip. Without this, the play overlay would
+                      // briefly jump to a different card.
+                      const isActive =
+                        playlistMode === 'reel' &&
+                        reel[activeIdx]?.id === n.id &&
+                        playlist.length > 0
+                      // dropEdge is for the Available → reel container
+                      // HTML5 path (append-at-end indicator). Intra-reel
+                      // reorder uses dnd-kit's striped placeholder +
+                      // neighbor reflow instead — no edge bar shown.
+                      const slot = dragOver?.kind === 'slot' ? dragOver.index : -1
+                      const dropEdge: 'left' | 'right' | null =
+                        slot === i
+                          ? 'left'
+                          : slot === effectiveReel.length && i === effectiveReel.length - 1
+                            ? 'right'
+                            : null
+                      return (
+                        <SortableClip key={n.id} id={n.id} aspect={n.data.aspect ?? '16:9'}>
+                          <ReelCard
+                            node={n}
+                            active={isActive}
+                            isPlaying={isActive && playing}
+                            dropEdge={dropEdge}
+                            onClick={() => {
+                              if (isActive) {
+                                togglePlay()
+                                return
+                              }
+                              // Look up the truth-state index so a click
+                              // during the brief optimistic window still
+                              // seeks to the clicked node, not whichever
+                              // node happens to share its display slot.
+                              const truthIdx = reel.findIndex((r) => r.id === n.id)
+                              if (truthIdx >= 0) playReelFrom(truthIdx)
+                            }}
+                            onAction={() => removeFromReel(n.id)}
+                            actionLabel="Remove"
+                            // No HTML5 drag handlers — dnd-kit owns this card.
+                          />
+                        </SortableClip>
+                      )
+                    })}
+                  </div>
+                </SortableContext>
+                {createPortal(
+                  <DragOverlay dropAnimation={null}>
+                    {activeDragNode ? <ClipGhostBody node={activeDragNode} /> : null}
+                  </DragOverlay>,
+                  document.body,
+                )}
+              </DndContext>
             )}
           </div>
         </div>
@@ -964,19 +1119,28 @@ function ReelCard({
   onClick: () => void
   onAction: () => void
   actionLabel: 'Remove'
-  onDragStart: (e: React.DragEvent) => void
-  onDragOver: (e: React.DragEvent) => void
-  onDragLeave: () => void
-  onDrop: (e: React.DragEvent) => void
+  // HTML5 drag handlers are optional — when this card is rendered inside
+  // a SortableClip wrapper (dnd-kit), the wrapper owns drag and these
+  // are undefined; the card then renders as draggable={false}.
+  onDragStart?: (e: React.DragEvent) => void
+  onDragOver?: (e: React.DragEvent) => void
+  onDragLeave?: () => void
+  onDrop?: (e: React.DragEvent) => void
 }): JSX.Element {
   const url = node.data.video_url
   const shotId = node.data.shot_id
   const label = node.data.label ?? 'untitled'
   const aspect = node.data.aspect ?? '16:9'
   const duration = node.data.duration
+  // dnd-kit-wrapped cards (intra-reel reorder) have no HTML5 handlers and
+  // must NOT be `draggable` or the browser-level drag steals pointer
+  // events from dnd-kit's MouseSensor. HTML5-only callers (legacy
+  // Available section fallback during Stage 1) pass the handlers and get
+  // `draggable=true`.
+  const html5Drag = typeof onDragStart === 'function'
   return (
     <div
-      draggable
+      draggable={html5Drag}
       onDragStart={onDragStart}
       onDragOver={onDragOver}
       onDragLeave={onDragLeave}
@@ -1042,24 +1206,29 @@ function ReelCard({
           ) : null}
         </div>
       </button>
-      <div className="flex items-center justify-between gap-2 px-2 py-1.5">
-        <div className="min-w-0 flex-1">
-          <div className="truncate text-xs text-neutral-200">{label}</div>
+      {/* Stacked density (picked from pick-variation V5 / reel-card-density):
+          label on its own row above a metadata + ✕-icon row. Fits the full
+          "aspect · Ns" without truncation on narrow cards, since the ✕
+          button is ~40px slimmer than the prior text "REMOVE" pill. */}
+      <div className="px-2 py-1.5">
+        <div className="truncate text-xs text-neutral-200">{label}</div>
+        <div className="mt-0.5 flex items-center justify-between gap-2">
           <div className="truncate font-mono text-[10px] text-neutral-500">
             {aspect}
             {typeof duration === 'number' ? ` · ${duration}s` : ''}
           </div>
+          <button
+            type="button"
+            title={actionLabel}
+            onClick={(e) => {
+              e.stopPropagation()
+              onAction()
+            }}
+            className="grid h-4 w-4 shrink-0 place-items-center rounded text-[12px] leading-none text-neutral-500 transition-colors hover:bg-red-500/10 hover:text-red-300"
+          >
+            ×
+          </button>
         </div>
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation()
-            onAction()
-          }}
-          className="rounded border border-red-900/60 bg-red-950/40 px-2 py-0.5 text-[10px] uppercase tracking-wide text-red-300 transition-colors hover:border-red-700"
-        >
-          {actionLabel}
-        </button>
       </div>
     </div>
   )
