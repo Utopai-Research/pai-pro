@@ -35,21 +35,29 @@ import {
   KeyboardSensor,
   MouseSensor,
   TouchSensor,
+  closestCenter,
+  pointerWithin,
   useSensor,
   useSensors,
+  type CollisionDetection,
   type DragEndEvent,
+  type DragOverEvent,
   type DragStartEvent,
 } from '@dnd-kit/core'
 import {
   SortableContext,
   arrayMove,
-  rectSortingStrategy,
+  horizontalListSortingStrategy,
   sortableKeyboardCoordinates,
 } from '@dnd-kit/sortable'
 import { VIEWER_URL } from '@/lib/socket'
 import type { Workflow, VideoResultNode } from '@/types/canvas'
 import SortableClip from './timeline/SortableClip'
 import ClipGhostBody from './timeline/ClipGhostBody'
+import DraggableCompactCard from './timeline/DraggableCompactCard'
+import AvailableDroppable from './timeline/AvailableDroppable'
+import ReelAreaDroppable from './timeline/ReelAreaDroppable'
+import GhostPlaceholder from './timeline/GhostPlaceholder'
 
 // Stable shallow-array equality for optimistic-order catch-up checks.
 function arraysEqual(a: string[] | null, b: string[] | null): boolean {
@@ -92,8 +100,6 @@ async function patchBatch(projectId: string, updates: BatchUpdate[]) {
     },
   )
 }
-
-const DRAG_MIME = 'application/x-pai-pro-clip'
 
 export function TimelinePanel({
   projectId,
@@ -488,12 +494,10 @@ export function TimelinePanel({
   // After computing the new reel ordering, send one batch PATCH that
   // assigns shot_id = i+1 to each reel node (skip if already correct)
   // and shot_id = null to anything that left the reel.
-  const [dragOver, setDragOver] = useState<
-    | { kind: 'slot'; index: number }
-    | { kind: 'available' }
-    | null
-  >(null)
-
+  //
+  // Still used by the Remove and +Reel buttons (additive paths the
+  // dnd-kit migration kept). Cross-region drag goes through
+  // applyOptimisticOrder instead and bypasses this function.
   const reorderTo = async (
     sourceId: string,
     destination:
@@ -501,7 +505,6 @@ export function TimelinePanel({
       | { kind: 'available' },
   ) => {
     if (projectId === null) return
-    setDragOver(null)
     const sourceFromReel = reel.findIndex((n) => n.id === sourceId)
     const sourceNode =
       sourceFromReel >= 0
@@ -546,30 +549,14 @@ export function TimelinePanel({
     await reorderTo(nodeId, { kind: 'slot', index: reel.length })
   }
 
-  const onCardDragStart = (e: React.DragEvent, nodeId: string) => {
-    e.dataTransfer.setData(DRAG_MIME, nodeId)
-    e.dataTransfer.effectAllowed = 'move'
-  }
-
-  // Compute the insertion slot from a drag event over a reel card.
-  // Left half of the card → insert before; right half → insert after.
-  // (Used by the legacy HTML5 card-level handler. Stage 1 of the dnd-kit
-  // migration removes per-card HTML5 handlers from reel cards, so this
-  // is only reached via Available → reel container fallback paths.)
-  const slotFromCardEvent = (
-    e: React.DragEvent,
-    cardIndex: number,
-  ): number => {
-    const r = e.currentTarget.getBoundingClientRect()
-    return e.clientX < r.left + r.width / 2 ? cardIndex : cardIndex + 1
-  }
-
-  // ---- dnd-kit intra-reel reorder (Stage 1) -------------------------
+  // ---- dnd-kit reorder + cross-region drag (Stage 1 + 2) ------------
   //
-  // Scope: dragging a reel card to a NEW reel slot. Cross-region
-  // drag (Available card → reel, reel → Available) still uses the
-  // existing HTML5 path through reorderTo above; Stage 2 will migrate
-  // those.
+  // Stage 1 wired intra-reel reorder. Stage 2 (in-progress) wires
+  // cross-region drag (Available card ↔ reel) via the same DndContext.
+  // The legacy HTML5 paths (DRAG_MIME, onCardDragStart, container-level
+  // onDragOver/onDrop) are gone — dnd-kit owns every drag surface.
+  // Remove (✕ on each reel card) and +Reel (on each Available card) stay
+  // as explicit button-driven alternatives to the drag paths.
   //
   // Optimistic-order pattern (handover §5.3): the user sees the new
   // order instantly via `optimisticOrder` overriding the truth-derived
@@ -578,6 +565,11 @@ export function TimelinePanel({
   const [optimisticOrder, setOptimisticOrder] = useState<string[] | null>(null)
   const [activeDragId, setActiveDragId] = useState<string | null>(null)
   const dragBaselineRef = useRef<string[] | null>(null)
+  // Sticky-over collision target (handover §5.7-C). Persists the last
+  // valid over.id so cursor wobble in dead-zone padding (between reel
+  // grid rows, between sections) doesn't oscillate between two closest
+  // droppables and strobe the preview.
+  const lastOverIdRef = useRef<string | null>(null)
 
   // Truth, derived from the live shot_id sort.
   const truthOrder = useMemo(() => reel.map((n) => n.id), [reel])
@@ -592,13 +584,35 @@ export function TimelinePanel({
   // Reel rendered in `effectiveOrder` instead of raw `reel` so the
   // user sees the new order the instant they drop, before the round-
   // trip lands.
+  //
+  // byId pulls from BOTH reel and available — cross-region drag
+  // (Stage 2) splices an Available source's id into optimisticOrder
+  // mid-drag, and the preview needs to render that source as a member
+  // of the reel grid. Without Available in the lookup, the splice
+  // would show in effectiveOrder but the .map would filter out the
+  // source's node data and the visual preview would silently break.
   const effectiveReel = useMemo<VideoResultNode[]>(() => {
     if (optimisticOrder == null) return reel
-    const byId = new Map(reel.map((n) => [n.id, n]))
+    const byId = new Map<string, VideoResultNode>()
+    for (const n of reel) byId.set(n.id, n)
+    for (const n of available) byId.set(n.id, n)
     return optimisticOrder
       .map((id) => byId.get(id))
       .filter((n): n is VideoResultNode => Boolean(n))
-  }, [reel, optimisticOrder])
+  }, [reel, available, optimisticOrder])
+
+  // Available rendered as `effectiveAvailable` (Stage 2 fix): when the
+  // cross-region preview engages, optimisticOrder includes the source
+  // id and the source is rendered inside the reel grid. Without
+  // excluding it from Available, the source would visually appear in
+  // both places (and dnd-kit registers double droppables for it). The
+  // pai-next "partition from effective order, not truth" pattern
+  // (handover §3 data-model contract).
+  const effectiveAvailable = useMemo<VideoResultNode[]>(() => {
+    if (optimisticOrder == null) return available
+    const optSet = new Set(optimisticOrder)
+    return available.filter((n) => !optSet.has(n.id))
+  }, [available, optimisticOrder])
 
   // Sparse renumber: only PATCH the cards whose shot_id actually
   // changes. 1-based, matching the existing reorderTo at line ~504.
@@ -611,20 +625,39 @@ export function TimelinePanel({
       }
       setOptimisticOrder(nextIds)
       const updates: BatchUpdate[] = []
+      // Sparse renumber: emit shot_id = i+1 for any id whose current
+      // value differs. Look up in BOTH reel and available — a cross-
+      // region drag inserts an Available source id into nextIds; the
+      // source is in `available`, not `reel`. Without checking
+      // available, the source is silently skipped from the PATCH,
+      // never gets a shot_id, never joins the reel — and the
+      // optimistic preview gets stuck forever (truth never matches).
+      // Downstream symptoms: × Remove and playback both no-op on the
+      // ghost card because reel.findIndex returns -1.
       nextIds.forEach((id, i) => {
-        const node = reel.find((n) => n.id === id)
+        const node =
+          reel.find((n) => n.id === id) ??
+          available.find((n) => n.id === id)
         if (!node) return
         const want = i + 1
         if (node.data.shot_id !== want) {
           updates.push({ nodeId: id, data: { shot_id: want } })
         }
       })
+      // Null-clear: any id that WAS on the reel pre-drag and is NOT in
+      // the new order has been dragged into Available. Clear its shot_id
+      // atomically so the canvas state is consistent (matches the
+      // existing reorderTo path's "remove from reel" branch).
+      truthOrder.forEach((id) => {
+        if (nextIds.includes(id)) return
+        updates.push({ nodeId: id, data: { shot_id: null } })
+      })
       void patchBatch(projectId, updates).catch(() => {
         // Rollback on failure; truth-derived order resumes next render.
         setOptimisticOrder(null)
       })
     },
-    [projectId, reel, truthOrder],
+    [projectId, reel, available, truthOrder],
   )
 
   const sensors = useSensors(
@@ -633,12 +666,86 @@ export function TimelinePanel({
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   )
 
+  // Strobe killer C (handover §5.7-C): once the cursor commits to a
+  // droppable, stay committed until it explicitly enters a different
+  // droppable's rect. Without this, sub-pixel cursor wobble in dead-
+  // zone padding (between reel grid rows, between the reel and
+  // Available sections) flips `closestCenter`'s result frame-to-frame
+  // and the preview strobes.
+  //
+  // Reset lastOverIdRef in handleDragStart / handleDragEnd /
+  // handleDragCancel so a leftover from the previous drag can't bias
+  // the start of the next one.
+  const collisionDetection = useCallback<CollisionDetection>((args) => {
+    const inside = pointerWithin(args)
+    if (inside.length > 0) {
+      lastOverIdRef.current = String(inside[0].id)
+      return inside
+    }
+    if (lastOverIdRef.current !== null) {
+      return [{ id: lastOverIdRef.current, data: { current: {} } }]
+    }
+    const closest = closestCenter(args)
+    if (closest.length > 0) lastOverIdRef.current = String(closest[0].id)
+    return closest
+  }, [])
+
   const handleDragStart = useCallback(
     (event: DragStartEvent) => {
       setActiveDragId(String(event.active.id))
       dragBaselineRef.current = optimisticOrder ?? truthOrder
+      lastOverIdRef.current = null
     },
     [optimisticOrder, truthOrder],
+  )
+
+  // Cross-region preview (handover §5.6). Cross-region drag from
+  // Available splices the source into the reel at the over index
+  // mid-drag so neighbors reflow before release. Intra-reel drag is
+  // skipped — dnd-kit's natural transform-based reorder handles it.
+  //
+  // Critical: splice against `baseline` (pre-drag snapshot), NOT
+  // against the current optimistic state. Otherwise each pointer move
+  // accumulates another copy of the source in the preview.
+  const handleDragOver = useCallback(
+    (event: DragOverEvent) => {
+      const baseline = dragBaselineRef.current
+      if (!baseline) return
+      const sourceId = String(event.active.id)
+      if (baseline.includes(sourceId)) return // intra-reel: dnd-kit handles natively
+
+      let desired: string[] = baseline
+      const over = event.over
+      if (over) {
+        const overId = String(over.id)
+        // Strobe killer A (handover §5.7-A): once preview engages, the
+        // source's <SortableClip> registers as a droppable. pointerWithin
+        // can pick it as `over`. Without this guard, the splice loops:
+        // "source not in baseline → clear preview → cursor on real clip
+        // → re-engage → strobe."
+        if (overId === sourceId) return
+        if (overId === 'reel-area') {
+          // Append-at-end preview: source goes after every existing
+          // reel id. Empty reel → [sourceId] (degenerate). Non-empty →
+          // [...baseline, sourceId]. The single 'reel-area' droppable
+          // wraps both empty-state and SortableContext — drop outside
+          // a specific card = "append," consistent across both cases.
+          desired = [...baseline, sourceId]
+        } else if (overId !== 'archive') {
+          const overIndex = baseline.indexOf(overId)
+          if (overIndex >= 0) {
+            desired = [
+              ...baseline.slice(0, overIndex),
+              sourceId,
+              ...baseline.slice(overIndex),
+            ]
+          }
+        }
+      }
+      const target = arraysEqual(desired, truthOrder) ? null : desired
+      setOptimisticOrder((prev) => (arraysEqual(prev, target) ? prev : target))
+    },
+    [truthOrder],
   )
 
   const handleDragEnd = useCallback(
@@ -646,6 +753,7 @@ export function TimelinePanel({
       setActiveDragId(null)
       const baseline = dragBaselineRef.current
       dragBaselineRef.current = null
+      lastOverIdRef.current = null
       const { active, over } = event
       if (!over || !baseline) {
         if (baseline) {
@@ -655,28 +763,105 @@ export function TimelinePanel({
       }
       const sourceId = String(active.id)
       const overId = String(over.id)
-      if (sourceId === overId) return
+      // `sourceId === overId` has TWO meanings depending on whether
+      // source was in the pre-drag reel:
+      //   - Intra-reel (source IN baseline): dropped on own original
+      //     slot — true no-op.
+      //   - Cross-region (source NOT in baseline): handleDragOver has
+      //     spliced source into the reel's optimistic preview at the
+      //     cursor position. dnd-kit's collision then picks the source's
+      //     own preview-position <SortableClip> as the over target on
+      //     release. THIS IS A COMMIT, not a no-op. Returning here was
+      //     the root cause of the "drag-up doesn't assign shot_id" bug
+      //     — handleDragOver's preview was stuck and never persisted.
+      if (sourceId === overId) {
+        if (baseline.includes(sourceId)) return
+        if (optimisticOrder) applyOptimisticOrder(optimisticOrder)
+        return
+      }
+
       const oldIndex = baseline.indexOf(sourceId)
       const newIndex = baseline.indexOf(overId)
-      // Only handle intra-reel drags here. Cross-region lands in Stage 2.
-      if (oldIndex < 0 || newIndex < 0) return
-      if (oldIndex !== newIndex) {
-        applyOptimisticOrder(arrayMove(baseline, oldIndex, newIndex))
+      const sourceInReel = oldIndex >= 0
+      const overInReel = newIndex >= 0
+
+      // Four drag classes (handover §5.6 + the empty-reel polish from
+      // handover §9.2 / Proposal 04 §5.4 — baseline is pre-drag truth):
+      //   1. Reel → Available (overId === 'archive'): clear shot_id via
+      //      applyOptimisticOrder with the source filtered out. The
+      //      null-clear branch of applyOptimisticOrder emits
+      //      { shot_id: null } for the removed id.
+      //   2. Intra-reel reorder (both in reel): arrayMove + apply.
+      //   3. Available → reel slot (source not in reel, over IS in
+      //      reel): splice the source into baseline at the over index.
+      //   4. Available → empty reel (overId === 'reel-empty'): source
+      //      becomes reel #1. Without this branch, an empty-reel target
+      //      would no-op because baseline = [] and overInReel = false.
+      // Anything else (no over, source/over in unknown regions): restore
+      // baseline (preview was non-committal).
+      if (sourceInReel && overId === 'archive') {
+        applyOptimisticOrder(baseline.filter((id) => id !== sourceId))
+      } else if (!sourceInReel && overId === 'reel-area') {
+        // Append at end. Empty reel → [sourceId]; non-empty → [...baseline, sourceId].
+        applyOptimisticOrder([...baseline, sourceId])
+      } else if (sourceInReel && overInReel) {
+        if (oldIndex !== newIndex) {
+          applyOptimisticOrder(arrayMove(baseline, oldIndex, newIndex))
+        }
+      } else if (!sourceInReel && overInReel) {
+        applyOptimisticOrder([
+          ...baseline.slice(0, newIndex),
+          sourceId,
+          ...baseline.slice(newIndex),
+        ])
+      } else {
+        setOptimisticOrder(arraysEqual(baseline, truthOrder) ? null : baseline)
       }
     },
-    [truthOrder, applyOptimisticOrder],
+    [truthOrder, optimisticOrder, applyOptimisticOrder],
   )
 
   const handleDragCancel = useCallback(() => {
     setActiveDragId(null)
+    const baseline = dragBaselineRef.current
     dragBaselineRef.current = null
-    // Stage 1 only mutates state on drop, so cancel has nothing to undo.
-  }, [])
+    lastOverIdRef.current = null
+    // handleDragOver may have mutated optimisticOrder mid-drag for
+    // cross-region preview — restore the pre-drag display state on
+    // cancel (or null if it equals truth, the catch-up effect's signal
+    // to release optimistic).
+    if (baseline) {
+      setOptimisticOrder(arraysEqual(baseline, truthOrder) ? null : baseline)
+    }
+  }, [truthOrder])
 
-  const activeDragNode = useMemo(
-    () => (activeDragId ? reel.find((n) => n.id === activeDragId) ?? null : null),
-    [activeDragId, reel],
-  )
+  // Cross-region drag (Stage 2) introduces sources that aren't in `reel`
+  // yet — fall back to `available` so the cursor ghost (ClipGhostBody)
+  // renders for Available → reel drags as well as intra-reel.
+  const activeDragNode = useMemo(() => {
+    if (activeDragId === null) return null
+    return (
+      reel.find((n) => n.id === activeDragId) ??
+      available.find((n) => n.id === activeDragId) ??
+      null
+    )
+  }, [activeDragId, reel, available])
+
+  // Strobe killer B (handover §5.7-B): when a cross-region drag engages
+  // (Available source mounting in the reel via preview), the source's
+  // <DraggableCompactCard> unmounts from Available. Without a ghost
+  // placeholder, Available's grid reflows from N tiles to N-1, changing
+  // its bounding rect and feeding `closestCenter` an oscillating
+  // boundary near the divider. Rendering a transparent dashed-border
+  // tile in Available at the source's slot keeps the rect stable.
+  //
+  // ghostClipId === null when no cross-region preview is in flight.
+  const ghostClipId =
+    activeDragId !== null &&
+    dragBaselineRef.current !== null &&
+    !dragBaselineRef.current.includes(activeDragId)
+      ? activeDragId
+      : null
 
   // ---- Stitch + download the reel via the viewer's ffmpeg endpoint ----
   const [downloading, setDownloading] = useState(false)
@@ -902,62 +1087,41 @@ export function TimelinePanel({
         {/* Reel section: the whole grid is one drop target. Position is
             taken from the cursor's left/right half of whichever card
             it's over; empty trailing space falls through to "append". */}
-        <div className="border-b border-neutral-900">
-          <div className="px-4 py-2 text-[11px] uppercase tracking-wide text-neutral-500">
-            On reel ({reel.length})
-            <span className="ml-2 normal-case tracking-normal text-neutral-700">
-              · drag to reorder · drop from Available to add
-            </span>
-          </div>
-          <div
-            className={
-              'min-h-[88px] px-4 pb-3 transition-colors ' +
-              (dragOver?.kind === 'slot' ? 'bg-neutral-900/30' : '')
-            }
-            onDragOver={(e) => {
-              // Container fallback — fires when the cursor is over empty
-              // grid space (between rows, past the last card). Card
-              // handlers stopPropagation so this doesn't overwrite their
-              // more-precise slot when the cursor is on a card.
-              if (e.dataTransfer.types.includes(DRAG_MIME)) {
-                e.preventDefault()
-                setDragOver({ kind: 'slot', index: reel.length })
-              }
-            }}
-            onDragLeave={(e) => {
-              if (!e.currentTarget.contains(e.relatedTarget as Node)) {
-                setDragOver(null)
-              }
-            }}
-            onDrop={(e) => {
-              const id = e.dataTransfer.getData(DRAG_MIME)
-              if (id) {
-                e.preventDefault()
-                void reorderTo(id, { kind: 'slot', index: reel.length })
-              }
-            }}
-          >
-            {reel.length === 0 ? (
-              <div
-                className={
-                  'flex h-20 items-center justify-center rounded-md border border-dashed px-4 text-center text-[11px] uppercase tracking-wide transition-colors ' +
-                  (dragOver?.kind === 'slot'
-                    ? 'border-neutral-300 bg-neutral-900/60 text-neutral-200'
-                    : 'border-neutral-800 text-neutral-600')
-                }
-              >
-                Drag a clip here to start the reel
-              </div>
-            ) : (
-              <DndContext
-                sensors={sensors}
-                onDragStart={handleDragStart}
-                onDragEnd={handleDragEnd}
-                onDragCancel={handleDragCancel}
-              >
-                <SortableContext items={effectiveOrder} strategy={rectSortingStrategy}>
+        {/* Lifted DndContext — wraps both reel and Available sections so
+            cross-region drag (Available → reel slot, reel → Available)
+            can transition the same id between useDraggable and
+            useSortable within one drag (handover §8.7). Sensors,
+            collision detection, and handlers are shared across the
+            whole timeline DnD surface. */}
+        <DndContext
+          sensors={sensors}
+          collisionDetection={collisionDetection}
+          onDragStart={handleDragStart}
+          onDragOver={handleDragOver}
+          onDragEnd={handleDragEnd}
+          onDragCancel={handleDragCancel}
+        >
+          {/* Reel section */}
+          <div className="border-b border-neutral-900">
+            <div className="px-4 py-2 text-[11px] uppercase tracking-wide text-neutral-500">
+              On reel ({reel.length})
+              <span className="ml-2 normal-case tracking-normal text-neutral-700">
+                · drag to reorder · drop from Available to add
+              </span>
+            </div>
+            <div className="min-h-[88px] px-4 pb-3">
+              {/* ReelAreaDroppable is always mounted (id 'reel-area').
+                  Drop on it = "append at end of current reel" — handles
+                  both the empty-reel case (drag a clip onto the
+                  placeholder, becomes reel #1) and the non-empty append
+                  case (drop past the last card, becomes reel #N+1).
+                  Specific-card drops still take precedence via
+                  pointerWithin against each SortableClip's own
+                  droppable. */}
+              <ReelAreaDroppable showEmptyHint={effectiveOrder.length === 0}>
+                <SortableContext items={effectiveOrder} strategy={horizontalListSortingStrategy}>
                   <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7">
-                    {effectiveReel.map((n, i) => {
+                    {effectiveReel.map((n) => {
                       // Active-card tracking follows the playing node's
                       // id (truth-state), NOT this map's index — during
                       // an optimistic reorder, the displayed position
@@ -968,24 +1132,13 @@ export function TimelinePanel({
                         playlistMode === 'reel' &&
                         reel[activeIdx]?.id === n.id &&
                         playlist.length > 0
-                      // dropEdge is for the Available → reel container
-                      // HTML5 path (append-at-end indicator). Intra-reel
-                      // reorder uses dnd-kit's striped placeholder +
-                      // neighbor reflow instead — no edge bar shown.
-                      const slot = dragOver?.kind === 'slot' ? dragOver.index : -1
-                      const dropEdge: 'left' | 'right' | null =
-                        slot === i
-                          ? 'left'
-                          : slot === effectiveReel.length && i === effectiveReel.length - 1
-                            ? 'right'
-                            : null
                       return (
                         <SortableClip key={n.id} id={n.id} aspect={n.data.aspect ?? '16:9'}>
                           <ReelCard
                             node={n}
                             active={isActive}
                             isPlaying={isActive && playing}
-                            dropEdge={dropEdge}
+                            dropEdge={null}
                             onClick={() => {
                               if (isActive) {
                                 togglePlay()
@@ -1007,68 +1160,61 @@ export function TimelinePanel({
                     })}
                   </div>
                 </SortableContext>
-                {createPortal(
-                  <DragOverlay dropAnimation={null}>
-                    {activeDragNode ? <ClipGhostBody node={activeDragNode} /> : null}
-                  </DragOverlay>,
-                  document.body,
-                )}
-              </DndContext>
-            )}
+              </ReelAreaDroppable>
+            </div>
           </div>
-        </div>
 
-        {/* Available section: compact thumbs + drop target to remove. */}
-        <div
-          className={
-            'border-b border-neutral-900 transition-colors ' +
-            (dragOver?.kind === 'available' ? 'bg-neutral-900/40' : '')
-          }
-          onDragOver={(e) => {
-            if (e.dataTransfer.types.includes(DRAG_MIME)) {
-              e.preventDefault()
-              setDragOver({ kind: 'available' })
-            }
-          }}
-          onDragLeave={() => setDragOver(null)}
-          onDrop={(e) => {
-            const id = e.dataTransfer.getData(DRAG_MIME)
-            if (id) {
-              e.preventDefault()
-              void reorderTo(id, { kind: 'available' })
-            }
-          }}
-        >
-          <div className="px-4 py-2 text-[11px] uppercase tracking-wide text-neutral-500">
-            Available clips ({available.length})
-            <span className="ml-2 normal-case tracking-normal text-neutral-700">
-              · click to play / pause · drag onto reel to add
-            </span>
-          </div>
-          {available.length === 0 ? (
-            <div className="px-4 pb-4 text-xs text-neutral-600">
-              No off-reel video clips on this canvas.
+          {/* Available section, wrapped in AvailableDroppable: a reel
+              card dragged here commits a "remove from reel" via the
+              handleDragEnd `sourceInReel && overId === 'archive'`
+              branch. The Remove ✕ on each reel card is still the
+              explicit alternative. */}
+          <AvailableDroppable>
+            <div className="px-4 py-2 text-[11px] uppercase tracking-wide text-neutral-500">
+              Available clips ({effectiveAvailable.length})
+              <span className="ml-2 normal-case tracking-normal text-neutral-700">
+                · click to play / pause · drag onto reel to add
+              </span>
             </div>
-          ) : (
-            <div className="grid grid-cols-3 gap-1.5 px-4 pb-4 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8">
-              {available.map((n) => {
-                const isActive =
-                  singleClip !== null && singleClip.id === n.id
-                return (
-                  <CompactCard
-                    key={n.id}
-                    node={n}
-                    active={isActive}
-                    isPlaying={isActive && playing}
-                    onClick={() => (isActive ? togglePlay() : playSingle(n))}
-                    onAdd={() => addToReelTail(n.id)}
-                    onDragStart={(e) => onCardDragStart(e, n.id)}
-                  />
-                )
-              })}
-            </div>
+            {effectiveAvailable.length === 0 && ghostClipId === null ? (
+              <div className="px-4 pb-4 text-xs text-neutral-600">
+                No off-reel video clips on this canvas.
+              </div>
+            ) : (
+              <div className="grid grid-cols-3 gap-1.5 px-4 pb-4 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8">
+                {effectiveAvailable.map((n) => {
+                  const isActive =
+                    singleClip !== null && singleClip.id === n.id
+                  return (
+                    <DraggableCompactCard key={n.id} id={n.id}>
+                      <CompactCard
+                        node={n}
+                        active={isActive}
+                        isPlaying={isActive && playing}
+                        onClick={() => (isActive ? togglePlay() : playSingle(n))}
+                        onAdd={() => addToReelTail(n.id)}
+                      />
+                    </DraggableCompactCard>
+                  )
+                })}
+                {/* Strobe killer B (handover §5.7-B): rect-stable placeholder
+                    for the in-flight cross-region source. Same grid cell
+                    footprint as a real Available card, keeping the grid's
+                    child count constant during the drag. */}
+                {ghostClipId !== null && (
+                  <GhostPlaceholder key={`ghost-${ghostClipId}`} />
+                )}
+              </div>
+            )}
+          </AvailableDroppable>
+
+          {createPortal(
+            <DragOverlay dropAnimation={null}>
+              {activeDragNode ? <ClipGhostBody node={activeDragNode} /> : null}
+            </DragOverlay>,
+            document.body,
           )}
-        </div>
+        </DndContext>
       </div>
     </div>
     {fullscreenOpen ? (
@@ -1240,22 +1386,21 @@ function CompactCard({
   isPlaying,
   onClick,
   onAdd,
-  onDragStart,
 }: {
   node: VideoResultNode
   active: boolean
   isPlaying: boolean
   onClick: () => void
   onAdd: () => void
-  onDragStart: (e: React.DragEvent) => void
 }): JSX.Element {
   const url = node.data.video_url
   const label = node.data.label ?? 'untitled'
   const aspect = node.data.aspect ?? '16:9'
+  // HTML5 `draggable` removed — DraggableCompactCard wraps this card with
+  // dnd-kit's useDraggable, and HTML5 drag would steal pointer events
+  // from dnd-kit's MouseSensor. Same pattern as SortableClip+ReelCard.
   return (
     <div
-      draggable
-      onDragStart={onDragStart}
       className={
         'group relative overflow-hidden rounded border bg-neutral-950 transition-colors ' +
         (active
