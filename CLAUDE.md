@@ -8,6 +8,17 @@ When you `cd pai-pro && claude` to work on this repo, this is the file Claude Co
 
 Below is for when you're editing the pai-pro repo itself, not running a project session. Skip if the user is asking for filmmaking work.
 
+### Editing principles
+
+A few rules of thumb when modifying source — bias toward caution over speed.
+
+- **Surgical edits.** Every changed line should trace to the request. Don't "improve" adjacent code, refactor things that aren't broken, or delete unrelated dead code (mention it, don't remove it).
+- **Simplicity first.** No speculative features, no abstractions for single-use code, no configurability that wasn't asked for, no error handling for impossible scenarios. If 200 lines could be 50, rewrite.
+- **Surface confusion early.** State assumptions before implementing. If multiple interpretations of the request exist, present them — don't pick silently. Stop and ask when something's unclear.
+- **Goal-driven, verifiable.** For non-trivial changes, define what "done" looks like upfront (a test that passes, a curl that returns 200, a visible UI behavior). Loop on that signal, not on intuition.
+
+Spirit borrowed from [Karpathy's observations](https://x.com/karpathy/status/2015883857489522876) on LLM coding pitfalls.
+
 ### Architecture
 
 - `server/local_viewer.js` — single Node server. Project CRUD, pty spawn for per-project `claude` sessions (cwd = `projects/<id>/`), canvas file watcher, Socket.IO push to the browser. Routes: `/projects` (list / create), `/projects/:id` (bundle), `/projects/:id/activate`, `/projects/:id/positions`, `/projects/:id/group-frames/...`, `/projects/:id/nodes/...`. Socket events: `canvas-state`, `canvas-positions`, `title`, `pending-generations`, `pty:spawned` / `pty:output` / `pty:exit` / `pty:error`.
