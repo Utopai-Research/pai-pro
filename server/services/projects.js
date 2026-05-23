@@ -8,6 +8,7 @@ import path from "node:path";
 import { initProjectMutatorState } from "../canvas_mutator.js";
 import { reseedFromCanvas } from "../pai_assets_client.js";
 import {
+  PROJECT_ROOT,
   PROJECTS_DIR,
   isValidId,
   projectDir,
@@ -22,6 +23,38 @@ import {
 } from "../lib/readers.js";
 import { writeMeta, writeActive } from "../lib/writers.js";
 
+// Per-project Claude wrapper. The `@./AGENTS.md` import pulls in the
+// canonical agent operating manual; everything below it is Claude-Code-
+// specific (slash-command syntax, hook flag, output tool). Future Codex/
+// Gemini wrappers would import the same AGENTS.md with different invocation
+// notes.
+const PER_PROJECT_CLAUDE_MD = `# Per-project filmmaking agent — Claude
+
+@./AGENTS.md
+
+You are invoked as \`claude\` in this project's PTY. The \`@./AGENTS.md\` import above is the full operating manual — skills routing, media CLIs, canvas grammar, hard rules. Read it as authoritative.
+
+Claude-specific notes:
+- Skill invocation syntax is \`/<skill-name>\` (slash-prefixed). The skills referenced in AGENTS.md (\`image-compose\`, \`video-compose\`, etc.) live at \`~/.claude/skills/\` and auto-discover by description.
+- Bash background flag is \`run_in_background: true\`. The \`.claude/hooks/require_background_for_generate.js\` hook will reject foreground \`generate_*\` calls.
+- To wait on a backgrounded Bash call, use the \`BashOutput\` tool against the bash id you got back. Never \`cat\`/\`grep\` \`/tmp/claude-*/.../tasks/<id>.output\`.
+`;
+
+const AGENT_TEMPLATE_PATH = path.join(PROJECT_ROOT, "agent-templates", "AGENTS.md");
+
+// Per-project settings.local.json — excludes the root dev CLAUDE.md from
+// the agent's memory so the per-project session sees ONLY its own
+// AGENTS.md + CLAUDE.md wrapper. Path is absolute, derived from
+// PROJECT_ROOT at write time, so it tracks repo moves. Always re-written
+// (not idempotent) so a repo move auto-heals on next viewer boot.
+function perProjectSettingsLocal() {
+  return JSON.stringify(
+    { claudeMdExcludes: [path.join(PROJECT_ROOT, "CLAUDE.md")] },
+    null,
+    2,
+  ) + "\n";
+}
+
 export async function ensureProjectStructure(id) {
   const dir = projectDir(id);
   // The four real asset buckets the mutator + CLIs write to. `audios/`
@@ -35,12 +68,80 @@ export async function ensureProjectStructure(id) {
   await fsp.mkdir(path.join(dir, "assets/videos"), { recursive: true });
   await fsp.mkdir(path.join(dir, "assets/audios"), { recursive: true });
   await fsp.mkdir(path.join(dir, "assets/notes"),  { recursive: true });
-  // Claude Code's settings discovery doesn't walk up from cwd, so
-  // per-project sessions (cwd=projects/<id>/) need their own .claude/.
+
+  // Per-project .claude/ — was a single symlink to ../../.claude; now a
+  // real dir with mixed contents so that settings.local.json can carry a
+  // per-project `claudeMdExcludes` while hooks and settings.json stay
+  // shared. The asymmetry is necessary because Claude Code's settings
+  // discovery doesn't walk up from cwd — each project session needs its
+  // own `.claude/` to be discovered at all.
+  const claudeDir = path.join(dir, ".claude");
+  // Legacy migration: unlink the old single-symlink shape if present.
   try {
-    await fsp.symlink("../../.claude", path.join(dir, ".claude"));
+    const st = await fsp.lstat(claudeDir);
+    if (st.isSymbolicLink()) await fsp.unlink(claudeDir);
   } catch (e) {
-    if (e.code !== "EEXIST") throw e;
+    if (e.code !== "ENOENT") throw e;
+  }
+  await fsp.mkdir(claudeDir, { recursive: true });
+
+  // hooks/ and settings.json stay shared via symlinks back to the repo's
+  // canonical .claude/. They encode repo-wide invariants (block direct
+  // workflow.json writes, require background for generate_*) that are
+  // identical across all projects.
+  await ensureSymlink(
+    path.join("..", "..", "..", ".claude", "hooks"),
+    path.join(claudeDir, "hooks"),
+  );
+  await ensureSymlink(
+    path.join("..", "..", "..", ".claude", "settings.json"),
+    path.join(claudeDir, "settings.json"),
+  );
+
+  // settings.local.json is per-project. Always overwrite — its content
+  // is system-generated (a single `claudeMdExcludes` derived from
+  // PROJECT_ROOT) and must track repo moves. Not intended for user edits.
+  await fsp.writeFile(
+    path.join(claudeDir, "settings.local.json"),
+    perProjectSettingsLocal(),
+  );
+
+  // AGENTS.md — canonical per-project agent operating manual, copied
+  // from agent-templates/AGENTS.md. Write-if-missing so a user who has
+  // customized their copy isn't clobbered on viewer reboot.
+  const agentsPath = path.join(dir, "AGENTS.md");
+  if (!(await fileExists(agentsPath))) {
+    const template = await fsp.readFile(AGENT_TEMPLATE_PATH, "utf8");
+    await fsp.writeFile(agentsPath, template);
+  }
+
+  // CLAUDE.md wrapper — thin Claude-flavored shim that @imports AGENTS.md.
+  // Write-if-missing so user edits stick.
+  const claudeMdPath = path.join(dir, "CLAUDE.md");
+  if (!(await fileExists(claudeMdPath))) {
+    await fsp.writeFile(claudeMdPath, PER_PROJECT_CLAUDE_MD);
+  }
+}
+
+// Idempotent symlink: succeed if a link with the right target already
+// exists; replace if a different target is present; create if missing.
+async function ensureSymlink(target, linkPath) {
+  try {
+    const existing = await fsp.readlink(linkPath);
+    if (existing === target) return;
+    await fsp.unlink(linkPath);
+  } catch (e) {
+    if (e.code !== "ENOENT") throw e;
+  }
+  await fsp.symlink(target, linkPath);
+}
+
+async function fileExists(p) {
+  try {
+    await fsp.access(p);
+    return true;
+  } catch {
+    return false;
   }
 }
 

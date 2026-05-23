@@ -24,7 +24,7 @@ Read [skills/CLAUDE.md](../skills/CLAUDE.md) for the SKILL.md authoring contract
 
 ## How do parallel generations work?
 
-When you ask the agent for multiple independent things ("design three character variations" or "generate three images of the diner from different angles"), pai-pro fires them concurrently. Three independent images render in ~20s, not ~60s. See the *Parallel calls* rule in [CLAUDE.md](../CLAUDE.md) for the contract.
+When you ask the agent for multiple independent things ("design three character variations" or "generate three images of the diner from different angles"), pai-pro fires them concurrently. Three independent images render in ~20s, not ~60s. See the *Parallel calls* rule in [agent-templates/AGENTS.md](../agent-templates/AGENTS.md) for the contract.
 
 ## What happens if I close the browser mid-generation?
 

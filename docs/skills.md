@@ -48,4 +48,4 @@ See [skills/CLAUDE.md](../skills/CLAUDE.md) for the authoring contract: SKILL.md
 
 ## Parallel calls
 
-When you ask the agent for multiple independent things at once ("design three character variations" or "generate three images of the diner from different angles"), pai-pro fires them concurrently. Three independent images render in ~20s, not ~60s. The *Parallel calls* rule in [CLAUDE.md](../CLAUDE.md) is the agent-side contract.
+When you ask the agent for multiple independent things at once ("design three character variations" or "generate three images of the diner from different angles"), pai-pro fires them concurrently. Three independent images render in ~20s, not ~60s. The *Parallel calls* rule in [agent-templates/AGENTS.md](../agent-templates/AGENTS.md) is the agent-side contract.
