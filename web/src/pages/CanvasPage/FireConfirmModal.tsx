@@ -67,8 +67,17 @@ export function FireConfirmModal({
         <p className="fire-confirm-body">
           Once you fire a request, the API call goes through immediately
           and can't be cancelled. You pay for any successful generation
-          whether or not you keep the result. Failed generations usually
-          aren't charged.
+          whether or not you keep the result. Failed generations will
+          get refunded. Review every API call you've made at{' '}
+          <a
+            href="https://pai-pro.utopaistudios.com/tasks"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="fire-confirm-link"
+          >
+            pai-pro.utopaistudios.com/tasks
+          </a>
+          .
         </p>
         {priceLabel !== null ? (
           <div className="fire-confirm-price">{priceLabel}</div>

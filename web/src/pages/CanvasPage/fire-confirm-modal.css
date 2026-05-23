@@ -66,6 +66,18 @@
   text-align: center;
 }
 
+.fire-confirm-link {
+  color: var(--amber);
+  text-decoration: underline;
+  text-decoration-color: oklch(0.78 0.14 70 / 0.45);
+  text-underline-offset: 2px;
+  transition: text-decoration-color 150ms, color 150ms;
+}
+.fire-confirm-link:hover {
+  text-decoration-color: var(--amber);
+  color: oklch(0.86 0.14 70);
+}
+
 .fire-confirm-price {
   margin: 6px 0 2px;
   font-family: var(--font-mono);
