@@ -65,10 +65,11 @@ session*.txt
 .tunnel_url
 
 # Docs: top-level docs/*.md tracked publicly; only maintainer-local
-# proposals + bug reports + roadmaps stay gitignored.
+# proposals + bug reports + roadmaps + plans stay gitignored.
 docs/proposals/
 docs/reports/
 docs/roadmaps/
+docs/plans/
 
 # Local-only tech debt audits.
 TECH_DEBT_AUDIT.md
