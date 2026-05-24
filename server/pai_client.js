@@ -406,7 +406,7 @@ export async function pollStatus(jobId, {
  * the MP4 from output_url. PAI's signed GCS URLs are publicly fetchable
  * within their TTL — no auth needed.
  */
-export async function downloadUrlToBuffer(url, { timeoutMs = 120_000, projectId, logTag = "pai-video-dl" } = {}) {
+export async function downloadUrlToBuffer(url, { timeoutMs = 120_000, projectId, logTag } = {}) {
   if (typeof url !== "string" || !url) throw err("bad_args", "downloadUrlToBuffer: url required");
   const t0 = Date.now();
   let host = "?";

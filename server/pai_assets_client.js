@@ -370,9 +370,9 @@ export async function uploadReferenceUrl(url, kind) {
       if (e.assetRejected) {
         _assetCache.set(key, { status: "rejected", reason: e.message });
         emitUpdate(key, "rejected", { reason: e.message });
+        logPai({ projectId, tag: "pai-cache", message: `REJECTED key=${key} reason="${String(e.message).slice(0, 200)}"` });
         // Re-throw with consistent attribution for the caller (generate_video.js).
-        const re = err("bad_args", e.message, { assetRejected: true, failedUrl: url, kind });
-        throw re;
+        throw err("bad_args", e.message, { assetRejected: true, failedUrl: url, kind });
       }
       // Transient / infra failure — drop cache so the next call retries cleanly.
       _assetCache.delete(key);
@@ -386,17 +386,13 @@ export async function uploadReferenceUrl(url, kind) {
   return promise;
 }
 
-// Fire-and-forget wrapper. Used by canvas-time pre-upload hooks where a
-// rejection is fine to silently log (the chip flips red); the agent
-// learns about it later if it tries to use the URL for video gen.
+// Fire-and-forget wrapper. Used by canvas-time pre-upload hooks; the
+// chip flips red on rejection and the agent learns about it later if
+// it tries to use the URL for video gen. Failures are already logged
+// inside uploadReferenceUrl (REJECTED / DROP) — this catch only
+// prevents an unhandled-rejection warning from Node.
 export function preuploadReferenceUrl(url, kind) {
-  uploadReferenceUrl(url, kind).catch((e) => {
-    if (e.assetRejected) {
-      console.warn(`[pai-assets] pre-upload rejected (${kind}) ${url}: ${e.message}`);
-    } else {
-      console.warn(`[pai-assets] pre-upload transient error (${kind}) ${url}: ${e.message}`);
-    }
-  });
+  uploadReferenceUrl(url, kind).catch(() => {});
 }
 
 // --- public: canvas chip UX entry point ----------------------------------
@@ -440,10 +436,10 @@ export function preuploadCanvasUrl({ projectId, localPath, mimeType }) {
     if (e?.assetRejected) {
       _assetCache.set(key, { status: "rejected", reason: e.message });
       emitUpdate(key, "rejected", { reason: e.message });
+      logPai({ projectId, tag: "pai-cache", message: `REJECTED key=${key} reason="${String(e.message).slice(0, 200)}"` });
     } else {
       _assetCache.delete(key);
       logPai({ projectId, tag: "pai-cache", message: `DROP key=${key} reason=${e?.klass || "transient"}` });
-      console.warn(`[pai-assets] pre-upload transient (${kind}) ${key}: ${e?.message}`);
     }
   });
 }
