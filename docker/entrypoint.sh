@@ -74,6 +74,27 @@ else
   echo "[entrypoint] tunnel: cloudflared not installed; video gen will fail until PUBLIC_VIEWER_URL is set"
 fi
 
-# 4. Boot the viewer. exec ensures tini → node directly, so SIGTERM lands
+# 4. PAI_KEY warn-but-don't-block. `docker compose up` has no TTY for an
+#    interactive prompt; the next-best onboarding hint is a loud message
+#    before the viewer boots so the user knows why generation later
+#    fails. Canvas, terminal, project switching all work without a key —
+#    only media CLIs need it. We don't exit here.
+if [ -z "${PAI_KEY:-}" ]; then
+    echo ""
+    echo "════════════════════════════════════════════════════════════════"
+    echo "  PAI_KEY is not set."
+    echo ""
+    echo "  Media generation will fail until you set it. Add one to your"
+    echo "  .env (next to docker-compose.yml) and restart:"
+    echo ""
+    echo "    echo \"PAI_KEY=PAI_yourkey\" >> .env"
+    echo "    docker compose restart"
+    echo ""
+    echo "  Get a key: https://pai-pro.utopaistudios.com/keys"
+    echo "════════════════════════════════════════════════════════════════"
+    echo ""
+fi
+
+# 5. Boot the viewer. exec ensures tini → node directly, so SIGTERM lands
 #    where the JS shutdown handler can react.
 exec node /repo/server/local_viewer.js
