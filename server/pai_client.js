@@ -135,8 +135,23 @@ export function classifyTerminalStatus(statusResp) {
 
 // Run a single POST attempt against /api/v1/<path>. Throws classified
 // errors on HTTP failure. Returns the parsed JSON body on success.
-async function postOnce({ path: apiPath, body, timeoutMs, projectId, logTag = "pai" }) {
+// `note` (string) is appended to both success and failure log lines —
+// use it for request-side identifiers known at call time (e.g.
+// `name=image_2.jpg`).
+// `describeResp` (fn) runs on success against the parsed response and
+// its return value is appended too — use it for response-side
+// identifiers (e.g. `→ asset-q3vp1`).
+function formatRespNote(describeResp, parsed) {
+  if (!describeResp) return "";
+  try {
+    const s = describeResp(parsed);
+    return s ? ` ${s}` : "";
+  } catch { return ""; }
+}
+
+async function postOnce({ path: apiPath, body, timeoutMs, projectId, logTag = "pai", note, describeResp }) {
   const t0 = Date.now();
+  const noteStr = note ? ` ${note}` : "";
   const url = `${paiBaseUrl()}/api/v1/${String(apiPath).replace(/^\/+/, "")}`;
   const controller = new AbortController();
   const timer = timeoutMs ? setTimeout(() => controller.abort(), timeoutMs) : null;
@@ -175,20 +190,25 @@ async function postOnce({ path: apiPath, body, timeoutMs, projectId, logTag = "p
     if (parsed === null || typeof parsed !== "object") {
       throw err("transient", `PAI ${apiPath} returned non-JSON 200: ${rawBody.slice(0, 200)}`);
     }
-    logPai({ projectId, tag: logTag, message: `POST ${apiPath} ${res.status} ${Date.now() - t0}ms` });
+    logPai({
+      projectId,
+      tag: logTag,
+      message: `POST ${apiPath} ${res.status} ${Date.now() - t0}ms${noteStr}${formatRespNote(describeResp, parsed)}`,
+    });
     return parsed;
   } catch (e) {
     logPai({
       projectId,
       tag: logTag,
-      message: `POST ${apiPath} FAIL ${e.klass || "?"} ${Date.now() - t0}ms msg="${String(e.message).slice(0, 200)}"`,
+      message: `POST ${apiPath} FAIL ${e.klass || "?"} ${Date.now() - t0}ms${noteStr} msg="${String(e.message).slice(0, 200)}"`,
     });
     throw e;
   }
 }
 
-async function getOnce({ path: apiPath, timeoutMs, projectId, logTag = "pai" }) {
+async function getOnce({ path: apiPath, timeoutMs, projectId, logTag = "pai", note, describeResp }) {
   const t0 = Date.now();
+  const noteStr = note ? ` ${note}` : "";
   const url = `${paiBaseUrl()}/api/v1/${String(apiPath).replace(/^\/+/, "")}`;
   const controller = new AbortController();
   const timer = timeoutMs ? setTimeout(() => controller.abort(), timeoutMs) : null;
@@ -225,13 +245,17 @@ async function getOnce({ path: apiPath, timeoutMs, projectId, logTag = "pai" }) 
     if (parsed === null || typeof parsed !== "object") {
       throw err("transient", `PAI ${apiPath} returned non-JSON 200: ${rawBody.slice(0, 200)}`);
     }
-    logPai({ projectId, tag: logTag, message: `GET ${apiPath} ${res.status} ${Date.now() - t0}ms` });
+    logPai({
+      projectId,
+      tag: logTag,
+      message: `GET ${apiPath} ${res.status} ${Date.now() - t0}ms${noteStr}${formatRespNote(describeResp, parsed)}`,
+    });
     return parsed;
   } catch (e) {
     logPai({
       projectId,
       tag: logTag,
-      message: `GET ${apiPath} FAIL ${e.klass || "?"} ${Date.now() - t0}ms msg="${String(e.message).slice(0, 200)}"`,
+      message: `GET ${apiPath} FAIL ${e.klass || "?"} ${Date.now() - t0}ms${noteStr} msg="${String(e.message).slice(0, 200)}"`,
     });
     throw e;
   }
@@ -280,6 +304,8 @@ export async function callGenerate({
   timeoutMs = 120_000,
   logTag = "pai",
   projectId,
+  note,
+  describeResp,
 }) {
   if (typeof model !== "string" || !model) throw err("bad_args", "callGenerate: model required");
   if (!payload || typeof payload !== "object") throw err("bad_args", "callGenerate: payload object required");
@@ -287,7 +313,7 @@ export async function callGenerate({
   if (queryParams && typeof queryParams === "object") body.query_params = queryParams;
   return withTransientRetry({
     logTag,
-    attempt: () => postOnce({ path: "generate", body, timeoutMs, projectId, logTag }),
+    attempt: () => postOnce({ path: "generate", body, timeoutMs, projectId, logTag, note, describeResp }),
   });
 }
 
@@ -308,6 +334,8 @@ export async function callSubmit({
   timeoutMs = 30_000,
   logTag = "pai",
   projectId,
+  note,
+  describeResp,
 }) {
   if (typeof model !== "string" || !model) throw err("bad_args", "callSubmit: model required");
   if (!payload || typeof payload !== "object") throw err("bad_args", "callSubmit: payload object required");
@@ -315,7 +343,7 @@ export async function callSubmit({
   if (queryParams && typeof queryParams === "object") body.query_params = queryParams;
   const env = await withTransientRetry({
     logTag,
-    attempt: () => postOnce({ path: "submit", body, timeoutMs, projectId, logTag }),
+    attempt: () => postOnce({ path: "submit", body, timeoutMs, projectId, logTag, note, describeResp }),
   });
   if (env?.code !== 0 || !env?.job_id) {
     throw classifySubmitBodyFailure(env);
@@ -361,6 +389,7 @@ export async function pollStatus(jobId, {
         timeoutMs: requestTimeoutMs,
         projectId,
         logTag,
+        describeResp: (r) => (r?.status ? `→ ${r.status}` : ""),
       });
       consecutiveTransient = 0;
     } catch (e) {

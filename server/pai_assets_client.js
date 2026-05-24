@@ -170,7 +170,32 @@ function reclassifyAssetError(e) {
   return e;
 }
 
+// Request-side identifier per action — known at call time, useful for
+// pairing parallel calls in the log. Response-side describer extracts
+// the resulting Id / Status from PAI's standard Result envelope.
+function assetCallContext(action, payload) {
+  if (action === "CreateAsset") {
+    return {
+      note: payload?.Name ? `name=${payload.Name}` : undefined,
+      describeResp: (r) => (r?.Result?.Id ? `→ ${r.Result.Id}` : ""),
+    };
+  }
+  if (action === "GetAsset") {
+    return {
+      note: payload?.Id ? `id=${payload.Id}` : undefined,
+      describeResp: (r) => (r?.Result?.Status ? `→ ${r.Result.Status}` : ""),
+    };
+  }
+  if (action === "CreateAssetGroup") {
+    return {
+      describeResp: (r) => (r?.Result?.Id ? `→ groupId=${r.Result.Id}` : ""),
+    };
+  }
+  return {};
+}
+
 async function paiAssetsCall({ action, payload, timeoutMs = 60_000, projectId }) {
+  const { note, describeResp } = assetCallContext(action, payload);
   try {
     return await callGenerate({
       model: "video-generation-assets",
@@ -179,6 +204,8 @@ async function paiAssetsCall({ action, payload, timeoutMs = 60_000, projectId })
       timeoutMs,
       logTag: `pai-assets:${action}`,
       projectId,
+      note,
+      describeResp,
     });
   } catch (e) {
     throw reclassifyAssetError(e);

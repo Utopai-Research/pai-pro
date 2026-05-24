@@ -137,6 +137,11 @@ export async function generateImage({ prompt, aspectRatio, imageSize, refImageUr
     safetySettings: SAFETY_SETTINGS,
   };
 
+  const refsCount = Array.isArray(refImageUrls) ? refImageUrls.filter(Boolean).length : 0;
+  const noteParts = [`refs=${refsCount}`];
+  if (aspectRatio) noteParts.push(`aspect=${aspectRatio}`);
+  if (imageSize) noteParts.push(`size=${imageSize}`);
+
   const started = Date.now();
   const body = await callGenerate({
     model: MODEL,
@@ -144,6 +149,7 @@ export async function generateImage({ prompt, aspectRatio, imageSize, refImageUr
     timeoutMs: TIMEOUT_MS,
     logTag: "pai-image",
     projectId,
+    note: noteParts.join(" "),
   });
 
   // Upstream safety blocks land as 200 OK with no image. Check before

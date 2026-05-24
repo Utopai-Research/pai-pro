@@ -61,6 +61,7 @@ export async function generateVoice({ text, prompt, projectId } = {}) {
     timeoutMs: TIMEOUT_MS,
     logTag: "pai-voice",
     projectId,
+    note: `textLen=${text.length}`,
   });
 
   const b64 = body?.body_base64;

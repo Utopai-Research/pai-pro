@@ -95,12 +95,15 @@ export async function submitVideo({
     watermark: false,
   };
 
+  const refsTotal = imageAssetIds.length + audioAssetIds.length + videoAssetIds.length;
   const env = await callSubmit({
     model: MODEL,
     payload,
     timeoutMs: SUBMIT_TIMEOUT_MS,
     logTag: "pai-video",
     projectId,
+    note: `dur=${Number(duration)}s res=${resolution} refs=${refsTotal}`,
+    describeResp: (r) => (r?.job_id ? `→ job=${r.job_id}` : ""),
   });
   return { taskId: env.job_id, raw: env };
 }
