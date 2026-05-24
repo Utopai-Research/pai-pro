@@ -147,8 +147,7 @@ export function tunnelUrlForLocalPath({ localPath, projectId }) {
 
 // Best-effort read of a single node from the project's workflow.json.
 // Returns null on any miss (no nodeId, unreadable / unparsable file,
-// no nodes array, no matching id). All three readers below funnel
-// through this — one file-read pattern instead of three.
+// no nodes array, no matching id). Readers below funnel through this.
 async function readNodeFromWorkflow({ nodeId, projectId }) {
   if (!nodeId) return null;
   const proj = projectId || await readActiveProject();
@@ -161,12 +160,6 @@ async function readNodeFromWorkflow({ nodeId, projectId }) {
   return doc.nodes.find((n) => n?.id === nodeId) ?? null;
 }
 
-export async function readNodeLocalPath({ nodeId, projectId }) {
-  const node = await readNodeFromWorkflow({ nodeId, projectId });
-  const v = node?.data?.local_path;
-  return typeof v === "string" && v ? v : null;
-}
-
 // Used by generate_video.js to partition a flat --ref-source-id list
 // into image / video buckets and reject wrong-typed refs.
 export async function readNodeType({ nodeId, projectId }) {
@@ -174,8 +167,8 @@ export async function readNodeType({ nodeId, projectId }) {
   return typeof node?.type === "string" ? node.type : null;
 }
 
-// Used by buildProviderRefs + postNodeAddBatch to fail-fast before the
-// provider call when an agent references an archived node.
+// Used by postNodeAddBatch to fail-fast before the provider call when an
+// agent references an archived node.
 export async function readNodeArchived({ nodeId, projectId }) {
   const node = await readNodeFromWorkflow({ nodeId, projectId });
   return node?.data?.archived === true;
@@ -191,6 +184,9 @@ function makeBadArgs(message) {
  * Build the array of refs to hand to a provider. Every ref is a canvas
  * node id — we look up its `local_path` and rewrite the host onto the
  * cloudflared tunnel origin so PAI's server-side fetch can reach it.
+ * The cached PAI `asset_id` (if any) rides alongside so callers that
+ * upload through video-generation-assets can skip CreateAsset when it's
+ * already known.
  *
  * External URLs are not accepted here. The agent mirrors them onto the
  * canvas first via `mirror_url.js`, which mints a `subtype: "reference"`
@@ -199,37 +195,38 @@ function makeBadArgs(message) {
  * @param {Object}    opts
  * @param {string[]}  opts.sourceIds  list of --ref-source-id values
  * @param {string}    [opts.projectId]
- * @returns {Promise<string[]>}       provider-ready tunnel URLs
+ * @returns {Promise<{ tunnelUrl: string, assetId: string | null }[]>}
  */
 export async function buildProviderRefs({ sourceIds = [], projectId } = {}) {
+  const proj = projectId || await readActiveProject();
   const out = [];
   for (let i = 0; i < sourceIds.length; i++) {
     const sid = sourceIds[i];
     if (!sid) continue;
+    const node = await readNodeFromWorkflow({ nodeId: sid, projectId: proj });
     // Refuse archived sources before the provider call — the CLAUDE.md
     // rule tells the agent to filter archived; this is the
     // system-boundary backstop.
-    if (await readNodeArchived({ nodeId: sid, projectId })) {
+    if (node?.data?.archived === true) {
       throw makeBadArgs(
         `Ref ${i + 1}: node ${sid} is archived. Pick a live node, or ask the user to restore it.`,
       );
     }
-    const lp = await readNodeLocalPath({ nodeId: sid, projectId });
-    if (!lp) {
+    const lp = node?.data?.local_path;
+    if (typeof lp !== "string" || !lp) {
       throw makeBadArgs(
         `Ref ${i + 1}: node ${sid} has no local_path. Asset nodes must carry local_path; if this is an old workflow.json shape, regenerate the asset.`,
       );
     }
-    const tunnelUrl = tunnelUrlForLocalPath({
-      localPath: lp,
-      projectId: projectId || await readActiveProject(),
-    });
+    const tunnelUrl = tunnelUrlForLocalPath({ localPath: lp, projectId: proj });
     if (!tunnelUrl) {
       throw makeBadArgs(
         `No tunnel configured for ref ${i + 1}. Run ./start.sh (auto-launches cloudflared).`,
       );
     }
-    out.push(tunnelUrl);
+    const md = node?.data?.metadata;
+    const assetId = typeof md?.asset_id === "string" && md.asset_id ? md.asset_id : null;
+    out.push({ tunnelUrl, assetId });
   }
   return out;
 }
