@@ -69,7 +69,8 @@ session*.txt
 docs/proposals/
 docs/reports/
 docs/roadmaps/
-docs/plans/
+docs/plans/*
+!docs/plans/.gitkeep
 
 # Local-only tech debt audits.
 TECH_DEBT_AUDIT.md
