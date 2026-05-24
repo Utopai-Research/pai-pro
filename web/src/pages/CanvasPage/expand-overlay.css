@@ -136,6 +136,24 @@
   max-height: none;
   height: 100%;
 }
+/* Draft mode: PROMPT (and the audio TEXT variant that shares the same
+   section/textarea classes) flex-fills the leftover space below
+   REFERENCES + DETAILS. Mirrors `.note-expand-textarea` inside
+   `.note-expand-body` further down in this file. */
+.me-top.me-top-static .me-prompt-section {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.me-top.me-top-static .me-prompt-section .me-prompt {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+}
+.me-top.me-top-static .me-prompt-section .me-prompt-textarea {
+  flex: 1 1 auto;
+  min-height: 0;
+  resize: none;
+}
 .media-expand-draft-bar {
   display: flex;
   align-items: center;
@@ -405,17 +423,6 @@
   gap: 16px;
   max-height: 60vh;
   overflow: auto;
-  scrollbar-width: thin;
-}
-.me-top-panel-inner::-webkit-scrollbar {
-  width: 6px;
-}
-.me-top-panel-inner::-webkit-scrollbar-track {
-  background: transparent;
-}
-.me-top-panel-inner::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 3px;
 }
 
 /* When the top panel is open, dim the underlying media so the focus
@@ -465,11 +472,10 @@
 /* Draft-editable variant — same typography as .me-prompt but uses an
    uncontrolled textarea (blur PATCHes). No mention-chip rendering;
    the user types raw @Image1 tokens and the rest of the canvas
-   resolves them on the next render. */
+   resolves them on the next render. Sizing (flex-fill) is handled by
+   the draft-scoped rules near the top of the file. */
 .me-prompt-textarea {
   width: 100%;
-  min-height: 60px;
-  resize: vertical;
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid var(--line-1);
   border-radius: 4px;
@@ -1075,25 +1081,37 @@
    editing surfaces — default browser chrome reads as bulky white-grey
    slabs against the dark overlay. */
 .note-markdown-expanded,
-.note-expand-textarea {
+.note-expand-textarea,
+.me-prompt-textarea,
+.me-top-panel-inner {
   scrollbar-width: thin;
   scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
 }
 .note-markdown-expanded::-webkit-scrollbar,
-.note-expand-textarea::-webkit-scrollbar { width: 8px; height: 8px; }
+.note-expand-textarea::-webkit-scrollbar,
+.me-prompt-textarea::-webkit-scrollbar,
+.me-top-panel-inner::-webkit-scrollbar { width: 8px; height: 8px; }
 .note-markdown-expanded::-webkit-scrollbar-track,
-.note-expand-textarea::-webkit-scrollbar-track { background: transparent; }
+.note-expand-textarea::-webkit-scrollbar-track,
+.me-prompt-textarea::-webkit-scrollbar-track,
+.me-top-panel-inner::-webkit-scrollbar-track { background: transparent; }
 .note-markdown-expanded::-webkit-scrollbar-thumb,
-.note-expand-textarea::-webkit-scrollbar-thumb {
+.note-expand-textarea::-webkit-scrollbar-thumb,
+.me-prompt-textarea::-webkit-scrollbar-thumb,
+.me-top-panel-inner::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.12);
   border-radius: 4px;
 }
 .note-markdown-expanded::-webkit-scrollbar-thumb:hover,
-.note-expand-textarea::-webkit-scrollbar-thumb:hover {
+.note-expand-textarea::-webkit-scrollbar-thumb:hover,
+.me-prompt-textarea::-webkit-scrollbar-thumb:hover,
+.me-top-panel-inner::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.22);
 }
 .note-markdown-expanded::-webkit-scrollbar-corner,
-.note-expand-textarea::-webkit-scrollbar-corner {
+.note-expand-textarea::-webkit-scrollbar-corner,
+.me-prompt-textarea::-webkit-scrollbar-corner,
+.me-top-panel-inner::-webkit-scrollbar-corner {
   background: transparent;
 }
 .note-markdown-expanded > :first-child { margin-top: 0; }
