@@ -37,6 +37,7 @@ import {
   projectDir,
   projectIdFromCanvasUrl,
 } from "../lib/paths.js";
+import { logPai } from "../lib/pai_log.js";
 import { findLatestSessionFile, readMeta } from "../lib/readers.js";
 
 const ptys = new Map();
@@ -84,11 +85,16 @@ export function killAllPtys() {
 // check short-circuits already-uploaded entries.
 function backfillProjectAssets(p) {
   const projectId = p.meta.id;
+  let count = 0;
   for (const n of p.canvasState?.nodes ?? []) {
     if (n.type !== "image_result") continue;
     const localPath = n.data?.local_path;
     if (typeof localPath !== "string" || !localPath) continue;
+    count++;
     preuploadCanvasUrl({ projectId, localPath });
+  }
+  if (count > 0) {
+    logPai({ projectId, tag: "pai-cache", message: `backfill walk: ${count} image_results` });
   }
 }
 

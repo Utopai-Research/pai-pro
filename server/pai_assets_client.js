@@ -41,6 +41,8 @@
 import { EventEmitter } from "node:events";
 import { callGenerate, err } from "./pai_client.js";
 import { readTunnelOrigin } from "./local_mirror.js";
+import { logPai } from "./lib/pai_log.js";
+import { projectIdFromCanvasUrl } from "./lib/paths.js";
 
 const GROUP_NAME = "pai-pro";
 
@@ -120,6 +122,8 @@ export function snapshotAssetStates() {
  */
 export function reseedFromCanvas(projectId, nodes) {
   if (!projectId || !Array.isArray(nodes)) return;
+  let active = 0;
+  let rejected = 0;
   for (const n of nodes) {
     if (n?.type !== "image_result" && n?.type !== "video_result" && n?.type !== "audio_result") continue;
     const localPath = n?.data?.local_path;
@@ -129,9 +133,18 @@ export function reseedFromCanvas(projectId, nodes) {
     if (_assetCache.has(key)) continue;
     if (typeof md?.asset_id === "string" && md.asset_id) {
       _assetCache.set(key, { status: "active", assetId: md.asset_id });
+      active++;
     } else if (typeof md?.asset_rejected_reason === "string" && md.asset_rejected_reason) {
       _assetCache.set(key, { status: "rejected", reason: md.asset_rejected_reason });
+      rejected++;
     }
+  }
+  if (active + rejected > 0) {
+    logPai({
+      projectId,
+      tag: "pai-cache",
+      message: `reseeded ${active + rejected} entries (${active} active / ${rejected} rejected)`,
+    });
   }
 }
 
@@ -157,7 +170,7 @@ function reclassifyAssetError(e) {
   return e;
 }
 
-async function paiAssetsCall({ action, payload, timeoutMs = 60_000 }) {
+async function paiAssetsCall({ action, payload, timeoutMs = 60_000, projectId }) {
   try {
     return await callGenerate({
       model: "video-generation-assets",
@@ -165,6 +178,7 @@ async function paiAssetsCall({ action, payload, timeoutMs = 60_000 }) {
       queryParams: { Action: action },
       timeoutMs,
       logTag: `pai-assets:${action}`,
+      projectId,
     });
   } catch (e) {
     throw reclassifyAssetError(e);
@@ -214,7 +228,7 @@ const GET_ASSET_POLL_INTERVAL_MS = 1_500;
 const GET_ASSET_POLL_CEILING_MS = 60_000;
 const GET_ASSET_REQUEST_TIMEOUT_MS = 8_000;
 
-async function pollGetAssetToTerminal(assetId) {
+async function pollGetAssetToTerminal(assetId, projectId) {
   const started = Date.now();
   let attempts = 0;
   let lastTransient = null;
@@ -235,6 +249,7 @@ async function pollGetAssetToTerminal(assetId) {
         action: "GetAsset",
         payload: { Id: assetId },
         timeoutMs: GET_ASSET_REQUEST_TIMEOUT_MS,
+        projectId,
       });
     } catch (e) {
       // bad_args (assetRejected, group missing) and infra fail fast.
@@ -260,6 +275,10 @@ async function pollGetAssetToTerminal(assetId) {
 async function doUpload(url, kind) {
   const assetType = KIND_TO_ASSET_TYPE[kind];
   if (!assetType) throw err("bad_args", `unknown asset kind: ${kind}`);
+  // Parse projectId once from the URL — every downstream PAI call for this
+  // upload gets the same routing. External URLs (picsum, etc.) → null →
+  // logs land in orphan_pai_calls.log.
+  const projectId = projectIdFromCanvasUrl(url);
 
   const createWithGroup = async (groupId) => {
     const name = String(url).split("/").pop().slice(0, 64) || "asset";
@@ -272,6 +291,7 @@ async function doUpload(url, kind) {
         Name: name,
         ProjectName: "default",
       },
+      projectId,
     });
     const assetId = data?.Result?.Id;
     if (!assetId) {
@@ -296,7 +316,7 @@ async function doUpload(url, kind) {
     }
   }
 
-  await pollGetAssetToTerminal(assetId);
+  await pollGetAssetToTerminal(assetId, projectId);
   return assetId;
 }
 
@@ -310,11 +330,16 @@ export async function uploadReferenceUrl(url, kind) {
   // original `url` keeps flowing to doUpload — PAI needs the fetchable
   // form to read the bytes.
   const key = canonicalAssetKey(url);
+  const projectId = projectIdFromCanvasUrl(key);
 
   const existing = _assetCache.get(key);
   if (existing) {
-    if (existing.status === "active") return existing.assetId;
+    if (existing.status === "active") {
+      logPai({ projectId, tag: "pai-cache", message: `HIT key=${key} assetId=${existing.assetId}` });
+      return existing.assetId;
+    }
     if (existing.status === "rejected") {
+      logPai({ projectId, tag: "pai-cache", message: `REJECT_CACHED key=${key} reason="${(existing.reason || "").slice(0, 200)}"` });
       throw err("bad_args", existing.reason || "Asset previously rejected", {
         assetRejected: true,
         failedUrl: url,
@@ -322,9 +347,12 @@ export async function uploadReferenceUrl(url, kind) {
       });
     }
     if (existing.status === "pending" && existing.promise) {
+      logPai({ projectId, tag: "pai-cache", message: `HIT_PENDING key=${key} (dedupe onto in-flight upload)` });
       return existing.promise;
     }
   }
+
+  logPai({ projectId, tag: "pai-cache", message: `MISS key=${key} → upload` });
 
   const promise = (async () => {
     try {
@@ -342,6 +370,7 @@ export async function uploadReferenceUrl(url, kind) {
       }
       // Transient / infra failure — drop cache so the next call retries cleanly.
       _assetCache.delete(key);
+      logPai({ projectId, tag: "pai-cache", message: `DROP key=${key} reason=${e.klass || "transient"}` });
       throw e;
     }
   })();
@@ -381,11 +410,15 @@ export function preuploadCanvasUrl({ projectId, localPath, mimeType }) {
   const kind = (mimeType?.split("/")[0]) || kindFromUrl(rel);
   if (kind !== "image" && kind !== "audio" && kind !== "video") return;
   const key = `/projects/${encodeURIComponent(projectId)}/${rel}`;
-  if (_assetCache.has(key)) return;
+  if (_assetCache.has(key)) {
+    logPai({ projectId, tag: "pai-cache", message: `HIT key=${key} (preupload skipped)` });
+    return;
+  }
 
   const origin = readTunnelOrigin();
   if (!origin) return;
   const tunnelUrl = `${origin}${key}`;
+  logPai({ projectId, tag: "pai-cache", message: `MISS key=${key} → upload (preupload)` });
 
   const promise = (async () => {
     const assetId = await doUpload(tunnelUrl, kind);
@@ -403,6 +436,7 @@ export function preuploadCanvasUrl({ projectId, localPath, mimeType }) {
       emitUpdate(key, "rejected", { reason: e.message });
     } else {
       _assetCache.delete(key);
+      logPai({ projectId, tag: "pai-cache", message: `DROP key=${key} reason=${e?.klass || "transient"}` });
       console.warn(`[pai-assets] pre-upload transient (${kind}) ${key}: ${e?.message}`);
     }
   });

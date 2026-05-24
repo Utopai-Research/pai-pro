@@ -14,7 +14,9 @@ export async function kickPreupload({ projectId, localPath, mimeType }) {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ local_path: localPath, mime_type: mimeType }),
     });
-  } catch {
-    // viewer down — no chip, no harm; CLI proceeds.
+  } catch (e) {
+    // viewer down — no chip, no harm; CLI proceeds. Log so "missing chip"
+    // bug reports have a breadcrumb instead of pure silence.
+    console.warn(`[preupload-kick] viewer unreachable at ${url}: ${e.message}`);
   }
 }

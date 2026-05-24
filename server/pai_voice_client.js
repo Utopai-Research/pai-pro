@@ -38,7 +38,7 @@ const TIMEOUT_MS = 60_000;
  * @throws  classified Error (.klass): bad_args / content_filtered /
  *          rate_limited / infra / transient / transient_exhausted
  */
-export async function generateVoice({ text, prompt } = {}) {
+export async function generateVoice({ text, prompt, projectId } = {}) {
   if (typeof text !== "string" || !text.trim()) {
     throw err("bad_args", "generateVoice: empty text");
   }
@@ -60,6 +60,7 @@ export async function generateVoice({ text, prompt } = {}) {
     payload,
     timeoutMs: TIMEOUT_MS,
     logTag: "pai-voice",
+    projectId,
   });
 
   const b64 = body?.body_base64;

@@ -212,10 +212,11 @@ try {
     imageAssetIds: assetIds.images,
     audioAssetIds: assetIds.audios,
     videoAssetIds: assetIds.videos,
+    projectId,
   });
 
-  const { videoUrl, durationSeconds } = await pollVideo(taskId);
-  const mp4Bytes = await downloadVideo(videoUrl);
+  const { videoUrl, durationSeconds } = await pollVideo(taskId, { projectId });
+  const mp4Bytes = await downloadVideo(videoUrl, { projectId });
   const staged = await writeBytesToTmp({
     bytes: mp4Bytes,
     mimeType: "video/mp4",

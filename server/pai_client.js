@@ -39,6 +39,7 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { config as dotenvConfig } from "dotenv";
+import { logPai } from "./lib/pai_log.js";
 
 // Load .env defensively. Scripts that import us from server/scripts/
 // already loaded dotenv via _cli.js, but library callers may not have.
@@ -134,84 +135,106 @@ export function classifyTerminalStatus(statusResp) {
 
 // Run a single POST attempt against /api/v1/<path>. Throws classified
 // errors on HTTP failure. Returns the parsed JSON body on success.
-async function postOnce({ path, body, timeoutMs }) {
-  const url = `${paiBaseUrl()}/api/v1/${String(path).replace(/^\/+/, "")}`;
+async function postOnce({ path: apiPath, body, timeoutMs, projectId, logTag = "pai" }) {
+  const t0 = Date.now();
+  const url = `${paiBaseUrl()}/api/v1/${String(apiPath).replace(/^\/+/, "")}`;
   const controller = new AbortController();
   const timer = timeoutMs ? setTimeout(() => controller.abort(), timeoutMs) : null;
-  let res;
   try {
-    res = await fetch(url, {
-      method: "POST",
-      headers: authHeaders(),
-      body: JSON.stringify(body),
-      signal: controller.signal,
-    });
-  } catch (e) {
-    if (e.name === "AbortError") {
-      throw err("transient", `PAI ${path} aborted after ${timeoutMs}ms`);
+    let res;
+    try {
+      res = await fetch(url, {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+    } catch (e) {
+      if (e.name === "AbortError") {
+        throw err("transient", `PAI ${apiPath} aborted after ${timeoutMs}ms`);
+      }
+      throw err("transient", `Network error calling PAI ${apiPath}: ${e.message}`);
+    } finally {
+      if (timer) clearTimeout(timer);
     }
-    throw err("transient", `Network error calling PAI ${path}: ${e.message}`);
-  } finally {
-    if (timer) clearTimeout(timer);
-  }
 
-  const rawBody = await res.text().catch(() => "");
-  let parsed = null;
-  try { parsed = rawBody ? JSON.parse(rawBody) : null; } catch { /* not JSON */ }
+    const rawBody = await res.text().catch(() => "");
+    let parsed = null;
+    try { parsed = rawBody ? JSON.parse(rawBody) : null; } catch { /* not JSON */ }
 
-  if (!res.ok) {
-    const errMsg = parsed?.detail
-      || parsed?.message
-      || parsed?.error?.message
-      || rawBody.slice(0, 300)
-      || `HTTP ${res.status}`;
-    const ra = parseInt(res.headers.get("retry-after") || "", 10);
-    throw classifyHttpFailure(res.status, errMsg, ra);
-  }
+    if (!res.ok) {
+      const errMsg = parsed?.detail
+        || parsed?.message
+        || parsed?.error?.message
+        || rawBody.slice(0, 300)
+        || `HTTP ${res.status}`;
+      const ra = parseInt(res.headers.get("retry-after") || "", 10);
+      throw classifyHttpFailure(res.status, errMsg, ra);
+    }
 
-  if (parsed === null || typeof parsed !== "object") {
-    throw err("transient", `PAI ${path} returned non-JSON 200: ${rawBody.slice(0, 200)}`);
+    if (parsed === null || typeof parsed !== "object") {
+      throw err("transient", `PAI ${apiPath} returned non-JSON 200: ${rawBody.slice(0, 200)}`);
+    }
+    logPai({ projectId, tag: logTag, message: `POST ${apiPath} ${res.status} ${Date.now() - t0}ms` });
+    return parsed;
+  } catch (e) {
+    logPai({
+      projectId,
+      tag: logTag,
+      message: `POST ${apiPath} FAIL ${e.klass || "?"} ${Date.now() - t0}ms msg="${String(e.message).slice(0, 200)}"`,
+    });
+    throw e;
   }
-  return parsed;
 }
 
-async function getOnce({ path, timeoutMs }) {
-  const url = `${paiBaseUrl()}/api/v1/${String(path).replace(/^\/+/, "")}`;
+async function getOnce({ path: apiPath, timeoutMs, projectId, logTag = "pai" }) {
+  const t0 = Date.now();
+  const url = `${paiBaseUrl()}/api/v1/${String(apiPath).replace(/^\/+/, "")}`;
   const controller = new AbortController();
   const timer = timeoutMs ? setTimeout(() => controller.abort(), timeoutMs) : null;
-  let res;
   try {
-    res = await fetch(url, {
-      method: "GET",
-      headers: { Authorization: `Bearer ${paiToken()}` },
-      signal: controller.signal,
-    });
-  } catch (e) {
-    if (e.name === "AbortError") {
-      throw err("transient", `PAI ${path} aborted after ${timeoutMs}ms`);
+    let res;
+    try {
+      res = await fetch(url, {
+        method: "GET",
+        headers: { Authorization: `Bearer ${paiToken()}` },
+        signal: controller.signal,
+      });
+    } catch (e) {
+      if (e.name === "AbortError") {
+        throw err("transient", `PAI ${apiPath} aborted after ${timeoutMs}ms`);
+      }
+      throw err("transient", `Network error calling PAI ${apiPath}: ${e.message}`);
+    } finally {
+      if (timer) clearTimeout(timer);
     }
-    throw err("transient", `Network error calling PAI ${path}: ${e.message}`);
-  } finally {
-    if (timer) clearTimeout(timer);
-  }
 
-  const rawBody = await res.text().catch(() => "");
-  let parsed = null;
-  try { parsed = rawBody ? JSON.parse(rawBody) : null; } catch { /* not JSON */ }
+    const rawBody = await res.text().catch(() => "");
+    let parsed = null;
+    try { parsed = rawBody ? JSON.parse(rawBody) : null; } catch { /* not JSON */ }
 
-  if (!res.ok) {
-    const errMsg = parsed?.detail
-      || parsed?.message
-      || rawBody.slice(0, 300)
-      || `HTTP ${res.status}`;
-    const ra = parseInt(res.headers.get("retry-after") || "", 10);
-    throw classifyHttpFailure(res.status, errMsg, ra);
-  }
+    if (!res.ok) {
+      const errMsg = parsed?.detail
+        || parsed?.message
+        || rawBody.slice(0, 300)
+        || `HTTP ${res.status}`;
+      const ra = parseInt(res.headers.get("retry-after") || "", 10);
+      throw classifyHttpFailure(res.status, errMsg, ra);
+    }
 
-  if (parsed === null || typeof parsed !== "object") {
-    throw err("transient", `PAI ${path} returned non-JSON 200: ${rawBody.slice(0, 200)}`);
+    if (parsed === null || typeof parsed !== "object") {
+      throw err("transient", `PAI ${apiPath} returned non-JSON 200: ${rawBody.slice(0, 200)}`);
+    }
+    logPai({ projectId, tag: logTag, message: `GET ${apiPath} ${res.status} ${Date.now() - t0}ms` });
+    return parsed;
+  } catch (e) {
+    logPai({
+      projectId,
+      tag: logTag,
+      message: `GET ${apiPath} FAIL ${e.klass || "?"} ${Date.now() - t0}ms msg="${String(e.message).slice(0, 200)}"`,
+    });
+    throw e;
   }
-  return parsed;
 }
 
 // Wrap a call in the canonical one-shot transient retry. `attempt()` is
@@ -256,6 +279,7 @@ export async function callGenerate({
   queryParams,
   timeoutMs = 120_000,
   logTag = "pai",
+  projectId,
 }) {
   if (typeof model !== "string" || !model) throw err("bad_args", "callGenerate: model required");
   if (!payload || typeof payload !== "object") throw err("bad_args", "callGenerate: payload object required");
@@ -263,7 +287,7 @@ export async function callGenerate({
   if (queryParams && typeof queryParams === "object") body.query_params = queryParams;
   return withTransientRetry({
     logTag,
-    attempt: () => postOnce({ path: "generate", body, timeoutMs }),
+    attempt: () => postOnce({ path: "generate", body, timeoutMs, projectId, logTag }),
   });
 }
 
@@ -283,6 +307,7 @@ export async function callSubmit({
   queryParams,
   timeoutMs = 30_000,
   logTag = "pai",
+  projectId,
 }) {
   if (typeof model !== "string" || !model) throw err("bad_args", "callSubmit: model required");
   if (!payload || typeof payload !== "object") throw err("bad_args", "callSubmit: payload object required");
@@ -290,7 +315,7 @@ export async function callSubmit({
   if (queryParams && typeof queryParams === "object") body.query_params = queryParams;
   const env = await withTransientRetry({
     logTag,
-    attempt: () => postOnce({ path: "submit", body, timeoutMs }),
+    attempt: () => postOnce({ path: "submit", body, timeoutMs, projectId, logTag }),
   });
   if (env?.code !== 0 || !env?.job_id) {
     throw classifySubmitBodyFailure(env);
@@ -319,10 +344,13 @@ export async function pollStatus(jobId, {
   timeoutMs = 30 * 60_000,
   requestTimeoutMs = 30_000,
   onProgress,
+  projectId,
+  logTag = "pai",
 } = {}) {
   if (typeof jobId !== "string" || !jobId) throw err("bad_args", "pollStatus: jobId required");
   const started = Date.now();
   let consecutiveTransient = 0;
+  let lastStatus = null;
 
   while (Date.now() - started < timeoutMs) {
     await new Promise((r) => setTimeout(r, intervalMs));
@@ -331,6 +359,8 @@ export async function pollStatus(jobId, {
       resp = await getOnce({
         path: `task/status/${encodeURIComponent(jobId)}`,
         timeoutMs: requestTimeoutMs,
+        projectId,
+        logTag,
       });
       consecutiveTransient = 0;
     } catch (e) {
@@ -345,8 +375,14 @@ export async function pollStatus(jobId, {
     }
 
     const status = String(resp?.status || "").toUpperCase();
+    const elapsedSec = Math.round((Date.now() - started) / 1000);
     if (onProgress) {
-      onProgress({ status, elapsedSec: (Date.now() - started) / 1000 });
+      onProgress({ status, elapsedSec });
+    }
+    if (status && status !== lastStatus) {
+      const arrow = lastStatus ? `${lastStatus} → ${status}` : status;
+      logPai({ projectId, tag: logTag, message: `poll job=${jobId} status=${arrow} elapsedSec=${elapsedSec}` });
+      lastStatus = status;
     }
 
     if (status === "SUCCESS") return resp;
@@ -370,13 +406,27 @@ export async function pollStatus(jobId, {
  * the MP4 from output_url. PAI's signed GCS URLs are publicly fetchable
  * within their TTL — no auth needed.
  */
-export async function downloadUrlToBuffer(url, { timeoutMs = 120_000 } = {}) {
+export async function downloadUrlToBuffer(url, { timeoutMs = 120_000, projectId, logTag = "pai-video-dl" } = {}) {
   if (typeof url !== "string" || !url) throw err("bad_args", "downloadUrlToBuffer: url required");
-  const res = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) });
-  if (!res.ok) {
-    const body = await res.text().catch(() => "");
-    throw err("transient", `download ${res.status}: ${body.slice(0, 200)}`);
+  const t0 = Date.now();
+  let host = "?";
+  try { host = new URL(url).host; } catch {}
+  try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) });
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      throw err("transient", `download ${res.status}: ${body.slice(0, 200)}`);
+    }
+    const buf = await res.arrayBuffer();
+    const bytes = buf.byteLength;
+    logPai({ projectId, tag: logTag, message: `GET ${host} ${res.status} ${Date.now() - t0}ms bytes=${bytes}` });
+    return Buffer.from(buf);
+  } catch (e) {
+    logPai({
+      projectId,
+      tag: logTag,
+      message: `GET ${host} FAIL ${e.klass || "?"} ${Date.now() - t0}ms msg="${String(e.message).slice(0, 200)}"`,
+    });
+    throw e;
   }
-  const buf = await res.arrayBuffer();
-  return Buffer.from(buf);
 }

@@ -124,7 +124,7 @@ function detectSafetyBlock(body) {
  * @throws  classified Error (.klass): bad_args / content_filtered /
  *          rate_limited / infra / transient / transient_exhausted
  */
-export async function generateImage({ prompt, aspectRatio, imageSize, refImageUrls } = {}) {
+export async function generateImage({ prompt, aspectRatio, imageSize, refImageUrls, projectId } = {}) {
   if (typeof prompt !== "string" || !prompt.trim()) {
     throw err("bad_args", "generateImage: prompt required");
   }
@@ -143,6 +143,7 @@ export async function generateImage({ prompt, aspectRatio, imageSize, refImageUr
     payload,
     timeoutMs: TIMEOUT_MS,
     logTag: "pai-image",
+    projectId,
   });
 
   // Upstream safety blocks land as 200 OK with no image. Check before

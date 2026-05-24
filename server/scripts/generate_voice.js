@@ -91,7 +91,7 @@ await writePending({
 try {
   const projectId = args["project-id"] || (await readActiveProject());
 
-  const result = await paiGenerateVoice({ text: args.text, prompt: args.prompt });
+  const result = await paiGenerateVoice({ text: args.text, prompt: args.prompt, projectId });
   // PAI's tts returns the MP3 bytes inline (decoded from the upstream
   // envelope's body_base64). Stage the bytes to the .tmp/ holding area;
   // the mutator renames into assets/audios/<node-id>.mp3 below.

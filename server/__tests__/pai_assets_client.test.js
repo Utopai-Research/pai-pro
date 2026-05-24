@@ -6,6 +6,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 process.env.PAI_KEY ||= "test_key";
+process.env.PAI_LOG_DISABLED ||= "1"; // keep pai_log.js fully no-op in tests
 
 // Fresh module instance per scenario so module-level state
 // (_groupIdPromise, _assetCache) is isolated between tests.

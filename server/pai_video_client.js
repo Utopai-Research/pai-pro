@@ -80,6 +80,7 @@ export async function submitVideo({
   imageAssetIds = [],
   audioAssetIds = [],
   videoAssetIds = [],
+  projectId,
 } = {}) {
   if (typeof prompt !== "string" || !prompt.trim()) {
     throw err("bad_args", "submitVideo: empty prompt");
@@ -99,6 +100,7 @@ export async function submitVideo({
     payload,
     timeoutMs: SUBMIT_TIMEOUT_MS,
     logTag: "pai-video",
+    projectId,
   });
   return { taskId: env.job_id, raw: env };
 }
@@ -125,12 +127,14 @@ function findVideoUrl(resp) {
  *
  * @returns {Promise<{ videoUrl: string, raw: object, durationSeconds: number }>}
  */
-export async function pollVideo(taskId, { onProgress } = {}) {
+export async function pollVideo(taskId, { onProgress, projectId } = {}) {
   const started = Date.now();
   const resp = await pollStatus(taskId, {
     intervalMs: POLL_INTERVAL_MS,
     timeoutMs: POLL_TIMEOUT_MS,
     onProgress,
+    projectId,
+    logTag: "pai-video",
   });
   const videoUrl = findVideoUrl(resp);
   if (!videoUrl) {
@@ -153,6 +157,6 @@ export async function pollVideo(taskId, { onProgress } = {}) {
  * @param {string} videoUrl
  * @returns {Promise<Buffer>}
  */
-export async function downloadVideo(videoUrl) {
-  return downloadUrlToBuffer(videoUrl, { timeoutMs: 120_000 });
+export async function downloadVideo(videoUrl, { projectId } = {}) {
+  return downloadUrlToBuffer(videoUrl, { timeoutMs: 120_000, projectId, logTag: "pai-video-dl" });
 }

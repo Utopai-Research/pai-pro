@@ -132,6 +132,7 @@ try {
     aspectRatio: args["aspect-ratio"],
     imageSize: args["image-size"],
     refImageUrls: resolvedRefs,
+    projectId,
   });
   // Mutator fills image_url + local_path after renaming the staged file
   // into assets/images/<node-id><ext> — the data payload below omits both.
