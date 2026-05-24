@@ -156,6 +156,26 @@ load_env() {
     set -a
     . "$SCRIPT_DIR/.env"
     set +a
+
+    # Interactive PAI_KEY prompt — catches users who only ran
+    # `cp .env.example .env` (the README's bad-old-onramp) and never
+    # filled the key. Skip in non-TTY contexts (CI, scripted setup)
+    # where the user can't respond to a prompt.
+    if [ -z "${PAI_KEY:-}" ] && [ -t 0 ]; then
+        echo ""
+        echo "PAI_KEY isn't set in your .env yet."
+        echo "Get a key at https://pai-pro.utopaistudios.com/keys (format: PAI_<random>)."
+        printf "Paste your PAI_KEY here (or Ctrl+C to abort): "
+        read -r PAI_KEY
+        if [ -z "$PAI_KEY" ]; then
+            echo "ERROR: PAI_KEY still empty; aborting."
+            exit 1
+        fi
+        echo "PAI_KEY=$PAI_KEY" >> "$SCRIPT_DIR/.env"
+        export PAI_KEY
+        echo "Saved to .env. Continuing boot."
+        echo ""
+    fi
 }
 
 derive_config() {
