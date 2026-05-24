@@ -9,9 +9,9 @@
 // external URLs, the agent runs mirror_url.js first to mint a canvas
 // reference node, then references that node's id via --ref-source-id.
 //
-// `./start.sh` auto-launches `cloudflared tunnel` and writes the public
-// URL to .tunnel_url. If .tunnel_url is missing the call fails with
-// bad_args pointing back at `./start.sh`.
+// `./scripts/start.sh` auto-launches `cloudflared tunnel` and writes the
+// public URL to .tunnel_url. If .tunnel_url is missing the call fails with
+// bad_args pointing back at `./scripts/start.sh`.
 //
 // Output (stdout, one line):
 //   { ok: true, output_url, model, aspect_ratio, image_size,

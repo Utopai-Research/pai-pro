@@ -17,7 +17,7 @@ import http from "node:http";
 import sharp from "sharp";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
-const SCRIPTS_DIR = join(__dirname, "..", "scripts");
+const CLI_DIR = join(__dirname, "..", "cli");
 
 function runCli({ script, args, cwd, env }) {
   return new Promise((resolve) => {
@@ -25,7 +25,7 @@ function runCli({ script, args, cwd, env }) {
     let stderr = "";
     const child = spawn(
       process.execPath,
-      [join(SCRIPTS_DIR, script), ...args],
+      [join(CLI_DIR, script), ...args],
       { cwd, env: { ...process.env, ...env }, stdio: ["ignore", "pipe", "pipe"] },
     );
     child.stdout.on("data", (d) => { stdout += d; });
@@ -41,8 +41,8 @@ function parseReply(stdout) {
 
 // Make a tmp project directory and a sibling .active_project file so the
 // CLI's readActiveProject() resolves without needing the host's real
-// projects/ tree. The CLI computes paths relative to PROJECT_ROOT
-// (server/local_mirror.js), which it derives from its own __dirname —
+// projects/ tree. The CLI computes paths relative to PAI_REPO_ROOT
+// (server/lib/paths.js), which it derives from its own __dirname —
 // we don't try to spoof that; the CLI just needs the active project id
 // and a place to drop the .tmp bytes.
 async function setupProject() {

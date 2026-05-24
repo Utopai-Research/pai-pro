@@ -60,9 +60,9 @@ __pycache__/
 # Local session resume notes (single + multi: `claude --resume <id>` snippets).
 session*.txt
 
-# Cloudflare tunnel state (rotates per ./start.sh; see CLAUDE.md)
+# Cloudflare tunnel state (rotates per ./scripts/start.sh; see CLAUDE.md).
+# Port-suffixed .tunnel_url.<port>.log is already covered by *.log above.
 .tunnel_url
-.tunnel_url.log
 
 # Docs: top-level docs/*.md tracked publicly; only maintainer-local
 # proposals + bug reports + roadmaps stay gitignored.

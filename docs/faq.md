@@ -2,11 +2,11 @@
 
 ## Skills don't trigger
 
-Restart your AI agent session after `./setup` — skills load at session start. If you're inside the embedded terminal, close the project and reopen.
+Restart your AI agent session after `./scripts/setup` — skills load at session start. If you're inside the embedded terminal, close the project and reopen.
 
 ## Generation fails with `bad_args`
 
-Either `.env` is missing `PAI_KEY`, or you asked for a video with a local ref and the tunnel isn't running. Re-run `./start.sh`; if `cloudflared` is missing, install it (macOS: `brew install cloudflared`; Linux/Windows: <https://github.com/cloudflare/cloudflared/releases>) and re-run.
+Either `.env` is missing `PAI_KEY`, or you asked for a video with a local ref and the tunnel isn't running. Re-run `./scripts/start.sh`; if `cloudflared` is missing, install it (macOS: `brew install cloudflared`; Linux/Windows: <https://github.com/cloudflare/cloudflared/releases>) and re-run.
 
 Last resort: pass a public URL via `--reference-image-url` / `--reference-audio-url` / `--reference-video-url`.
 
@@ -20,7 +20,7 @@ Yes — canvas, terminal, and notes work. Media generation just fails with a cle
 
 ## How do I add a new skill?
 
-Read [skills/CLAUDE.md](../skills/CLAUDE.md) for the SKILL.md authoring contract. Drop a new directory under `skills/<your-skill>/` with a `SKILL.md` file and (optionally) any helper scripts. Run `./setup` to symlink it into `~/.claude/skills/`. The agent picks it up at next session start.
+Read [skills/CLAUDE.md](../skills/CLAUDE.md) for the SKILL.md authoring contract. Drop a new directory under `skills/<your-skill>/` with a `SKILL.md` file and (optionally) any helper scripts. Run `./scripts/setup` to symlink it into `~/.claude/skills/`. The agent picks it up at next session start.
 
 ## How do parallel generations work?
 

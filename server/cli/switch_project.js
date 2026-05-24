@@ -3,19 +3,19 @@
 // `./workflow.json` references resolve to the requested project.
 //
 // Usage:
-//   node server/scripts/switch_project.js --id <project-id>
-//   node server/scripts/switch_project.js --list
+//   node server/cli/switch_project.js --id <project-id>
+//   node server/cli/switch_project.js --list
 //
 // Success JSON: { ok: true, active, projects: [{ id, title, last_active_at }] }
 // Failure JSON: { ok: false, klass, message } — same shape as the media CLIs.
 
 import fs from "node:fs/promises";
 import path from "node:path";
-import { PROJECT_ROOT, parseArgs, emitSuccess, emitFailure } from "./_cli.js";
+import { PAI_REPO_ROOT, parseArgs, emitSuccess, emitFailure } from "./_cli.js";
 
-const PROJECTS_DIR = path.join(PROJECT_ROOT, "projects");
-const ACTIVE_FILE  = path.join(PROJECT_ROOT, ".active_project");
-const ROOT_LINK    = path.join(PROJECT_ROOT, "workflow.json");
+const PROJECTS_DIR = path.join(PAI_REPO_ROOT, "projects");
+const ACTIVE_FILE  = path.join(PAI_REPO_ROOT, ".active_project");
+const ROOT_LINK    = path.join(PAI_REPO_ROOT, "workflow.json");
 
 async function listProjects() {
   let entries;

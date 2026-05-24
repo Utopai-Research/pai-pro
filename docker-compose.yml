@@ -12,8 +12,8 @@ services:
       dockerfile: Dockerfile
     image: pai-pro:local
     container_name: pai-pro
-    # Host port offset to 7588 by default so `./start.sh` on the host can
-    # keep using 7488 alongside Docker. Override via .env.
+    # Host port offset to 7588 by default so `./scripts/start.sh` on the host
+    # can keep using 7488 alongside Docker. Override via .env.
     #
     # Host-side bind pinned to 127.0.0.1 because the viewer has no auth
     # and exposes pty:spawn (process launch in a project's cwd) over

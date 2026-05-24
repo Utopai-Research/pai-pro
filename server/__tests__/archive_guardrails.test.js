@@ -15,7 +15,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { buildProviderRefs, readNodeArchived } from "../local_mirror.js";
-import { postNodeAddBatch } from "../scripts/_mutate_helper.js";
+import { postNodeAddBatch } from "../cli/_mutate_helper.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = join(__dirname, "..", "..");

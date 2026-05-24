@@ -6,10 +6,11 @@
 # start.sh does to discover the ports.
 set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PAI_REPO_ROOT="${PAI_REPO_ROOT:-$(cd "$SCRIPT_DIR/.." && pwd)}"
 
-if [ -f "$SCRIPT_DIR/.env" ]; then
+if [ -f "$PAI_REPO_ROOT/.env" ]; then
     set -a
-    . "$SCRIPT_DIR/.env"
+    . "$PAI_REPO_ROOT/.env"
     set +a
 fi
 
@@ -26,4 +27,4 @@ for s in "pai_pro_viewer_${VIEWER_PORT}" "pai_pro_web_${WEB_PORT}" "pai_pro_tunn
 done
 
 # Clean up tunnel state — the URL is ephemeral and tied to the dead session.
-rm -f "$SCRIPT_DIR/.tunnel_url" "$SCRIPT_DIR/.tunnel_url.${VIEWER_PORT}.log"
+rm -f "$PAI_REPO_ROOT/.tunnel_url" "$PAI_REPO_ROOT/.tunnel_url.${VIEWER_PORT}.log"

@@ -78,14 +78,14 @@ Groups go through the canvas mutator — the agent does NOT `Write` /
 3. Decide on title + hue (0–360). Default hue 200 if you have no signal.
 4. **New group** — call the mutator with `addGroup`:
    ```
-   node "$PAI_REPO_ROOT/server/scripts/canvas_mutate.js" \
+   node "$PAI_REPO_ROOT/server/cli/canvas_mutate.js" \
      --op addGroup \
      --payload-json '{"group":{"title":"Scene 1 — Causeway","node_ids":["image_3","video_1","note_2"],"hue":200}}'
    ```
    Stdout returns `assigned.group_id`. The CLI auto-mints `group_<N>` if you don't pass an explicit id in the payload.
 5. **Extend an existing group** — call the mutator with `updateGroup`, passing the full new `node_ids` list (the mutator replaces the list wholesale and dedupes):
    ```
-   node "$PAI_REPO_ROOT/server/scripts/canvas_mutate.js" \
+   node "$PAI_REPO_ROOT/server/cli/canvas_mutate.js" \
      --op updateGroup \
      --payload-json '{"id":"group_3","patch":{"node_ids":["image_3","video_1","note_2","image_5"]}}'
    ```

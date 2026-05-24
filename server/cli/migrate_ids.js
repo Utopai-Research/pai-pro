@@ -5,10 +5,10 @@
 // next_ids counter in workflow.json.
 //
 // Usage:
-//   node server/scripts/migrate_ids.js --all
-//   node server/scripts/migrate_ids.js --project <id>
-//   node server/scripts/migrate_ids.js --all --dry-run
-//   node server/scripts/migrate_ids.js --all --force   # overwrite an existing backup
+//   node server/cli/migrate_ids.js --all
+//   node server/cli/migrate_ids.js --project <id>
+//   node server/cli/migrate_ids.js --all --dry-run
+//   node server/cli/migrate_ids.js --all --force   # overwrite an existing backup
 //
 // Idempotent — a second run on a migrated project is a no-op.
 //
@@ -18,14 +18,9 @@
 
 import fs from "node:fs/promises";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
-import { config as dotenvConfig } from "dotenv";
+import { PAI_REPO_ROOT } from "../lib/paths.js";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const PROJECT_ROOT = path.resolve(__dirname, "..", "..");
-const PROJECTS_DIR = path.join(PROJECT_ROOT, "projects");
-
-dotenvConfig({ path: path.join(PROJECT_ROOT, ".env") });
+const PROJECTS_DIR = path.join(PAI_REPO_ROOT, "projects");
 
 const BUCKET_BY_TYPE = {
   image_result: "images",

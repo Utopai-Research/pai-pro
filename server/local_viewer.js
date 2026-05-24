@@ -166,7 +166,7 @@ async function boot() {
   // Docker maps the container's PORT to HOST_VIEWER_PORT on the host;
   // the viewer itself only knows PORT. Prefer the host-side port for
   // user-facing URLs when it's set and differs (Docker mode). Falls
-  // back to PORT for host mode / start.sh / anywhere HOST_VIEWER_PORT
+  // back to PORT for host mode / scripts/start.sh / anywhere HOST_VIEWER_PORT
   // is unset.
   const hostPortRaw = process.env.HOST_VIEWER_PORT;
   const hostPort = hostPortRaw && hostPortRaw !== String(PORT) ? hostPortRaw : null;

@@ -17,7 +17,7 @@ Triggers: "give / design a voice for [character]", "what does [character] sound 
 - Read the image first. Open `data.local_path` before composing the prompt — voice description is grounded in what you see. Any `data.name` / `role` / `description` on the node layers on top, doesn't replace.
 - Run via Bash (`$PAI_REPO_ROOT` is exported by the viewer — see CLAUDE.md § "Media CLIs / Invocation path"):
   ```
-  node "$PAI_REPO_ROOT/server/scripts/generate_voice.js" \
+  node "$PAI_REPO_ROOT/server/cli/generate_voice.js" \
     --text "<line>" \
     --prompt "<voice design brief>" \
     --source-node-id <character.id>
@@ -41,7 +41,7 @@ Triggers: "a narrator voice", "voice-over for the opener", "a voice that says X"
 
 - Omit `--source-node-id`. The CLI creates a free-floating `audio_result` (subtype `voice`, no `source_id`, no edge):
   ```
-  node "$PAI_REPO_ROOT/server/scripts/generate_voice.js" \
+  node "$PAI_REPO_ROOT/server/cli/generate_voice.js" \
     --text "<the narration line>" \
     --prompt "<voice design brief>"
   ```

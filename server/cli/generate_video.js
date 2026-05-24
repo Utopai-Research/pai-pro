@@ -6,10 +6,10 @@
 // Refs: every ref is a canvas node id (--ref-source-id for image / video
 // sources, --ref-audio-source-id for audio sources). buildProviderRefs
 // resolves each source's local_path and rewrites the host to the
-// cloudflared tunnel origin via .tunnel_url, so PAI's
-// video-generation-assets endpoint can fetch the bytes server-side.
-// External URLs are mirrored onto the canvas first via mirror_url.js;
-// no separate URL-passthrough flag.
+// cloudflared tunnel origin via .tunnel_url (written by scripts/start.sh),
+// so PAI's video-generation-assets endpoint can fetch the bytes
+// server-side. External URLs are mirrored onto the canvas first via
+// mirror_url.js; no separate URL-passthrough flag.
 
 import path from "node:path";
 import fs from "node:fs/promises";

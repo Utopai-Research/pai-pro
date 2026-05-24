@@ -15,7 +15,7 @@ import fsp from "node:fs/promises";
 import path from "node:path";
 
 import { getCost } from "../model_registry.js";
-import { PROJECT_ROOT, pendingDir, projectDir } from "../lib/paths.js";
+import { PAI_REPO_ROOT, pendingDir, projectDir } from "../lib/paths.js";
 import { readPendingEntry } from "../lib/readers.js";
 import { withProjectMutationLock } from "../lib/writers.js";
 import { writeToProjectPty } from "../services/socket.js";
@@ -133,7 +133,7 @@ export function registerPendingRoutes({ app, projects }) {
       const child = spawn(
         "node",
         [
-          path.join(PROJECT_ROOT, "server", "scripts", entry.script),
+          path.join(PAI_REPO_ROOT, "server", "cli", entry.script),
           "--existing-job-id", jobId,
           ...(Array.isArray(entry.argv) ? entry.argv : []),
         ],

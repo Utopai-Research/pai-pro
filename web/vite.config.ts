@@ -18,7 +18,7 @@ export default defineConfig({
     // Vite serves the SPA on :7443; we proxy /projects/* through to the
     // viewer so the browser's auto-resolved origin works. Same origin
     // collapse is automatic in production (viewer serves both).
-    // VITE_VIEWER_URL is exported by start.sh; VIEWER_PORT isn't passed
+    // VITE_VIEWER_URL is exported by scripts/start.sh; VIEWER_PORT isn't passed
     // into this tmux pane, so don't derive from it here.
     proxy: {
       '/projects': {

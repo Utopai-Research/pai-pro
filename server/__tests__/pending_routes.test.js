@@ -236,7 +236,7 @@ test("writePending preserves position across stage transitions", async () => {
   // file and copy `position` forward (sticky field semantics).
   await new Promise((resolve) => {
     const child = spawn(process.execPath, [
-      join(__dirname, "..", "scripts", "generate_image.js"),
+      join(__dirname, "..", "cli", "generate_image.js"),
       "--stage",
       "--existing-job-id", jobId,
       "--prompt", "still the same cat",

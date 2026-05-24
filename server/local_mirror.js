@@ -7,12 +7,10 @@ import fs from "node:fs/promises";
 import fsSync from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
-import { fileURLToPath } from "node:url";
+import { PAI_REPO_ROOT } from "./lib/paths.js";
 
-const __dirname    = path.dirname(fileURLToPath(import.meta.url));
-const PROJECT_ROOT = path.resolve(__dirname, "..");
-const PROJECTS_DIR = path.join(PROJECT_ROOT, "projects");
-const ACTIVE_FILE  = path.join(PROJECT_ROOT, ".active_project");
+const PROJECTS_DIR = path.join(PAI_REPO_ROOT, "projects");
+const ACTIVE_FILE  = path.join(PAI_REPO_ROOT, ".active_project");
 
 const MIME_TO_EXT = {
   "image/png":  "png",
@@ -71,7 +69,7 @@ export async function mirrorToTmp({ url, projectId, filename }) {
   const ext = path.extname(basenameFromUrl(url)) || ".bin";
   const fname = filename || `tmp_${crypto.randomBytes(8).toString("hex")}${ext}`;
   const relPath = path.posix.join("assets", TMP_DIRNAME, fname);
-  const absPath = path.join(PROJECT_ROOT, "projects", proj, relPath);
+  const absPath = path.join(PAI_REPO_ROOT, "projects", proj, relPath);
 
   const res = await fetch(url);
   if (!res.ok) {
@@ -89,7 +87,7 @@ export async function writeBytesToTmp({ bytes, mimeType, projectId, filename }) 
   const ext = extensionForMime(mimeType);
   const fname = filename || `tmp_${crypto.randomBytes(8).toString("hex")}.${ext}`;
   const relPath = path.posix.join("assets", TMP_DIRNAME, fname);
-  const absPath = path.join(PROJECT_ROOT, "projects", proj, relPath);
+  const absPath = path.join(PAI_REPO_ROOT, "projects", proj, relPath);
   await fs.mkdir(path.dirname(absPath), { recursive: true });
   await fs.writeFile(absPath, bytes);
   return { local_path: relPath, absolute_path: absPath, filename: fname };
@@ -120,13 +118,13 @@ export function viewerUrlForLocalPath({ localPath, projectId }) {
   return `/projects/${encodeURIComponent(projectId)}/${rel}`;
 }
 
-// Cloudflared tunnel origin, written by start.sh to <repo>/.tunnel_url.
-// File-only on purpose: env vars baked into long-running PTYs go stale when
-// the tunnel rotates, but the file is always rewritten by start.sh, so a
-// fresh CLI invocation always picks up the current URL.
+// Cloudflared tunnel origin. File-only on purpose: env vars baked into
+// long-running PTYs go stale when the tunnel rotates, but scripts/start.sh
+// rewrites $PAI_REPO_ROOT/.tunnel_url on every launch, so a fresh CLI
+// invocation always picks up the current URL.
 export function readTunnelOrigin() {
   try {
-    const raw = fsSync.readFileSync(path.join(PROJECT_ROOT, ".tunnel_url"), "utf8").trim();
+    const raw = fsSync.readFileSync(path.join(PAI_REPO_ROOT, ".tunnel_url"), "utf8").trim();
     return raw ? raw.replace(/\/+$/, "") : null;
   } catch {
     return null;
@@ -152,7 +150,7 @@ export function tunnelUrlForLocalPath({ localPath, projectId }) {
 async function readNodeFromWorkflow({ nodeId, projectId }) {
   if (!nodeId) return null;
   const proj = projectId || await readActiveProject();
-  const wfPath = path.join(PROJECT_ROOT, "projects", proj, "workflow.json");
+  const wfPath = path.join(PAI_REPO_ROOT, "projects", proj, "workflow.json");
   let raw;
   try { raw = await fs.readFile(wfPath, "utf8"); } catch { return null; }
   let doc;
@@ -226,7 +224,7 @@ export async function buildProviderRefs({ sourceIds = [], projectId } = {}) {
     });
     if (!tunnelUrl) {
       throw makeBadArgs(
-        `No tunnel configured for ref ${i + 1}. Run ./start.sh (auto-launches cloudflared).`,
+        `No tunnel configured for ref ${i + 1}. Run ./scripts/start.sh (auto-launches cloudflared).`,
       );
     }
     out.push(tunnelUrl);

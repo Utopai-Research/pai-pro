@@ -15,7 +15,7 @@ Behaviors that production-judgment instinct will silently flip when they aren't 
 ## CLI shape
 
 ```
-node "$PAI_REPO_ROOT/server/scripts/generate_video.js" --prompt "..." [--duration 15] [--aspect-ratio 16:9]
+node "$PAI_REPO_ROOT/server/cli/generate_video.js" --prompt "..." [--duration 15] [--aspect-ratio 16:9]
   [--resolution 1080p] [--no-audio]
   [--label "..."] [--ref-source-id <id> ...] [--ref-audio-source-id <audio_id> ...]
   [--source-node-id <id>] [--shot-id <N>]
@@ -79,7 +79,7 @@ Pick the one that fits. When unsure, read `./workflow.json` first to see what's 
 ### 1. Standalone T2V
 
 **Triggers:** a fresh clip unrelated to canvas content ("a noir alley at dawn, slow dolly-in", "a runner in a stadium, 10 seconds").
-**Call:** `node "$PAI_REPO_ROOT/server/scripts/generate_video.js" --prompt "..."` with sensible defaults (15s, 16:9, 1080p, audio on).
+**Call:** `node "$PAI_REPO_ROOT/server/cli/generate_video.js" --prompt "..."` with sensible defaults (15s, 16:9, 1080p, audio on).
 **Edges:** none.
 **For the bracket scaffold and slot-by-slot construction when the user wants polish:** see [`references/video-single-shot.md`](references/video-single-shot.md).
 
@@ -87,7 +87,7 @@ Pick the one that fits. When unsure, read `./workflow.json` first to see what's 
 
 **Triggers:** "animate this", "make a video of this image", "put motion on this still" — applied to a specific canvas `image_result` (character, location, or otherwise).
 **Source:** the named `image_result` node — just `id`.
-**Call:** `node "$PAI_REPO_ROOT/server/scripts/generate_video.js" --prompt "..." --ref-source-id <image.id>`.
+**Call:** `node "$PAI_REPO_ROOT/server/cli/generate_video.js" --prompt "..." --ref-source-id <image.id>`.
 **Edges:** `{ from: <source.id>, to: video_<N>, kind: "derived" }` — emitted by the CLI.
 **Anchor sub-variants:** opening-frame (default — *"opening frame @Image1, …"*) and closing-frame (*"closing on the frame from @Image1"*) — both pass the image as `--ref-source-id`; the anchor direction lives in the prompt wording, since the upstream model exposes no separate last-frame param.
 **For slot-by-slot construction and the opening- vs closing-frame phrasing:** see [`references/video-single-shot.md`](references/video-single-shot.md).
@@ -96,7 +96,7 @@ Pick the one that fits. When unsure, read `./workflow.json` first to see what's 
 
 **Triggers:** "a video of [character]", "put [character] in [setting]", "[character] does [action]" — when at least one canvas character or location is involved.
 **Source:** character / location `image_result` nodes (cap from §Reference caps).
-**Call:** `node "$PAI_REPO_ROOT/server/scripts/generate_video.js" --prompt "..." --ref-source-id <char1.id> --ref-source-id <char2.id> ...`.
+**Call:** `node "$PAI_REPO_ROOT/server/cli/generate_video.js" --prompt "..." --ref-source-id <char1.id> --ref-source-id <char2.id> ...`.
 **Edges:** `{ from: <char.id>, to: video_<N>, kind: "derived" }` — one per `--ref-source-id`.
 **For single-shot composition and adjacent-role wording:** see [`references/video-single-shot.md`](references/video-single-shot.md). **For ≥2 internal shots in one render:** see [`references/video-multi-shot.md`](references/video-multi-shot.md).
 
@@ -104,7 +104,7 @@ Pick the one that fits. When unsure, read `./workflow.json` first to see what's 
 
 **Triggers:** "continue from this", "extend this clip by Ns", "what happens after", "scene 2 follows scene 1" — applied to an existing canvas `video_result`.
 **Source:** any canvas `video_result` node — agent-generated *or* user-uploaded (`data.metadata.source` is `"pai"` for generated and `"user_upload"` for dropped).
-**Call:** `node "$PAI_REPO_ROOT/server/scripts/generate_video.js" --prompt "..." --ref-source-id <source_video.id>`.
+**Call:** `node "$PAI_REPO_ROOT/server/cli/generate_video.js" --prompt "..." --ref-source-id <source_video.id>`.
 **Edges:** `{ from: <source_video.id>, to: video_<N>, kind: "derived" }`.
 **For the continuity prefix, sub-intent decision tree, and sequencing across multiple linked calls:** see [`references/video-extension.md`](references/video-extension.md).
 
@@ -112,7 +112,7 @@ Pick the one that fits. When unsure, read `./workflow.json` first to see what's 
 
 **Triggers:** "re-render in golden hour", "restyle as anime", "add rain", "remove the passerby", "swap the product", "change the wardrobe color", "rewrite what happens" — applied to an existing canvas `video_result`. Creative edits go through `generate_video.js`, not local `ffmpeg` (which is reserved for mechanical ops).
 **Source:** any canvas `video_result` node — agent-generated *or* user-uploaded.
-**Call:** `node "$PAI_REPO_ROOT/server/scripts/generate_video.js" --prompt "..." --ref-source-id <source_video.id>`.
+**Call:** `node "$PAI_REPO_ROOT/server/cli/generate_video.js" --prompt "..." --ref-source-id <source_video.id>`.
 **Edges:** `{ from: <source_video.id>, to: video_<N>, kind: "derived" }`.
 **For the Restyle / Partial / Replace / Re-plot decision tree and per-mode templates:** see [`references/video-editing.md`](references/video-editing.md).
 
@@ -120,7 +120,7 @@ Pick the one that fits. When unsure, read `./workflow.json` first to see what's 
 
 **Triggers:** "have [character] say this", "make a video where [character] says / narrates …", "use [character]'s voice in this clip".
 **Source:** any canvas `audio_result` node — agent-generated or user-uploaded.
-**Call:** `node "$PAI_REPO_ROOT/server/scripts/generate_video.js" --prompt "..." --ref-audio-source-id <audio_id>`. Often combined with character image refs for face + voice — pass both `--ref-source-id <character_id>` (for the character image) and `--ref-audio-source-id <audio_id>` (for the voice).
+**Call:** `node "$PAI_REPO_ROOT/server/cli/generate_video.js" --prompt "..." --ref-audio-source-id <audio_id>`. Often combined with character image refs for face + voice — pass both `--ref-source-id <character_id>` (for the character image) and `--ref-audio-source-id <audio_id>` (for the voice).
 **Prompt — inline this iteration:**
 - Mark the timbre: *"Use the voice timbre from @Audio1 for the dialogue."*
 - Preserve dialogue verbatim: write as `[Character] says: "…"`, or *"the character in @Image1 says: …"* when an image ref is also attached. For V.O. without an on-screen speaker, attribute to the voice track (*"V.O. from @Audio1: …"*) — never write `@Image1 says` (images don't talk).
@@ -131,7 +131,7 @@ Pick the one that fits. When unsure, read `./workflow.json` first to see what's 
 ### 7. Multi-shot / brand / ad / MV
 
 **Triggers:** ≥2 distinct shots inside one render, ad / music-video / brand framing, durations ≥10s with multiple movements.
-**Call:** `node "$PAI_REPO_ROOT/server/scripts/generate_video.js" --prompt "..." [--ref-source-id <image|video.id> ...] [--ref-audio-source-id <audio.id> ...]`.
+**Call:** `node "$PAI_REPO_ROOT/server/cli/generate_video.js" --prompt "..." [--ref-source-id <image|video.id> ...] [--ref-audio-source-id <audio.id> ...]`.
 **Edges:** as per the underlying pattern (3, 4, 5) for any refs attached.
 **For the 4-section scaffold (timeline / effects inventory / density map / energy arc) and how to populate the timeline from canvas script shot notes or storyboard mosaic panels:** see [`references/video-multi-shot.md`](references/video-multi-shot.md).
 
