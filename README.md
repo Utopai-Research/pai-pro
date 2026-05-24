@@ -31,7 +31,7 @@ git clone https://github.com/Utopai-Research/pai-pro.git ~/pai-pro
 cd ~/pai-pro
 cp .env.example .env
 # Get your PAI_KEY at https://pai-pro.utopaistudios.com/keys (format: PAI_<random>)
-read -rp "Paste your PAI_KEY: " key && echo "PAI_KEY=$key" >> .env
+printf "Paste your PAI_KEY: " && read -r key && sed -i.bak "s|^PAI_KEY=.*|PAI_KEY=$key|" .env && rm -f .env.bak
 docker compose up --build
 ```
 
@@ -44,7 +44,7 @@ git clone https://github.com/Utopai-Research/pai-pro.git ~/pai-pro && cd ~/pai-p
 ./scripts/setup && npm --prefix server install && npm --prefix web install
 cp .env.example .env
 # Get your PAI_KEY at https://pai-pro.utopaistudios.com/keys (format: PAI_<random>)
-read -rp "Paste your PAI_KEY: " key && echo "PAI_KEY=$key" >> .env
+printf "Paste your PAI_KEY: " && read -r key && sed -i.bak "s|^PAI_KEY=.*|PAI_KEY=$key|" .env && rm -f .env.bak
 ./scripts/start.sh
 ```
 
