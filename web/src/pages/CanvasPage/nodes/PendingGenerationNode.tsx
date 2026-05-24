@@ -207,7 +207,7 @@ export function PendingGenerationNode({ id, data, selected }: NodeProps): JSX.El
         {stage === 'running' ? <div className="pending-shimmer" aria-hidden /> : null}
         {isDraft ? (
           <textarea
-            className="draft-prompt nodrag nowheel"
+            className="draft-prompt scrollbar-subtle nodrag nowheel"
             defaultValue={bodyText}
             onBlur={handleBodyBlur}
             placeholder={isAudio ? 'What should the voice say…' : 'Describe what to generate…'}
