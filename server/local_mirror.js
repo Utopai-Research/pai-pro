@@ -118,10 +118,10 @@ export function viewerUrlForLocalPath({ localPath, projectId }) {
   return `/projects/${encodeURIComponent(projectId)}/${rel}`;
 }
 
-// Cloudflared tunnel origin, written by scripts/start.sh to <repo>/.tunnel_url.
-// File-only on purpose: env vars baked into long-running PTYs go stale when
-// the tunnel rotates, but the file is always rewritten by scripts/start.sh, so
-// a fresh CLI invocation always picks up the current URL.
+// Cloudflared tunnel origin. File-only on purpose: env vars baked into
+// long-running PTYs go stale when the tunnel rotates, but scripts/start.sh
+// rewrites $PAI_REPO_ROOT/.tunnel_url on every launch, so a fresh CLI
+// invocation always picks up the current URL.
 export function readTunnelOrigin() {
   try {
     const raw = fsSync.readFileSync(path.join(PAI_REPO_ROOT, ".tunnel_url"), "utf8").trim();

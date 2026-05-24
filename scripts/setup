@@ -5,9 +5,9 @@
 # (~/.claude/skills/) by symlinking each skills/<name>/ into place.
 #
 # Usage:
-#   ./setup                  install (idempotent)
-#   ./setup --force          overwrite existing files
-#   ./setup --uninstall      remove the symlinks
+#   ./scripts/setup              install (idempotent)
+#   ./scripts/setup --force      overwrite existing files
+#   ./scripts/setup --uninstall  remove the symlinks
 
 set -euo pipefail
 

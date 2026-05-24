@@ -88,21 +88,16 @@ preflight_tools() {
     ensure_tool pdftotext poppler
 }
 
-# Refuse to run if another pai-pro checkout already owns this port.
-# scripts/start.sh writes .tunnel_url to ${PAI_REPO_ROOT}/.tunnel_url, which
-# is the same path skills read from (PAI_REPO_ROOT is the canonical anchor
-# in both bash and JS). Two checkouts on the same port → writes and reads
-# land on different files → skills see a stale URL while the live tunnel
-# runs elsewhere → video gen 530's from a dead host. The contract is per-
-# port (not machine-global — checkouts on different VIEWER_PORTs are
-# independent stacks): for any VIEWER_PORT, exactly one checkout owns the
-# tmux sessions.
+# Refuse to run if another pai-pro checkout already owns this port. Two
+# checkouts on the same port would share $PAI_REPO_ROOT/.tunnel_url —
+# writes from this checkout would clobber the live URL from the other,
+# and video gen would 530 from a dead host. The contract is per-port
+# (different VIEWER_PORTs are independent stacks).
 #
 # Must run after derive_config so VIEWER_PORT/WEB_PORT are resolved.
 require_singleton_checkout() {
     if [ -n "$PAI_REPO_ROOT_ENV" ] && [ "$PAI_REPO_ROOT_ENV" != "$PAI_REPO_ROOT" ]; then
-        echo "ERROR: PAI_REPO_ROOT='${PAI_REPO_ROOT_ENV}' but scripts/start.sh is in '${PAI_REPO_ROOT}'."
-        echo "  Skills read .tunnel_url from PAI_REPO_ROOT; start.sh writes to the same path."
+        echo "ERROR: PAI_REPO_ROOT='${PAI_REPO_ROOT_ENV}' doesn't match this checkout at '${PAI_REPO_ROOT}'."
         echo "  Fix: cd \$PAI_REPO_ROOT && ./scripts/start.sh   (or unset PAI_REPO_ROOT if this IS the active checkout)"
         exit 1
     fi
