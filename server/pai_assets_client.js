@@ -410,15 +410,26 @@ export function preuploadCanvasUrl({ projectId, localPath, mimeType }) {
 
 // --- public: bulk fan-out used by generate_video.js ----------------------
 
+// Each input array is a list of { tunnelUrl, assetId } objects (the
+// shape `buildProviderRefs` produces). Refs that arrive with a non-null
+// assetId already have a PAI asset id on file (from a prior preupload
+// recorded in workflow.json metadata) — those skip the upload entirely.
+// Refs with assetId=null fall through to uploadReferenceUrl, which
+// fires CreateAsset + GetAsset and returns a fresh id. Order is
+// preserved per kind so positional ref semantics survive.
 export async function uploadReferences({ images = [], audios = [], videos = [] } = {}) {
-  const per = async (urls, kind) => {
+  const per = async (refs, kind) => {
     const out = [];
-    for (const url of urls) {
+    for (const r of refs) {
+      if (r.assetId) {
+        out.push(r.assetId);
+        continue;
+      }
       try {
-        const id = await uploadReferenceUrl(url, kind);
+        const id = await uploadReferenceUrl(r.tunnelUrl, kind);
         out.push(id);
       } catch (e) {
-        if (!e.failedUrl) e.failedUrl = url;
+        if (!e.failedUrl) e.failedUrl = r.tunnelUrl;
         if (!e.kind) e.kind = kind;
         throw e;
       }

@@ -179,6 +179,19 @@ export async function readNodeArchived({ nodeId, projectId }) {
   return node?.data?.archived === true;
 }
 
+// The PAI asset_id this canvas node was uploaded as, or null if not yet
+// uploaded (or rejected). buildProviderRefs surfaces this so the video
+// CLI can skip re-uploading refs that already have a cached asset_id
+// from a prior preupload (chip preupload / generate_image kickPreupload
+// / drag-drop upload). Without this lookup every video gen re-fires
+// CreateAsset for every ref, because each CLI runs as a fresh Node
+// process with an empty in-memory _assetCache.
+export async function readNodeAssetId({ nodeId, projectId }) {
+  const node = await readNodeFromWorkflow({ nodeId, projectId });
+  const v = node?.data?.metadata?.asset_id;
+  return typeof v === "string" && v ? v : null;
+}
+
 function makeBadArgs(message) {
   const e = new Error(message);
   e.klass = "bad_args";
@@ -189,6 +202,9 @@ function makeBadArgs(message) {
  * Build the array of refs to hand to a provider. Every ref is a canvas
  * node id — we look up its `local_path` and rewrite the host onto the
  * cloudflared tunnel origin so PAI's server-side fetch can reach it.
+ * The cached PAI `asset_id` (if any) rides alongside so callers that
+ * upload through video-generation-assets can skip CreateAsset when it's
+ * already known.
  *
  * External URLs are not accepted here. The agent mirrors them onto the
  * canvas first via `mirror_url.js`, which mints a `subtype: "reference"`
@@ -197,7 +213,7 @@ function makeBadArgs(message) {
  * @param {Object}    opts
  * @param {string[]}  opts.sourceIds  list of --ref-source-id values
  * @param {string}    [opts.projectId]
- * @returns {Promise<string[]>}       provider-ready tunnel URLs
+ * @returns {Promise<{ tunnelUrl: string, assetId: string | null }[]>}
  */
 export async function buildProviderRefs({ sourceIds = [], projectId } = {}) {
   const out = [];
@@ -227,7 +243,8 @@ export async function buildProviderRefs({ sourceIds = [], projectId } = {}) {
         `No tunnel configured for ref ${i + 1}. Run ./scripts/start.sh (auto-launches cloudflared).`,
       );
     }
-    out.push(tunnelUrl);
+    const assetId = await readNodeAssetId({ nodeId: sid, projectId });
+    out.push({ tunnelUrl, assetId });
   }
   return out;
 }

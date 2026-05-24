@@ -122,10 +122,13 @@ let exitCode = 0;
 try {
   const projectId = args["project-id"] || (await readActiveProject());
 
-  const resolvedRefs = await buildProviderRefs({
+  // Image gen passes tunnel URLs directly to the upstream model via
+  // fileData.fileUri (no asset upload involved), so we only need the
+  // tunnelUrl side of buildProviderRefs's enriched return shape.
+  const resolvedRefs = (await buildProviderRefs({
     sourceIds: refSources,
     projectId,
-  });
+  })).map((r) => r.tunnelUrl);
 
   const result = await paiGenerateImage({
     prompt: args.prompt,
