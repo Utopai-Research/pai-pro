@@ -189,7 +189,12 @@ async function paiAssetsCall({ action, payload, timeoutMs = 60_000, projectId })
 
 let _groupIdPromise = null;
 
-async function ensureAssetGroup() {
+// `projectId` is the trigger-project — the upload that paid the
+// bootstrap cost. Cached promise means only the first caller's
+// projectId reaches the wire log; subsequent uploads reuse the
+// resolved group id without re-firing CreateAssetGroup, so attribution
+// is naturally one-shot.
+async function ensureAssetGroup(projectId) {
   if (_groupIdPromise) return _groupIdPromise;
   _groupIdPromise = (async () => {
     const data = await paiAssetsCall({
@@ -200,6 +205,7 @@ async function ensureAssetGroup() {
         GroupType: "AIGC",
         ProjectName: "default",
       },
+      projectId,
     });
     const groupId = data?.Result?.Id;
     if (!groupId) {
@@ -305,12 +311,12 @@ async function doUpload(url, kind) {
 
   let assetId;
   try {
-    assetId = await createWithGroup(await ensureAssetGroup());
+    assetId = await createWithGroup(await ensureAssetGroup(projectId));
   } catch (e) {
     if (e?.groupExpired) {
       // Provider TTL'd the cached group — drop and recreate, retry CreateAsset once.
       _groupIdPromise = null;
-      assetId = await createWithGroup(await ensureAssetGroup());
+      assetId = await createWithGroup(await ensureAssetGroup(projectId));
     } else {
       throw e;
     }

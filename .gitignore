@@ -43,7 +43,6 @@ Desktop.ini
 # Logs
 *.log
 npm-debug.log*
-logs/
 
 # Python cache
 __pycache__/
