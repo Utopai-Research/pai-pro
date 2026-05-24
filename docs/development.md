@@ -25,7 +25,7 @@ npm --prefix server install
 npm --prefix web install
 cp .env.example .env
 # Get your PAI_KEY at https://pai-pro.utopaistudios.com/keys (format: PAI_<random>)
-read -rp "Paste your PAI_KEY: " key && echo "PAI_KEY=$key" >> .env
+printf "Paste your PAI_KEY: " && read -r key && sed -i.bak "s|^PAI_KEY=.*|PAI_KEY=$key|" .env && rm -f .env.bak
 ./scripts/start.sh                   # tmux: viewer (:7488) + web (:7443)
 open http://localhost:7443
 ```

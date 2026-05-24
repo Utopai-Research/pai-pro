@@ -172,7 +172,13 @@ load_env() {
             echo "ERROR: PAI_KEY still empty; aborting."
             exit 1
         fi
-        echo "PAI_KEY=$PAI_KEY" >> "$PAI_REPO_ROOT/.env"
+        # Replace the existing PAI_KEY= line in place (sed -i.bak then rm
+        # the .bak — portable across BSD/macOS sed and GNU/Linux sed).
+        # Both parsers (bash source + dotenv pkg) honor last-occurrence,
+        # but in-place replacement keeps .env clean for users who later
+        # edit it manually.
+        sed -i.bak "s|^PAI_KEY=.*|PAI_KEY=$PAI_KEY|" "$PAI_REPO_ROOT/.env" && \
+            rm -f "$PAI_REPO_ROOT/.env.bak"
         export PAI_KEY
         echo "Saved to .env. Continuing boot."
         echo ""
