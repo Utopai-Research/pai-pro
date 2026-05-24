@@ -30,7 +30,7 @@ The canvas on the left, the embedded agent terminal on the right, both sharing t
                                           └───────────────────────────────┘
                                                        ▲ writes
                                                        │
-                ┌─ skills/ ─┐   ┌─ server/scripts/ ────┴────┐
+                ┌─ skills/ ─┐   ┌─ server/cli/ ────────┴────┐
                 │  *.md     │──►│ generate_image.js          │
                 │           │   │ generate_video.js          │  local mirror
                 │ Claude in │   │ generate_voice.js          │  → assets/
@@ -51,7 +51,7 @@ pai-pro/
 ├── server/
 │   ├── local_viewer.js            # Express + Socket.IO + chokidar + node-pty + asset routes
 │   ├── local_mirror.js            # writes/mirrors generated media into projects/<active>/assets/
-│   ├── scripts/                   # CLI wrappers (generate_*, canvas_mutate, split_image, …)
+│   ├── cli/                       # CLI wrappers (generate_*, canvas_mutate, split_image, …)
 │   ├── pai_client.js              # shared HTTP plumbing for /api/v1/generate, /submit, /task/status
 │   ├── pai_image_client.js        # image (PAI raw `image-generation`)
 │   ├── pai_video_client.js        # video (PAI raw `video-generation`)
@@ -62,8 +62,7 @@ pai-pro/
 ├── CLAUDE.md                      # repo maintainer guide (dev sessions auto-load this)
 ├── agent-templates/AGENTS.md      # canvas schema + agent persona + skill routing (copied into each project)
 ├── .claude-plugin/marketplace.json
-├── setup                          # symlink skills into ~/.claude/skills
-└── start.sh / stop.sh             # tmux launcher / killer
+└── scripts/                       # tmux launcher (start.sh) + teardown (stop.sh) + skills symlinker (setup)
 ```
 
 ## Where each layer is documented

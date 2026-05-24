@@ -6,7 +6,7 @@
 // single output file. Default output is ./reel.mp4 in the project root.
 //
 // Usage:
-//   node server/scripts/reel_stitch.js [--out reel.mp4] [--workflow workflow.json]
+//   node server/cli/reel_stitch.js [--out reel.mp4] [--workflow workflow.json]
 //
 // Output (stdout, one JSON line):
 //   { ok: true, output_path, size_bytes, shot_count, generated_at }
@@ -19,7 +19,7 @@
 import path from "node:path";
 import { copyFile, stat } from "node:fs/promises";
 import { readFile } from "node:fs/promises";
-import { parseArgs, emitSuccess, emitFailure, classify, isoNow, PROJECT_ROOT } from "./_cli.js";
+import { parseArgs, emitSuccess, emitFailure, classify, isoNow, PAI_REPO_ROOT } from "./_cli.js";
 import { stitchReel } from "../reel_stitch.js";
 import { readActiveProject } from "../local_mirror.js";
 
@@ -29,12 +29,12 @@ const args = parseArgs({
 });
 
 // Active project's directory — local_path values in workflow.json
-// resolve against this. PROJECT_ROOT is the repo root; the active
+// resolve against this. PAI_REPO_ROOT is the repo root; the active
 // project sits under projects/<active-id>/.
 const activeId = await readActiveProject().catch(() => null);
 const projectBaseDir = activeId
-  ? path.join(PROJECT_ROOT, "projects", activeId)
-  : PROJECT_ROOT;
+  ? path.join(PAI_REPO_ROOT, "projects", activeId)
+  : PAI_REPO_ROOT;
 const workflowPath = path.resolve(projectBaseDir, args.workflow);
 const outPath      = path.resolve(projectBaseDir, args.out);
 

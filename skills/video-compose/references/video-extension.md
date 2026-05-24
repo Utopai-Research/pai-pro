@@ -75,7 +75,7 @@ If every answer is "no" for a given pair (two unrelated scenes), parallel is fin
 
 Each `generate_video.js` call takes 2–4 min wall-clock — but it runs in the background, so the chat stays interactive. Sequence:
 
-1. Tell the user one short sentence: *"Rendering scene 1 in the background — about 3 min."* Fire `node "$PAI_REPO_ROOT/server/scripts/generate_video.js" …` for clip A. Keep the bash id for the poll in step 2.
+1. Tell the user one short sentence: *"Rendering scene 1 in the background — about 3 min."* Fire `node "$PAI_REPO_ROOT/server/cli/generate_video.js" …` for clip A. Keep the bash id for the poll in step 2.
 2. `BashOutput`-poll the task until the `{ ok: true, output_url, ... }` JSON line lands. Read the JSON, add the `video_result` node for clip A to `./workflow.json`.
 3. Tell the user *"Scene 1 ready, kicking off scene 2."* Fire the CLI for clip B with `--ref-source-id <video_A.id>`. Poll, add node, repeat.
 
@@ -98,8 +98,8 @@ Scene A ends with a traveler stepping off a train onto a platform. Scene B opens
 - Scene B's prompt names the platform but has no frame anchor from scene A. Mismatched cut.
 
 **Good (serial):**
-- Step 1: `node "$PAI_REPO_ROOT/server/scripts/generate_video.js" --prompt "<scene A prompt>" --ref-source-id <traveler.id>` → wait → read JSON → add `video_A` node.
-- Step 2: `node "$PAI_REPO_ROOT/server/scripts/generate_video.js" --prompt "<scene B prompt>" --ref-source-id <traveler.id> --ref-source-id <attendant.id> --ref-source-id <video_A.id>`. Prefix: *"Continue from @Video1 — maintain visual continuity with the final frame (platform at dusk, traveler mid-stride stepping off the train). The character in @Image1 is the traveler; the character in @Image2 is the attendant watching from the booth. …"*.
+- Step 1: `node "$PAI_REPO_ROOT/server/cli/generate_video.js" --prompt "<scene A prompt>" --ref-source-id <traveler.id>` → wait → read JSON → add `video_A` node.
+- Step 2: `node "$PAI_REPO_ROOT/server/cli/generate_video.js" --prompt "<scene B prompt>" --ref-source-id <traveler.id> --ref-source-id <attendant.id> --ref-source-id <video_A.id>`. Prefix: *"Continue from @Video1 — maintain visual continuity with the final frame (platform at dusk, traveler mid-stride stepping off the train). The character in @Image1 is the traveler; the character in @Image2 is the attendant watching from the booth. …"*.
 
 ## Troubleshooting
 

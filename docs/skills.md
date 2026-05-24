@@ -1,6 +1,6 @@
 # Skills
 
-Each skill is a standard `SKILL.md` with YAML frontmatter — Claude Code auto-discovers them after `./setup`. You don't type a slash command; you describe what you want, and the agent invokes the right skill.
+Each skill is a standard `SKILL.md` with YAML frontmatter — Claude Code auto-discovers them after `./scripts/setup`. You don't type a slash command; you describe what you want, and the agent invokes the right skill.
 
 ## Reference table
 

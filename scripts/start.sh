@@ -8,6 +8,11 @@
 
 set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# Capture env-set value before we overwrite, so the singleton check can
+# detect the "user pre-set PAI_REPO_ROOT to a different checkout" case.
+PAI_REPO_ROOT_ENV="${PAI_REPO_ROOT:-}"
+PAI_REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+export PAI_REPO_ROOT
 
 # ============================================================================
 # Helpers
@@ -84,33 +89,34 @@ preflight_tools() {
 }
 
 # Refuse to run if another pai-pro checkout already owns this port.
-# start.sh writes .tunnel_url to ${SCRIPT_DIR}/.tunnel_url, but skills read
-# it from PROJECT_ROOT — which resolves to the viewer's $PAI_REPO_ROOT. Two
-# checkouts on the same port → writes and reads land on different files →
-# skills see a stale URL while the live tunnel runs elsewhere → video gen
-# 530's from a dead host. The contract is per-port (not machine-global —
-# checkouts on different VIEWER_PORTs are independent stacks): for any
-# VIEWER_PORT, exactly one checkout owns the tmux sessions.
+# scripts/start.sh writes .tunnel_url to ${PAI_REPO_ROOT}/.tunnel_url, which
+# is the same path skills read from (PAI_REPO_ROOT is the canonical anchor
+# in both bash and JS). Two checkouts on the same port → writes and reads
+# land on different files → skills see a stale URL while the live tunnel
+# runs elsewhere → video gen 530's from a dead host. The contract is per-
+# port (not machine-global — checkouts on different VIEWER_PORTs are
+# independent stacks): for any VIEWER_PORT, exactly one checkout owns the
+# tmux sessions.
 #
 # Must run after derive_config so VIEWER_PORT/WEB_PORT are resolved.
 require_singleton_checkout() {
-    if [ -n "${PAI_REPO_ROOT:-}" ] && [ "$PAI_REPO_ROOT" != "$SCRIPT_DIR" ]; then
-        echo "ERROR: PAI_REPO_ROOT='${PAI_REPO_ROOT}' but start.sh is at '${SCRIPT_DIR}'."
-        echo "  Skills read .tunnel_url from PAI_REPO_ROOT; start.sh writes next to itself."
-        echo "  Fix: cd \$PAI_REPO_ROOT && ./start.sh   (or unset PAI_REPO_ROOT if this IS the active checkout)"
+    if [ -n "$PAI_REPO_ROOT_ENV" ] && [ "$PAI_REPO_ROOT_ENV" != "$PAI_REPO_ROOT" ]; then
+        echo "ERROR: PAI_REPO_ROOT='${PAI_REPO_ROOT_ENV}' but scripts/start.sh is in '${PAI_REPO_ROOT}'."
+        echo "  Skills read .tunnel_url from PAI_REPO_ROOT; start.sh writes to the same path."
+        echo "  Fix: cd \$PAI_REPO_ROOT && ./scripts/start.sh   (or unset PAI_REPO_ROOT if this IS the active checkout)"
         exit 1
     fi
 
     local conflicts=() session cwd
     while IFS= read -r session; do
         cwd=$(tmux list-panes -t "$session" -F "#{pane_current_path}" 2>/dev/null | head -1)
-        # Web sessions cd into $SCRIPT_DIR/web before starting Vite — strip
-        # /web so we compare apples-to-apples with SCRIPT_DIR. Empty cwd means
-        # the working directory was unlinked under the running process (e.g.,
-        # the checkout was moved to ~/.Trash without stopping the session),
-        # which is still a zombie binding our port.
+        # Web sessions cd into $PAI_REPO_ROOT/web before starting Vite —
+        # strip /web so we compare apples-to-apples with PAI_REPO_ROOT.
+        # Empty cwd means the working directory was unlinked under the
+        # running process (e.g., the checkout was moved to ~/.Trash without
+        # stopping the session), which is still a zombie binding our port.
         cwd="${cwd%/web}"
-        if [ "$cwd" != "$SCRIPT_DIR" ]; then
+        if [ "$cwd" != "$PAI_REPO_ROOT" ]; then
             if [ -z "$cwd" ]; then
                 conflicts+=("  $session  →  (zombie — kill with: tmux kill-session -t $session)")
             else
@@ -125,12 +131,12 @@ require_singleton_checkout() {
         echo "ERROR: another pai-pro checkout already owns ports ${VIEWER_PORT}/${WEB_PORT}:"
         printf '%s\n' "${conflicts[@]}"
         echo ""
-        echo "  This start.sh: $SCRIPT_DIR"
+        echo "  This checkout: $PAI_REPO_ROOT"
         echo "  Two checkouts can't share a port — they'd drift on .tunnel_url."
         echo ""
         echo "  Fix one of:"
-        echo "    • cd <other checkout> && ./start.sh   (use that one as active)"
-        echo "    • cd <other checkout> && ./stop.sh    (then re-run start.sh here)"
+        echo "    • cd <other checkout> && ./scripts/start.sh   (use that one as active)"
+        echo "    • cd <other checkout> && ./scripts/stop.sh    (then re-run ./scripts/start.sh here)"
         echo "    • Change VIEWER_PORT in this checkout's .env to run alongside the other"
         exit 1
     fi
@@ -146,7 +152,7 @@ sync_skills() {
 }
 
 load_env() {
-    if [ ! -f "$SCRIPT_DIR/.env" ]; then
+    if [ ! -f "$PAI_REPO_ROOT/.env" ]; then
         echo "⚠️  .env not found. Copy .env.example → .env and fill PAI_KEY"
         echo "    (one key for image + video + voice + asset upload) before you"
         echo "    trigger any media-generation skill. The viewer alone runs"
@@ -154,7 +160,7 @@ load_env() {
         return
     fi
     set -a
-    . "$SCRIPT_DIR/.env"
+    . "$PAI_REPO_ROOT/.env"
     set +a
 }
 
@@ -172,20 +178,20 @@ derive_config() {
     VIEWER_SESSION="pai_pro_viewer_${VIEWER_PORT}"
     WEB_SESSION="pai_pro_web_${WEB_PORT}"
     TUNNEL_SESSION="pai_pro_tunnel_${VIEWER_PORT}"
-    TUNNEL_URL_FILE="$SCRIPT_DIR/.tunnel_url"
+    TUNNEL_URL_FILE="$PAI_REPO_ROOT/.tunnel_url"
     # Port-suffix the log so a stale `tee` from a prior port can't keep
     # an FD open on the same path and corrupt the new log with NUL holes.
-    TUNNEL_LOG_FILE="$SCRIPT_DIR/.tunnel_url.${VIEWER_PORT}.log"
+    TUNNEL_LOG_FILE="$PAI_REPO_ROOT/.tunnel_url.${VIEWER_PORT}.log"
 }
 
 install_deps() {
-    if [ ! -d "$SCRIPT_DIR/server/node_modules" ]; then
+    if [ ! -d "$PAI_REPO_ROOT/server/node_modules" ]; then
         echo "Installing server deps…"
-        (cd "$SCRIPT_DIR/server" && npm install)
+        (cd "$PAI_REPO_ROOT/server" && npm install)
     fi
-    if [ ! -d "$SCRIPT_DIR/web/node_modules" ]; then
+    if [ ! -d "$PAI_REPO_ROOT/web/node_modules" ]; then
         echo "Installing web deps…"
-        (cd "$SCRIPT_DIR/web" && npm install)
+        (cd "$PAI_REPO_ROOT/web" && npm install)
     fi
 }
 
@@ -243,7 +249,7 @@ launch_tunnel() {
         echo "  Common causes:"
         echo "    • trycloudflare.com is having an outage — retry in a minute"
         echo "    • UDP/QUIC blocked on your network — add '--protocol http2' to"
-        echo "      the cloudflared command in start.sh"
+        echo "      the cloudflared command in scripts/start.sh"
         echo "    • cloudflared is outdated — 'brew upgrade cloudflared'"
         echo "  Workaround: run a named Cloudflare tunnel and set"
         echo "    PUBLIC_VIEWER_URL=https://your.named.tunnel in .env"
@@ -267,10 +273,10 @@ ensure_tunnel() {
 # ---- services -------------------------------------------------------------
 
 smoke_check_clis() {
-    echo "Smoke-checking CLI scripts…"
+    echo "Smoke-checking CLIs…"
     local script out
     for script in generate_image generate_video generate_voice split_image switch_project; do
-        out=$(cd "$SCRIPT_DIR" && node "server/scripts/${script}.js" 2>/dev/null || true)
+        out=$(cd "$PAI_REPO_ROOT" && node "server/cli/${script}.js" 2>/dev/null || true)
         if echo "$out" | grep -q '"ok":false,"klass":"bad_args"'; then
             echo "  OK  ${script}.js"
         else
@@ -288,7 +294,7 @@ start_viewer() {
     # tmux strips most parent env vars; inline what the viewer needs that
     # isn't already in .env (WEB_ORIGIN is derived from WEB_PORT here).
     tmux_ensure_session "$VIEWER_SESSION" \
-        "cd ${SCRIPT_DIR} && WEB_ORIGIN='${WEB_ORIGIN}' VIEWER_PORT='${VIEWER_PORT}' node --watch server/local_viewer.js"
+        "cd ${PAI_REPO_ROOT} && WEB_ORIGIN='${WEB_ORIGIN}' VIEWER_PORT='${VIEWER_PORT}' node --watch server/local_viewer.js"
 }
 
 start_web() {
@@ -301,7 +307,7 @@ start_web() {
     # custom vars, so vite.config.ts wouldn't see WEB_PORT and the web bundle
     # wouldn't see VITE_VIEWER_URL otherwise.
     tmux_ensure_session "$WEB_SESSION" \
-        "cd ${SCRIPT_DIR}/web && WEB_PORT='${WEB_PORT}' VITE_VIEWER_URL='${VITE_VIEWER_URL}' npm run dev"
+        "cd ${PAI_REPO_ROOT}/web && WEB_PORT='${WEB_PORT}' VITE_VIEWER_URL='${VITE_VIEWER_URL}' npm run dev"
 }
 
 # ---- verification ---------------------------------------------------------
@@ -344,7 +350,7 @@ _resolve_tunnel_ip() {
 verify_tunnel_reachable() {
     if [ ! -s "$TUNNEL_URL_FILE" ]; then
         echo "ERROR: .tunnel_url is missing after tunnel setup — refusing to declare Ready."
-        echo "  Recover: ./stop.sh && ./start.sh"
+        echo "  Recover: ./scripts/stop.sh && ./scripts/start.sh"
         exit 1
     fi
     TUNNEL_URL_VAL="$(cat "$TUNNEL_URL_FILE")"
@@ -357,7 +363,7 @@ verify_tunnel_reachable() {
         echo "ERROR: tunnel hostname ${TUNNEL_HOST} did not resolve via 1.1.1.1 in 30s."
         echo "  Cloudflare's authoritative DNS doesn't see this subdomain yet, which"
         echo "  means PAI won't be able to fetch refs through it either."
-        echo "  Recover: ./stop.sh && ./start.sh   (forces a fresh tunnel URL)"
+        echo "  Recover: ./scripts/stop.sh && ./scripts/start.sh   (forces a fresh tunnel URL)"
         exit 1
     fi
     echo " → $TUNNEL_IP"
@@ -370,7 +376,7 @@ verify_tunnel_reachable() {
         echo "  is broken on cloudflared's side. Diagnose:"
         echo "    tmux attach -t $TUNNEL_SESSION"
         echo "    curl -v --resolve ${TUNNEL_HOST}:443:${TUNNEL_IP} ${TUNNEL_URL_VAL}/"
-        echo "  Recover: ./stop.sh && ./start.sh"
+        echo "  Recover: ./scripts/stop.sh && ./scripts/start.sh"
         exit 1
     fi
     echo ""
@@ -391,14 +397,14 @@ print_ready_banner() {
     fi
     echo ""
     echo "  Drive from Claude Code:"
-    echo "    cd ${SCRIPT_DIR} && claude"
+    echo "    cd ${PAI_REPO_ROOT} && claude"
     echo ""
     echo "  Attach:   tmux attach -t $VIEWER_SESSION"
     echo "            tmux attach -t $WEB_SESSION"
     if tmux has-session -t "$TUNNEL_SESSION" 2>/dev/null; then
         echo "            tmux attach -t $TUNNEL_SESSION"
     fi
-    echo "  Stop:     ./stop.sh"
+    echo "  Stop:     ./scripts/stop.sh"
     echo "============================================================"
 }
 

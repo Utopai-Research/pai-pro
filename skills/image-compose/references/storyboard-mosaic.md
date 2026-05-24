@@ -1,6 +1,6 @@
 # NxN storyboard mosaic — prompt template
 
-Bracketed-section format for `node "$PAI_REPO_ROOT/server/scripts/generate_image.js"` (the standard image tier). Produces ONE composite image of N×M storyboard panels on a single sheet, with a per-cell number badge so downstream video-compose can crop each panel individually for I2V. Layout fidelity is best at ≤4 cells on the standard tier; warn the user before firing anything larger.
+Bracketed-section format for `node "$PAI_REPO_ROOT/server/cli/generate_image.js"` (the standard image tier). Produces ONE composite image of N×M storyboard panels on a single sheet, with a per-cell number badge so downstream video-compose can crop each panel individually for I2V. Layout fidelity is best at ≤4 cells on the standard tier; warn the user before firing anything larger.
 
 ## Contents
 

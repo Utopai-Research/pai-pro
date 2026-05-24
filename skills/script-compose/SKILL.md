@@ -32,14 +32,14 @@ canvas mutator — a PreToolUse hook blocks direct `Write` / `Edit` on
 1. `read` `./workflow.json` (read-only inspection — see if `title` is already set).
 2. **Append the script note** via the mutator. Stamp `subtype: "script"` so the renderer applies the script-card chrome and `video-compose` can recognise it without label parsing:
    ```
-   node "$PAI_REPO_ROOT/server/scripts/canvas_mutate.js" \
+   node "$PAI_REPO_ROOT/server/cli/canvas_mutate.js" \
      --op addNode \
      --payload-json '{"node":{"type":"note","data":{"subtype":"script","label":"Script: <title>","body":"<full screenplay verbatim>","metadata":{"author":"agent","timestamp":"<ISO>"}}}}'
    ```
    Stdout returns `assigned.node_id` — keep it for §3 (shots derive from this id).
 3. **Set the workflow title if empty:**
    ```
-   node "$PAI_REPO_ROOT/server/scripts/canvas_mutate.js" --op setTitle --payload-json '{"title":"<title>"}'
+   node "$PAI_REPO_ROOT/server/cli/canvas_mutate.js" --op setTitle --payload-json '{"title":"<title>"}'
    ```
 4. Close with: `Captured. Want me to split it into ≤15s shots and pull out the characters / locations?`
 
@@ -55,7 +55,7 @@ When triggered:
 1. **Slug** — kebab-case of the working title. Collision → suffix `-2`, `-3`.
 2. **Shot splits** (≤15s each; video model caps there): split on natural beats (slug changes, dialogue turns). Aim for shots **as close to 15s as possible** (default ≈ `ceil(total_seconds / 15)` shots) — not rigid; sub-divide smaller when a hard cut or strong beat genuinely demands it, but don't over-fragment just because the script's own time markers say so. Pacing: ~2.5 dialogue words/sec; silent action ~3–5s. **Never rewrite when splitting** — each shot body is a verbatim slice. Each shot note carries `subtype: "shot"` so `video-compose` can locate them structurally and the canvas renders the shot-card chrome. Build ONE `addBatch` payload with N shot notes + N derived edges from the script note, and apply it in one mutator call:
    ```
-   node "$PAI_REPO_ROOT/server/scripts/canvas_mutate.js" \
+   node "$PAI_REPO_ROOT/server/cli/canvas_mutate.js" \
      --op addBatch \
      --payload-json '{
        "nodes": [

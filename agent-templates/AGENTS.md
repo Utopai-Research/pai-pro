@@ -18,7 +18,7 @@ Keep messages under ~120 words unless the user asks for depth.
 
 ## Skills routing (READ THIS FIRST)
 
-Seven filmmaking skills are installed at `~/.claude/skills/` (via the repo's `./setup`) and auto-discover by description. Don't re-derive workflows — invoke the matching skill so the canonical recipe runs:
+Seven filmmaking skills are installed at `~/.claude/skills/` (via the repo's `./scripts/setup`) and auto-discover by description. Don't re-derive workflows — invoke the matching skill so the canonical recipe runs:
 
 | When the user wants to … | Invoke |
 |---|---|
@@ -35,17 +35,17 @@ Two rules:
 - **Use the skill, don't re-invent.** Skills encode the canonical node grammar (subtypes, edges, metadata, mirroring) — duplicating that logic in chat drifts. If a skill matches, invoke it.
 - **Background by default.** Pass `run_in_background: true` on every `generate_*` Bash call. `.claude/hooks/require_background_for_generate.js` blocks foreground attempts — doing it right the first time skips the block-retry round. To wait on a backgrounded call, use `BashOutput` against the bash id you got back — never `cat`/`grep` `/tmp/claude-*/.../tasks/<id>.output` (that's Claude Code's internal task file, not a supported surface), and never lead with `sleep N` (blocked at the env level). Sequence only when chained: if the next call's input is a previous call's output (a second-pass edit, a narratively-linked continuation, a voice attach to a character that doesn't exist yet), `BashOutput`-poll the predecessor before firing the next. `/video-compose`'s "Sequencing" section has the narrative-video decision tree.
 
-## Media CLIs (`server/scripts/`)
+## Media CLIs (`server/cli/`)
 
 The skills above wrap these. Reach for them directly only for one-off shell-outs where invoking a skill would be overkill. Each CLI prints one JSON line on stdout (`{ ok, ... }`) when it finishes, and uses the shared failure-class taxonomy at the end of this section.
 
 **Invocation path.** Your cwd is `projects/<active>/`, but the scripts live at the repo root. The viewer exports `PAI_REPO_ROOT` in your shell env — always invoke as:
 
 ```
-node "$PAI_REPO_ROOT/server/scripts/<x>.js" ...
+node "$PAI_REPO_ROOT/server/cli/<x>.js" ...
 ```
 
-Do not write `node server/scripts/...` (no such directory under your cwd) and do not hardcode `../../server/scripts/...` (brittle if the project layout changes).
+Do not write `node server/cli/...` (no such directory under your cwd) and do not hardcode `../../server/cli/...` (brittle if the project layout changes).
 
 | CLI | Skill | Provider | Model (PAI raw model name) | Notes |
 |---|---|---|---|---|
@@ -69,7 +69,7 @@ Do not write `node server/scripts/...` (no such directory under your cwd) and do
 Every `generate_*` call passes `--stage`. The CLI writes a draft sidecar capturing the call + price and exits without contacting the provider; the user reviews and fires it from the canvas.
 
 ```
-$ node "$PAI_REPO_ROOT/server/scripts/generate_video.js" --stage --prompt "..." --duration 10 --resolution 1080p
+$ node "$PAI_REPO_ROOT/server/cli/generate_video.js" --stage --prompt "..." --duration 10 --resolution 1080p
 { "ok": true, "stage": "draft", "job_id": "pending_xyz", "cost_usd": 3.41 }
 ```
 
@@ -81,7 +81,7 @@ Reply in one short sentence naming the price (*"Staged a 10s 1080p clip — $3.4
 
 ### Failure handling
 
-Every CLI prints `{ ok: false, klass, message, limits, sent, ... }` on failure. `limits` ([server/scripts/_limits.js](server/scripts/_limits.js)) is the provider's hard caps; `sent` is what was submitted — compare to localize.
+Every CLI prints `{ ok: false, klass, message, limits, sent, ... }` on failure. `limits` ([server/cli/_limits.js](server/cli/_limits.js)) is the provider's hard caps; `sent` is what was submitted — compare to localize.
 
 - `rate_limited` — wait `retryAfterSec`; ask before retry.
 - `content_filtered` — reword the prompt.
@@ -108,7 +108,7 @@ Three ways into the mutator, all equivalent:
 
 2. **For manual mutations** (`/add-note`, `/groups-compose`, script breakdowns) the agent invokes:
    ```
-   node "$PAI_REPO_ROOT/server/scripts/canvas_mutate.js" \
+   node "$PAI_REPO_ROOT/server/cli/canvas_mutate.js" \
      --op <addNode|updateNode|deleteNode|addEdge|deleteEdge|addGroup|updateGroup|deleteGroup|setTitle|addBatch|updateBatch> \
      --payload-json '<JSON>'
    ```
@@ -172,8 +172,8 @@ Generated and user-uploaded media live under `projects/<id>/assets/{images,video
 
 1. **CLI** (when the user says "switch to X" / "open the X project" in chat):
    ```
-   node "$PAI_REPO_ROOT/server/scripts/switch_project.js" --id <project-id>
-   node "$PAI_REPO_ROOT/server/scripts/switch_project.js" --list
+   node "$PAI_REPO_ROOT/server/cli/switch_project.js" --id <project-id>
+   node "$PAI_REPO_ROOT/server/cli/switch_project.js" --list
    ```
    Same JSON-on-stdout shape as the media CLIs (`{ ok, active, projects: [...] }`). Run `--list` first if you don't have the id memorized.
 

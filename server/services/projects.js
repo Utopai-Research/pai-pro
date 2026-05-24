@@ -8,7 +8,7 @@ import path from "node:path";
 import { initProjectMutatorState } from "../canvas_mutator.js";
 import { reseedFromCanvas } from "../pai_assets_client.js";
 import {
-  PROJECT_ROOT,
+  PAI_REPO_ROOT,
   PROJECTS_DIR,
   isValidId,
   projectDir,
@@ -40,16 +40,16 @@ Claude-specific notes:
 - To wait on a backgrounded Bash call, use the \`BashOutput\` tool against the bash id you got back. Never \`cat\`/\`grep\` \`/tmp/claude-*/.../tasks/<id>.output\`.
 `;
 
-const AGENT_TEMPLATE_PATH = path.join(PROJECT_ROOT, "agent-templates", "AGENTS.md");
+const AGENT_TEMPLATE_PATH = path.join(PAI_REPO_ROOT, "agent-templates", "AGENTS.md");
 
 // Per-project settings.local.json — excludes the root dev CLAUDE.md from
 // the agent's memory so the per-project session sees ONLY its own
 // AGENTS.md + CLAUDE.md wrapper. Path is absolute, derived from
-// PROJECT_ROOT at write time, so it tracks repo moves. Always re-written
+// PAI_REPO_ROOT at write time, so it tracks repo moves. Always re-written
 // (not idempotent) so a repo move auto-heals on next viewer boot.
 function perProjectSettingsLocal() {
   return JSON.stringify(
-    { claudeMdExcludes: [path.join(PROJECT_ROOT, "CLAUDE.md")] },
+    { claudeMdExcludes: [path.join(PAI_REPO_ROOT, "CLAUDE.md")] },
     null,
     2,
   ) + "\n";
@@ -100,7 +100,7 @@ export async function ensureProjectStructure(id) {
 
   // settings.local.json is per-project. Always overwrite — its content
   // is system-generated (a single `claudeMdExcludes` derived from
-  // PROJECT_ROOT) and must track repo moves. Not intended for user edits.
+  // PAI_REPO_ROOT) and must track repo moves. Not intended for user edits.
   await fsp.writeFile(
     path.join(claudeDir, "settings.local.json"),
     perProjectSettingsLocal(),

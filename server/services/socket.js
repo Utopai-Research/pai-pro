@@ -33,7 +33,7 @@ import {
   snapshotAssetStates,
 } from "../pai_assets_client.js";
 import {
-  PROJECT_ROOT,
+  PAI_REPO_ROOT,
   projectDir,
   projectIdFromCanvasUrl,
 } from "../lib/paths.js";
@@ -142,9 +142,9 @@ function registerSocketPtyHandlers({ socket, io, projects, nodePty }) {
       ...passthroughEnv,
       TERM: "xterm-256color",
       // Absolute path to the repo root, so the agent can invoke media CLIs
-      // as `"$PAI_REPO_ROOT/server/scripts/<x>.js"` regardless of the
+      // as `"$PAI_REPO_ROOT/server/cli/<x>.js"` regardless of the
       // per-project cwd. See CLAUDE.md § "Media CLIs".
-      PAI_REPO_ROOT: PROJECT_ROOT,
+      PAI_REPO_ROOT,
       // Pad PATH so `claude` resolves under whatever shell launched us.
       PATH: [
         "/opt/homebrew/bin",

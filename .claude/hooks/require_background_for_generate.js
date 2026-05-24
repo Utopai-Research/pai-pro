@@ -12,7 +12,7 @@
 import { readFileSync } from "node:fs";
 
 // Explicit allow-list of CLIs we guard. Add a filename here when you
-// add another long-running generate_* CLI under server/scripts/.
+// add another long-running generate_* CLI under server/cli/.
 const GUARDED_CLIS = [
   "generate_image.js",
   "generate_video.js",

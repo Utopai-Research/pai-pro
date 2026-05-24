@@ -11,21 +11,21 @@ The two use different ports (`:7588` and `:7488`) so you can run both side by si
 
 - **Node.js ≥20** and **npm**
 - **[Claude Code](https://docs.claude.com/en/docs/claude-code/setup)** installed and logged in (`claude` should run from any directory)
-- **tmux** — `./start.sh` launches viewer + web in detached tmux sessions
-- **[cloudflared](https://github.com/cloudflare/cloudflared)** — `brew install cloudflared` on macOS, or [binary download](https://github.com/cloudflare/cloudflared/releases) for Linux/Windows. `./start.sh` auto-launches it as a quick tunnel so PAI's `video-generation-assets` endpoint can fetch local video refs from a publicly-reachable URL. Only required for video generation.
-- **[poppler](https://poppler.freedesktop.org/)** (`pdftotext`) — `brew install poppler` on macOS, `apt-get install poppler-utils` on Debian/Ubuntu. `./start.sh` auto-installs on macOS. Used at upload time to inline a PDF's text into the note body so the agent can read it without a shell-out. Missing → PDF notes fall back to filename-only.
+- **tmux** — `./scripts/start.sh` launches viewer + web in detached tmux sessions
+- **[cloudflared](https://github.com/cloudflare/cloudflared)** — `brew install cloudflared` on macOS, or [binary download](https://github.com/cloudflare/cloudflared/releases) for Linux/Windows. `./scripts/start.sh` auto-launches it as a quick tunnel so PAI's `video-generation-assets` endpoint can fetch local video refs from a publicly-reachable URL. Only required for video generation.
+- **[poppler](https://poppler.freedesktop.org/)** (`pdftotext`) — `brew install poppler` on macOS, `apt-get install poppler-utils` on Debian/Ubuntu. `./scripts/start.sh` auto-installs on macOS. Used at upload time to inline a PDF's text into the note body so the agent can read it without a shell-out. Missing → PDF notes fall back to filename-only.
 
 ## Install
 
 ```bash
 git clone https://github.com/Utopai-Research/pai-pro.git ~/pai-pro
 cd ~/pai-pro
-./setup                              # symlinks skills into your agent's skills dir
+./scripts/setup                      # symlinks skills into your agent's skills dir
 npm --prefix server install
 npm --prefix web install
 cp .env.example .env
 # Edit .env — add your PAI_KEY
-./start.sh                           # tmux: viewer (:7488) + web (:7443)
+./scripts/start.sh                   # tmux: viewer (:7488) + web (:7443)
 open http://localhost:7443
 ```
 
@@ -41,7 +41,7 @@ cd server && npm test
 
 ## Debugging
 
-- **Viewer logs:** `./start.sh` writes them to a tmux pane. `tmux attach -t pai-pro-viewer` to inspect; `stop.sh && start.sh` to recycle.
+- **Viewer logs:** `./scripts/start.sh` writes them to a tmux pane. `tmux attach -t pai-pro-viewer` to inspect; `stop.sh && start.sh` to recycle.
 - **Vite logs:** same shape — `tmux attach -t pai-pro-web`.
 - **PTY / embedded claude logs:** visible in the browser's terminal tab.
 
@@ -57,7 +57,7 @@ cd server && npm test
 ## Stop everything
 
 ```bash
-./stop.sh                            # kills tmux sessions
+./scripts/stop.sh                    # kills tmux sessions
 ```
 
 Doesn't touch `projects/` — your work survives.

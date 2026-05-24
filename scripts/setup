@@ -11,8 +11,9 @@
 
 set -euo pipefail
 
-REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SKILLS_SRC="$REPO_DIR/skills"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PAI_REPO_ROOT="${PAI_REPO_ROOT:-$(cd "$SCRIPT_DIR/.." && pwd)}"
+SKILLS_SRC="$PAI_REPO_ROOT/skills"
 TARGET_DIR="${HOME}/.claude/skills"
 
 FORCE=0

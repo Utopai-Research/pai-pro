@@ -3,7 +3,7 @@
 // generation CLIs only accept --ref-source-id (canvas node ids).
 //
 // Source-id resolution reads workflow.json + .tunnel_url out of the real
-// repo's PROJECT_ROOT/projects/<id>/ (the module derives PROJECT_ROOT
+// repo's PAI_REPO_ROOT/projects/<id>/ (the module derives PAI_REPO_ROOT
 // from its own location), so happy-path tunnel resolution requires
 // either a fixture project or an integration test through the CLI.
 // These unit tests focus on the bad_args boundary cases that don't

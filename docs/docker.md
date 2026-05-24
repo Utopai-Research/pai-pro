@@ -35,7 +35,7 @@ Run the commands in **PowerShell** or a **WSL2 terminal** — not `cmd.exe` (whi
 
 ## Ports
 
-Container port `:7488` maps to host `:7588`. This is intentional so a parallel `./start.sh` host-mode setup on `:7488` keeps working alongside Docker. Set `HOST_VIEWER_PORT=7488` in `.env` if you don't run host mode and want the canonical port.
+Container port `:7488` maps to host `:7588`. This is intentional so a parallel `./scripts/start.sh` host-mode setup on `:7488` keeps working alongside Docker. Set `HOST_VIEWER_PORT=7488` in `.env` if you don't run host mode and want the canonical port.
 
 ## Verbose logs
 
@@ -54,4 +54,4 @@ docker compose up --build
 
 ## Side-by-side with host mode
 
-The Docker container binds to host `:7588`; host mode (`./start.sh`) binds to `:7488` and `:7443`. They don't collide — useful for catching "works on my machine" regressions before they ship. See [development.md](development.md).
+The Docker container binds to host `:7588`; host mode (`./scripts/start.sh`) binds to `:7488` and `:7443`. They don't collide — useful for catching "works on my machine" regressions before they ship. See [development.md](development.md).

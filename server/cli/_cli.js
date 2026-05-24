@@ -1,5 +1,5 @@
-// Shared CLI plumbing for scripts/. Each generator script imports this to:
-//   1. load .env from project root,
+// Shared CLI plumbing for cli/. Each generator script imports this to:
+//   1. load .env from PAI_REPO_ROOT (handled by lib/paths.js as a side-effect),
 //   2. parse argv,
 //   3. emit a single JSON line on stdout (success or failure).
 //
@@ -8,16 +8,9 @@
 // (rate_limited, content_filtered, bad_args, transient_exhausted, infra).
 
 import { parseArgs as nodeParseArgs } from "node:util";
-import { fileURLToPath } from "node:url";
-import path from "node:path";
-import { config as dotenvConfig } from "dotenv";
+import { PAI_REPO_ROOT } from "../lib/paths.js";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const PROJECT_ROOT = path.resolve(__dirname, "..", "..");
-
-dotenvConfig({ path: path.join(PROJECT_ROOT, ".env") });
-
-export { PROJECT_ROOT };
+export { PAI_REPO_ROOT };
 
 export function parseArgs(options) {
   try {

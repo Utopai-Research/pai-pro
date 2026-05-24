@@ -8,7 +8,7 @@ description: Generates or edits images on the filmmaking canvas via the local ge
 All patterns below shell out to:
 
 ```
-node "$PAI_REPO_ROOT/server/scripts/generate_image.js" --prompt "..." [--aspect-ratio 16:9] [--image-size 2K] [--label "..."] [--subtype <character|location|edit|reference|split>] [--name "..."] [--role "..."] [--description "..."] [--source-node-id <id>] [--ref-source-id <id> ...]
+node "$PAI_REPO_ROOT/server/cli/generate_image.js" --prompt "..." [--aspect-ratio 16:9] [--image-size 2K] [--label "..."] [--subtype <character|location|edit|reference|split>] [--name "..."] [--role "..."] [--description "..."] [--source-node-id <id>] [--ref-source-id <id> ...]
 ```
 
 `$PAI_REPO_ROOT` is exported by the viewer — see CLAUDE.md § "Media CLIs / Invocation path".
@@ -33,7 +33,7 @@ Pick the one that fits. When unsure, read `./workflow.json` first to see what's 
 
 Triggers: "design / create / introduce / cast a character / protagonist / antagonist / hero / villain / lead / portrait / headshot".
 
-- `node "$PAI_REPO_ROOT/server/scripts/generate_image.js" --prompt "..." --aspect-ratio 9:16 --image-size 2K --subtype character --name "Detective Morris" --role "..." --description "..."` — **no refs**. A character is an identity anchor, not a derivative.
+- `node "$PAI_REPO_ROOT/server/cli/generate_image.js" --prompt "..." --aspect-ratio 9:16 --image-size 2K --subtype character --name "Detective Morris" --role "..." --description "..."` — **no refs**. A character is an identity anchor, not a derivative.
 - Prompt template:
   > `[style] character portrait of [NAME], [role]. [age, build, wardrobe, distinguishing features]. Front-facing medium close-up, eye-level, looking directly at camera, neutral expression. Plain neutral background, soft even lighting. No dramatic shadows, no stylized lighting, no side profile, no multiple views.`
 - Inherit the project's style if one is already established on the canvas; otherwise default to realistic. Name the character if the user didn't ("Detective Morris", "The Prospector").
@@ -43,7 +43,7 @@ Triggers: "design / create / introduce / cast a character / protagonist / antago
 
 Triggers: "establish / design / picture [LOCATION]", or "yes" to a `script-compose` parse offer listing locations.
 
-- `node "$PAI_REPO_ROOT/server/scripts/generate_image.js" --prompt "..." --aspect-ratio 16:9 --image-size 2K --subtype location --name "Causeway" --description "..."` — **no refs**. A location is a setting anchor, not a derivative.
+- `node "$PAI_REPO_ROOT/server/cli/generate_image.js" --prompt "..." --aspect-ratio 16:9 --image-size 2K --subtype location --name "Causeway" --description "..."` — **no refs**. A location is a setting anchor, not a derivative.
 - Prompt template:
   > `[style] establishing still of [LOCATION NAME]. [visual brief — architecture, lighting, atmosphere]. Wide shot, eye-level, no characters present.`
 - Keep the frame empty of characters — locations are reusable references for later scenes. Inherit project style if one exists.
@@ -55,7 +55,7 @@ Triggers: "establish / design / picture [LOCATION]", or "yes" to a `script-compo
 Triggers: "change / edit / swap / replace / add / remove / tweak / what-if", OR "make a turnaround / 3D version / alternate style / variation" — applied to an image already on the canvas.
 
 - Identify the source node (usually the most recent `image_result`, or one the user named). Grab `source.id` and `source.metadata.aspect_ratio`.
-- `node "$PAI_REPO_ROOT/server/scripts/generate_image.js" --prompt "..." --aspect-ratio <source ratio> --image-size <source size or 2K> --subtype edit --source-node-id <source.id> --ref-source-id <source.id>`.
+- `node "$PAI_REPO_ROOT/server/cli/generate_image.js" --prompt "..." --aspect-ratio <source ratio> --image-size <source size or 2K> --subtype edit --source-node-id <source.id> --ref-source-id <source.id>`.
 - Prompt as a **transformation**, not a full re-description:
   > `<concrete change>. Preserve everything else.`
 
@@ -70,7 +70,7 @@ Triggers: "change / edit / swap / replace / add / remove / tweak / what-if", OR 
 Triggers: "put [character] in [setting]", "a shot of [X] and [Y]", "[character] does [action] in [location]" — when at least one canvas character is involved.
 
 - Identify each character involved — any `image_result` of that person (up to 16). Collect each one's `id`.
-- `node "$PAI_REPO_ROOT/server/scripts/generate_image.js" --prompt "..." --aspect-ratio <fit the shot> --image-size 2K --ref-source-id <char1.id> --ref-source-id <char2.id> ...`.
+- `node "$PAI_REPO_ROOT/server/cli/generate_image.js" --prompt "..." --aspect-ratio <fit the shot> --image-size 2K --ref-source-id <char1.id> --ref-source-id <char2.id> ...`.
 - Prompt: the full scene description. Name each character by their role so the generator binds identity to role. Refer to them in the prompt as `@Image1`, `@Image2`, … in `--ref-source-id` order.
 - **No `--subtype`** — a scene is neither a character nor an edit. CLI emits one derived edge per `--ref-source-id`.
 
@@ -78,14 +78,14 @@ Triggers: "put [character] in [setting]", "a shot of [X] and [Y]", "[character] 
 
 Triggers: a fresh image unrelated to existing canvas content ("generate a mountain at dusk", "a noir alley — just the setting").
 
-- Plain `node "$PAI_REPO_ROOT/server/scripts/generate_image.js" --prompt "..."` with sensible defaults (16:9, 2K unless the user asks otherwise). No subtype, no refs.
+- Plain `node "$PAI_REPO_ROOT/server/cli/generate_image.js" --prompt "..."` with sensible defaults (16:9, 2K unless the user asks otherwise). No subtype, no refs.
 
 ### 6. Storyboard mosaic — one composite per location
 
 Triggers: user asks for a storyboard, mosaic, NxN / N×M grid, shot list, coverage, keyframe sheet, shot planning, or image previs. The intent is **ONE composite image with N×M panels per location**, NOT one image per panel and NOT a video.
 
 - **Tool**: `generate_image.js` (standard tier). Layout fidelity is best at ≤4 cells; past that, cells drift in framing and identity. Warn the user one short line before firing for any grid larger than 2×2: "Heads up — the standard image tier loses layout fidelity past ~4 cells; cells may drift in framing."
-- **Single call per mosaic**: ONE `node "$PAI_REPO_ROOT/server/scripts/generate_image.js" --prompt "..." --aspect-ratio 16:9 --image-size 2K --label "Storyboard — <location>"` per mosaic. The pattern's point is one composite image per location, not N×M small generations.
+- **Single call per mosaic**: ONE `node "$PAI_REPO_ROOT/server/cli/generate_image.js" --prompt "..." --aspect-ratio 16:9 --image-size 2K --label "Storyboard — <location>"` per mosaic. The pattern's point is one composite image per location, not N×M small generations.
 - **Aspect ratio**: ALWAYS default to **`16:9`** — this is filmmaking. Each panel inside the mosaic is a 16:9 cinematic frame, and the overall sheet should also feel cinematic landscape. The grid shape (3×3, 4×2, etc.) describes cell layout, NOT canvas shape. Only override `16:9` if the user explicitly says "portrait", "square", "vertical", or names a different ratio:
   - "3x3 storyboard" → `16:9` (default)
   - "3x3 square storyboard" → `1:1`

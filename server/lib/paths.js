@@ -6,7 +6,7 @@
 // the integration tests spawn the viewer with these pointed at a tmp
 // dir so a failing test never touches the real repo's .active_project
 // or workflow.json symlink. In normal use, all three resolve under
-// PROJECT_ROOT.
+// PAI_REPO_ROOT.
 
 import { config as dotenvConfig } from "dotenv";
 import os from "node:os";
@@ -14,15 +14,15 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-export const PROJECT_ROOT = path.resolve(__dirname, "..", "..");
+export const PAI_REPO_ROOT = path.resolve(__dirname, "..", "..");
 
-dotenvConfig({ path: path.join(PROJECT_ROOT, ".env") });
+dotenvConfig({ path: path.join(PAI_REPO_ROOT, ".env") });
 
 export const PORT         = parseInt(process.env.VIEWER_PORT ?? "7488", 10);
 export const WEB_ORIGIN   = process.env.WEB_ORIGIN ?? "http://localhost:7443";
-export const PROJECTS_DIR = process.env.PAI_PROJECTS_DIR ?? path.join(PROJECT_ROOT, "projects");
-export const ACTIVE_FILE  = process.env.PAI_ACTIVE_FILE  ?? path.join(PROJECT_ROOT, ".active_project");
-export const ROOT_LINK    = process.env.PAI_ROOT_LINK    ?? path.join(PROJECT_ROOT, "workflow.json");
+export const PROJECTS_DIR = process.env.PAI_PROJECTS_DIR ?? path.join(PAI_REPO_ROOT, "projects");
+export const ACTIVE_FILE  = process.env.PAI_ACTIVE_FILE  ?? path.join(PAI_REPO_ROOT, ".active_project");
+export const ROOT_LINK    = process.env.PAI_ROOT_LINK    ?? path.join(PAI_REPO_ROOT, "workflow.json");
 
 export function isValidId(id) {
   return typeof id === "string" && /^[a-z0-9][a-z0-9_-]{0,62}$/i.test(id);

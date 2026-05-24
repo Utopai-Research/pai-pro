@@ -34,7 +34,7 @@ that path. Use `scripts/canvas_mutate.js` instead.
 
 3. **Call the mutator:**
    ```
-   node "$PAI_REPO_ROOT/server/scripts/canvas_mutate.js" \
+   node "$PAI_REPO_ROOT/server/cli/canvas_mutate.js" \
      --op addBatch \
      --payload-json '<the JSON above as one line>'
    ```

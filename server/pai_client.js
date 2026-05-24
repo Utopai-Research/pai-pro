@@ -40,9 +40,9 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { config as dotenvConfig } from "dotenv";
 
-// Load .env defensively. Scripts that import us from server/scripts/
-// already loaded dotenv via _cli.js, but library callers may not have.
-// dotenv.config() does not overwrite already-set vars.
+// Load .env defensively. CLIs that import us from server/cli/ already
+// loaded dotenv via _cli.js → lib/paths.js, but library callers may not
+// have. dotenv.config() does not overwrite already-set vars.
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 dotenvConfig({ path: path.resolve(__dirname, "..", ".env") });
 

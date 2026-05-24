@@ -13,7 +13,7 @@ import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
-const SCRIPTS_DIR = join(__dirname, "..", "scripts");
+const CLI_DIR = join(__dirname, "..", "cli");
 
 function runCli({ script, args, cwd, env }) {
   return new Promise((resolve) => {
@@ -21,7 +21,7 @@ function runCli({ script, args, cwd, env }) {
     let stderr = "";
     const child = spawn(
       process.execPath,
-      [join(SCRIPTS_DIR, script), ...args],
+      [join(CLI_DIR, script), ...args],
       { cwd, env: { ...process.env, ...env }, stdio: ["ignore", "pipe", "pipe"] },
     );
     child.stdout.on("data", (d) => { stdout += d; });
