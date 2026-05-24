@@ -7,10 +7,14 @@ Pai-pro's recommended onboarding path — every system dependency (ffmpeg, poppl
 ```bash
 git clone https://github.com/Utopai-Research/pai-pro.git ~/pai-pro
 cd ~/pai-pro
-cp .env.example .env                  # add the API keys you have
+cp .env.example .env
+# Get your PAI_KEY at https://pai-pro.utopaistudios.com/keys (format: PAI_<random>)
+read -rp "Paste your PAI_KEY: " key && echo "PAI_KEY=$key" >> .env
 docker compose up --build             # ~5-10 min first build, cached after
 open http://localhost:7588            # browser entry
 ```
+
+(If you skip the `read` step or paste an empty key, the container will still boot — canvas, terminal, and project switching all work — but media generation fails with a clear error until you add the key to `.env` and `docker compose restart`.)
 
 In the embedded terminal, pick a Claude Code theme and run `/login` once. After that the canvas is fully wired — generate images, chain into videos, drop notes, scrub the timeline.
 
