@@ -28,7 +28,10 @@ Filmmaking skills + a React Flow canvas + an embedded `claude` terminal. Write a
 
 ```bash
 git clone https://github.com/Utopai-Research/pai-pro.git ~/pai-pro
-cd ~/pai-pro && cp .env.example .env       # add your PAI_KEY
+cd ~/pai-pro
+cp .env.example .env
+# Get your PAI_KEY at https://pai-pro.utopaistudios.com/keys (format: PAI_<random>)
+read -rp "Paste your PAI_KEY: " key && echo "PAI_KEY=$key" >> .env
 docker compose up --build
 ```
 
@@ -39,7 +42,10 @@ Open <http://localhost:7588>.
 ```bash
 git clone https://github.com/Utopai-Research/pai-pro.git ~/pai-pro && cd ~/pai-pro
 ./scripts/setup && npm --prefix server install && npm --prefix web install
-cp .env.example .env && ./scripts/start.sh
+cp .env.example .env
+# Get your PAI_KEY at https://pai-pro.utopaistudios.com/keys (format: PAI_<random>)
+read -rp "Paste your PAI_KEY: " key && echo "PAI_KEY=$key" >> .env
+./scripts/start.sh
 ```
 
 Open <http://localhost:7443>. In the embedded terminal, `/login` once and you're driving.
@@ -48,13 +54,13 @@ Open <http://localhost:7443>. In the embedded terminal, `/login` once and you're
 
 ## API key
 
-One key, **PAI_KEY**, drives every capability — image, video, voice, and reference-asset uploads all route through PAI Lite. Get a key (and watch your live balance) at <https://pai-pro.utopaistudios.com/>. CLIs only fire when you explicitly ask for media; chat suggestions don't burn credits.
+One key, **PAI_KEY**, drives every capability — image, video, voice, and reference-asset uploads all route through PAI Lite. Get a key (and watch your live balance) at <https://pai-pro.utopaistudios.com/keys>. Format is `PAI_<random>`. CLIs only fire when you explicitly ask for media; chat suggestions don't burn credits.
 
 ## Resources
 
 - 📚 [Documentation](docs/) — Docker setup, development, architecture, agents, skills, FAQ
 - 🎬 [Skills reference](skills/) — the `SKILL.md` files that drive the agent
-- 🔑 [PAI developer platform](https://pai-pro.utopaistudios.com/) — get keys, watch balance
+- 🔑 [PAI developer platform](https://pai-pro.utopaistudios.com/keys) — get keys, watch balance
 - 💬 [Discussions](https://github.com/Utopai-Research/pai-pro/discussions) — questions, ideas, show & tell
 - 🐛 [Issues](https://github.com/Utopai-Research/pai-pro/issues) — bug reports only
 
