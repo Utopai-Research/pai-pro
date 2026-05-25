@@ -6,6 +6,11 @@ import fs from "node:fs";
 import fsp from "node:fs/promises";
 import path from "node:path";
 
+import {
+  getProvider,
+  resolveAgentIdForMeta,
+  resolveAgentIdForNewProject,
+} from "../agents/index.js";
 import { mutate } from "../canvas_mutator.js";
 import {
   ACTIVE_FILE,
@@ -16,10 +21,6 @@ import {
   slugify,
   workflowPath,
 } from "../lib/paths.js";
-import {
-  findLatestSessionFile,
-  parseSessionMessages,
-} from "../lib/readers.js";
 import { readActive, writeActive, writeMeta } from "../lib/writers.js";
 import {
   ensureProjectStructure,
@@ -59,6 +60,7 @@ export function registerProjectsRoutes({ app, io, projects, mutatorHooks }) {
         title: titleIn || "Untitled project",
         created_at: now,
         last_active_at: now,
+        agent_id: resolveAgentIdForNewProject(),
       };
       await fsp.writeFile(
         workflowPath(id),
@@ -251,16 +253,19 @@ export function registerProjectsRoutes({ app, io, projects, mutatorHooks }) {
   });
 
   // GET /projects/:id/chat-history — returns the parsed messages of the
-  // most-recent Claude session JSONL under ~/.claude/projects/<encoded>/.
+  // owning agent's most-recent session.
   // Used by the chat-history sidebar to seed a project's transcript view
   // when the user reopens it.
   app.get("/projects/:id/chat-history", async (req, res) => {
     const id = req.params.id;
-    if (!projects.has(id)) return res.status(404).json({ error: "not found" });
+    const p = projects.get(id);
+    if (!p) return res.status(404).json({ error: "not found" });
     try {
-      const latest = await findLatestSessionFile(id);
+      const provider = getProvider(resolveAgentIdForMeta(p.meta));
+      if (!provider) return res.json({ session_id: null, mtime: null, messages: [] });
+      const latest = await provider.findLatestSession(id);
       if (!latest) return res.json({ session_id: null, mtime: null, messages: [] });
-      const messages = await parseSessionMessages(latest.path);
+      const messages = await provider.parseHistory(latest);
       res.json({ session_id: latest.sessionId, mtime: latest.mtime, messages });
     } catch (e) {
       console.warn(`[viewer] chat-history failed for ${id}:`, e);

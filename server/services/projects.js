@@ -7,6 +7,7 @@ import path from "node:path";
 
 import { initProjectMutatorState } from "../canvas_mutator.js";
 import { reseedFromCanvas } from "../pai_assets_client.js";
+import { resolveAgentIdForNewProject } from "../agents/index.js";
 import {
   PAI_REPO_ROOT,
   PROJECTS_DIR,
@@ -180,7 +181,13 @@ export async function primeProjects(projects) {
       JSON.stringify({ version: 2, workflow_id: id, title: "", nodes: [], edges: [] }, null, 2) + "\n",
     );
     const now = new Date().toISOString();
-    await writeMeta(id, { id, title: "Untitled project", created_at: now, last_active_at: now });
+    await writeMeta(id, {
+      id,
+      title: "Untitled project",
+      created_at: now,
+      last_active_at: now,
+      agent_id: resolveAgentIdForNewProject(),
+    });
     await loadProject(projects, id);
     await writeActive(id);
   }

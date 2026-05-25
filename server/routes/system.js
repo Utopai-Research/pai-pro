@@ -7,6 +7,7 @@ import { constants as fsc } from "node:fs";
 import { promises as fsp } from "node:fs";
 import { promisify } from "node:util";
 
+import { getProvider } from "../agents/index.js";
 import { MODELS, getCost } from "../model_registry.js";
 import { PROJECTS_DIR } from "../lib/paths.js";
 import { viewerUrlForLocalPath } from "../local_mirror.js";
@@ -32,7 +33,7 @@ export function rowFor(meta, project) {
   return {
     id: meta.id,
     title: meta.title,
-    saved: !!meta.claude_session_id,
+    saved: !!(meta.agent_session_id ?? meta.claude_session_id),
     created_at: meta.created_at,
     last_active_at: meta.last_active_at,
     cover_url: coverUrl,
@@ -55,12 +56,13 @@ export function registerSystemRoutes({ app, projects, nodePty }) {
   // writable mutability of the projects volume. Returns 503 on any
   // failure so `restart: unless-stopped` can loop a degraded container.
   app.get("/healthz", async (_req, res) => {
-    const [ffmpeg, poppler, claude_cli, volume_writable] = await Promise.all([
+    const [ffmpeg, poppler, claudeHealth, volume_writable] = await Promise.all([
       binaryOk("ffmpeg"),
       binaryOk("pdftotext"),
-      binaryOk("claude"),
+      getProvider("claude").healthCheck(),
       canWrite(PROJECTS_DIR),
     ]);
+    const claude_cli = !!claudeHealth.binary;
     const checks = { ffmpeg, poppler, claude_cli, volume_writable };
     const ok = Object.values(checks).every(Boolean);
     res.status(ok ? 200 : 503).json({ ok, checks, pty_available: !!nodePty });

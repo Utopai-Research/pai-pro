@@ -1,6 +1,5 @@
 // Per-project file readers — meta.json, workflow.json, canvas_positions
-// sidecar, asset-cache sidecar, .pending/<job>.json sidecars, and the
-// Claude-session JSONLs that the chat-history route surfaces.
+// sidecar, asset-cache sidecar, and .pending/<job>.json sidecars.
 //
 // None of these read from in-memory state; they're side-effect-free
 // reads that return the parsed shape (or null/empty on miss). Soft
@@ -11,7 +10,6 @@ import fsp from "node:fs/promises";
 import path from "node:path";
 
 import {
-  claudeSessionDir,
   metaPath,
   workflowPath,
   canvasPositionsPath,
@@ -141,76 +139,6 @@ export async function readPendingDir(id) {
     const jobId = e.name.slice(0, -".json".length);
     const entry = await readPendingEntry(id, jobId);
     if (entry) out.set(jobId, entry);
-  }
-  return out;
-}
-
-export async function findLatestSessionFile(id) {
-  const dir = claudeSessionDir(id);
-  let entries;
-  try { entries = await fsp.readdir(dir, { withFileTypes: true }); }
-  catch (e) { if (e.code === "ENOENT") return null; throw e; }
-  const candidates = [];
-  for (const e of entries) {
-    if (!e.isFile() || !e.name.endsWith(".jsonl")) continue;
-    const full = path.join(dir, e.name);
-    try {
-      const stat = await fsp.stat(full);
-      candidates.push({ path: full, sessionId: e.name.replace(/\.jsonl$/, ""), mtime: stat.mtimeMs });
-    } catch { /* race during deletion */ }
-  }
-  candidates.sort((a, b) => b.mtime - a.mtime);
-  return candidates[0] ?? null;
-}
-
-// Parse a Claude session JSONL into a flat list of {role, text, timestamp, ...}.
-// Skips sidechain (subagent) entries, file-snapshot rows, attachments, and the
-// invisible <system-reminder>/<command-*> wrapper tags. Tool uses are surfaced
-// as a one-line "[tool] <name>" hint so the user knows where work happened.
-export async function parseSessionMessages(filePath) {
-  const raw = await fsp.readFile(filePath, "utf8");
-  const out = [];
-  for (const line of raw.split("\n")) {
-    if (!line.trim()) continue;
-    let obj;
-    try { obj = JSON.parse(line); } catch { continue; }
-    if (obj.type !== "user" && obj.type !== "assistant") continue;
-    if (obj.isSidechain) continue;
-    const msg = obj.message;
-    if (!msg) continue;
-
-    let text = "";
-    const toolUses = [];
-    if (typeof msg.content === "string") {
-      text = msg.content;
-    } else if (Array.isArray(msg.content)) {
-      const parts = [];
-      for (const c of msg.content) {
-        if (c.type === "text" && typeof c.text === "string") parts.push(c.text);
-        else if (c.type === "tool_use") toolUses.push({ name: c.name, input: c.input });
-        // skip thinking, tool_result, image, document blocks
-      }
-      text = parts.join("\n").trim();
-    }
-
-    // Strip system-reminder + command-name wrapper tags so the panel reads
-    // like a plain conversation.
-    text = text
-      .replace(/<system-reminder>[\s\S]*?<\/system-reminder>/g, "")
-      .replace(/<command-name>[\s\S]*?<\/command-name>/g, "")
-      .replace(/<command-message>[\s\S]*?<\/command-message>/g, "")
-      .replace(/<command-args>[\s\S]*?<\/command-args>/g, "")
-      .replace(/<local-command-stdout>[\s\S]*?<\/local-command-stdout>/g, "")
-      .trim();
-
-    if (!text && toolUses.length === 0) continue;
-    out.push({
-      role: obj.type,
-      text,
-      toolUses,
-      timestamp: obj.timestamp ?? null,
-      uuid: obj.uuid ?? null,
-    });
   }
   return out;
 }

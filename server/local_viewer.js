@@ -4,11 +4,11 @@
 // (title/timestamps) and canvas_positions.json (drag positions +
 // group frames) on disk and pushes them to the browser via Socket.IO.
 // Also bridges an in-browser xterm.js terminal to a node-pty process
-// running `claude` with cwd=projects/<active>/.
+// running the project's owning coding agent with cwd=projects/<active>/.
 //
 // File layout (from the repo root):
 //   projects/<id>/workflow.json          — the canvas (nodes/edges/groups)
-//   projects/<id>/meta.json              — { id, title, created_at, last_active_at, claude_session_id? }
+//   projects/<id>/meta.json              — { id, title, created_at, last_active_at, agent_id? }
 //   projects/<id>/assets/                — local mirror of generated media
 //   projects/<id>/canvas_positions.json  — drag positions + group frames sidecar
 //   .active_project                      — id of the active project
@@ -34,7 +34,7 @@
 //   canvas-positions          — sidecar on every disk change
 //   title                     — { projectId, title } on meta change
 //
-//   pty:spawn { projectId?, cols?, rows? }  — start a new claude pty
+//   pty:spawn { projectId?, cols?, rows? }  — start a new agent pty
 //   pty:input data            — keystrokes from browser → pty stdin
 //   pty:output data           — pty stdout → browser
 //   pty:resize { cols, rows } — terminal resize

@@ -9,7 +9,6 @@
 // PAI_REPO_ROOT.
 
 import { config as dotenvConfig } from "dotenv";
-import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -78,10 +77,3 @@ export const PENDING_STALE_RUNNING_MS = 15 * 60 * 1000;
 // longer leash before the orphan sweep. Discard via the canvas Discard
 // button (PR #2) or `rm projects/<id>/.pending/<jobId>.json`.
 export const PENDING_STALE_DRAFT_MS = 24 * 60 * 60 * 1000;
-
-// Claude Code stores session JSONLs at ~/.claude/projects/<encoded-cwd>/.
-// The encoding maps `/`, `_`, `.` to `-`.
-const CLAUDE_PROJECTS_ROOT = path.join(os.homedir(), ".claude", "projects");
-export function claudeSessionDir(id) {
-  return path.join(CLAUDE_PROJECTS_ROOT, projectDir(id).replace(/[/_.]/g, "-"));
-}

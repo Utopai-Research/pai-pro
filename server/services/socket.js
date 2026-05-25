@@ -14,7 +14,7 @@
 //
 // PTY persistence model — tmux-style.
 //
-// Each project has at most ONE shell+claude process, kept alive across
+// Each project has at most ONE shell+agent process, kept alive across
 // browser tabs and disconnects. Closing a tab detaches the socket but
 // leaves the pty running, so an in-flight `generate_video.js` (2-4
 // minute job) survives the user navigating away. Re-opening the
@@ -32,12 +32,13 @@ import {
   preuploadCanvasUrl,
   snapshotAssetStates,
 } from "../pai_assets_client.js";
+import { getProvider, resolveAgentIdForMeta } from "../agents/index.js";
 import {
   PAI_REPO_ROOT,
   projectDir,
   projectIdFromCanvasUrl,
 } from "../lib/paths.js";
-import { findLatestSessionFile, readMeta } from "../lib/readers.js";
+import { readMeta } from "../lib/readers.js";
 
 const ptys = new Map();
 const socketAttach = new Map();           // socket.id -> projectId
@@ -95,7 +96,7 @@ function backfillProjectAssets(p) {
 // Wire the pty:* handlers onto a single socket. The fresh-spawn vs.
 // re-attach branch is the heart of tmux-style persistence.
 function registerSocketPtyHandlers({ socket, io, projects, nodePty }) {
-  socket.on("pty:spawn", ({ projectId, cols: rawCols, rows: rawRows } = {}) => {
+  socket.on("pty:spawn", async ({ projectId, cols: rawCols, rows: rawRows } = {}) => {
     // Reject 0/<10 cols — client may emit before xterm has fit a visible container.
     const cols = (typeof rawCols === "number" && rawCols >= 10) ? rawCols : 80;
     const rows = (typeof rawRows === "number" && rawRows >= 3)  ? rawRows : 24;
@@ -103,7 +104,8 @@ function registerSocketPtyHandlers({ socket, io, projects, nodePty }) {
       socket.emit("pty:error", "node-pty not available; rebuild server with native deps");
       return;
     }
-    if (!projectId || !projects.has(projectId)) {
+    const project = projects.get(projectId);
+    if (!projectId || !project) {
       socket.emit("pty:error", "no such project");
       return;
     }
@@ -126,26 +128,30 @@ function registerSocketPtyHandlers({ socket, io, projects, nodePty }) {
       return;
     }
 
+    let meta = project.meta;
+    try {
+      meta = (await readMeta(projectId)) ?? project.meta;
+    } catch {
+      // readMeta already logs soft failures; keep the in-memory copy.
+    }
+    const agentId = resolveAgentIdForMeta(meta);
+    const provider = getProvider(agentId);
+    if (!provider) {
+      socket.emit("pty:error", `no provider available for agent '${agentId}'`);
+      return;
+    }
+
     // Fresh-spawn path.
     const cwd = projectDir(projectId);
-    // Strip Anthropic auth env vars so `claude` always uses the user's
-    // ~/.claude/ login. Otherwise, when the shell inherits a developer's
-    // ANTHROPIC_API_KEY, claude prompts "Detected a custom API key" and
-    // hangs the embedded terminal until the user picks an option.
-    const {
-      ANTHROPIC_API_KEY: _a,
-      ANTHROPIC_AUTH_TOKEN: _b,
-      CLAUDE_API_KEY: _c,
-      ...passthroughEnv
-    } = process.env;
+    const passthroughEnv = provider.filterEnv(process.env);
     const env = {
       ...passthroughEnv,
       TERM: "xterm-256color",
       // Absolute path to the repo root, so the agent can invoke media CLIs
       // as `"$PAI_REPO_ROOT/server/cli/<x>.js"` regardless of the
-      // per-project cwd. See CLAUDE.md § "Media CLIs".
+      // per-project cwd. See the per-project AGENTS.md media CLI table.
       PAI_REPO_ROOT,
-      // Pad PATH so `claude` resolves under whatever shell launched us.
+      // Pad PATH so agent binaries resolve under whatever shell launched us.
       PATH: [
         "/opt/homebrew/bin",
         "/usr/local/bin",
@@ -189,32 +195,19 @@ function registerSocketPtyHandlers({ socket, io, projects, nodePty }) {
       ptys.delete(projectId);
     });
     socket.emit("pty:spawned", { pid: pty.pid, attached: false });
-    // Auto-launch claude after the shell settles. Resume the most recent
-    // session in the project's cwd if one exists so the user keeps full
-    // context across browser refreshes — `claude --continue` is what the
-    // CLI uses for "pick up where I left off". If no session exists yet,
-    // fall back to a fresh `claude`.
-    //
-    // Per-project overrides come from meta.json:
-    //   claude_model  — alias (sonnet|opus|haiku) or full id (claude-opus-4-7)
-    //                   Defaults to `sonnet` when unset.
-    //   claude_effort — low|medium|high|xhigh|max. `xhigh` is Opus-only;
-    //                   Sonnet silently clamps it to `high`, which is why
-    //                   the default here is `max` (Sonnet's top level).
+    // Auto-launch the owning agent after the shell settles. Resume the most
+    // recent session in the project's cwd if the provider can find one.
     setTimeout(async () => {
-      let flagsSuffix = " --model sonnet --effort max";
       try {
-        const meta = await readMeta(projectId);
-        const safe = (v) => typeof v === "string" && /^[A-Za-z0-9._-]+$/.test(v);
-        const model = safe(meta?.claude_model) ? meta.claude_model : "sonnet";
-        const effort = safe(meta?.claude_effort) ? meta.claude_effort : "max";
-        flagsSuffix = ` --model ${model} --effort ${effort}`;
-      } catch { /* keep the default suffix */ }
-      let cmd = `claude${flagsSuffix}\r`;
-      try {
-        const latest = await findLatestSessionFile(projectId);
-        if (latest) cmd = `claude --continue${flagsSuffix}\r`;
-      } catch { /* fall back to plain claude */ }
+        meta = (await readMeta(projectId)) ?? meta;
+      } catch { /* keep the launch-time meta */ }
+      let latest = null;
+      try { latest = await provider.findLatestSession(projectId); }
+      catch { /* fall back to fresh launch */ }
+      const input = { projectId, meta, session: latest };
+      const cmd = latest
+        ? provider.buildResumeCommand(input)
+        : provider.buildLaunchCommand(input);
       try { pty.write(cmd); } catch {}
     }, 500);
   });
