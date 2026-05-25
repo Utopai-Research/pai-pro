@@ -15,11 +15,13 @@ If fewer than 3 members resolve, or the tie is just "these happened to be genera
 
 ## Contract recap (enforced)
 
-- Write only `id`, `title`, `node_ids` (and optionally `hue` 0–360).
-- Never set `x` / `y` / `width` / `height` / any "collapsed" flag.
-- A node may appear in at most one group.
-- No nested groups.
-- `id` format: `^group_[a-z0-9_]+$`. Titles are free-form (≤ 30 chars recommended).
+A group is a **visual frame** that wraps its member nodes on the canvas. The frame's geometry (x, y, width, height) is a bounding box computed from the members' current positions.
+
+- Write `memberIds`, `title`, `hue` (0–360), AND `x` / `y` / `width` / `height` for the frame itself.
+- Never touch the **member nodes'** `x` / `y` — the renderer positions them; the frame just wraps wherever they currently sit.
+- A node may appear in at most one frame. If a proposed member is already in an existing frame, evict it first (re-PUT the old frame with the reduced `memberIds`, or `DELETE` the old frame if fewer than 2 members would remain).
+- No nested frames.
+- `frameId` format: `frame_<unix_ms>` (e.g. `frame_1716579123456`). Matches the frontend's convention. Titles are free-form (≤ 30 chars recommended).
 
 ## Patterns
 
@@ -70,31 +72,48 @@ Less common; use only when the user explicitly sorts by quality / status.
 
 ## Recipe
 
-Groups go through the canvas mutator — the agent does NOT `Write` /
-`Edit` `workflow.json` directly (a PreToolUse hook blocks that path).
+Frames go through the HTTP API (`PUT /projects/:id/group-frames/:frameId`) — the same path the frontend's own "+ Group" button uses. The mutator's `addGroup` op writes to a metadata-only store nothing visualizes; don't use it.
 
-1. `read` `./workflow.json` to enumerate existing node ids + existing groups (reads are unrestricted; only writes are blocked).
-2. Identify which nodes belong in the proposed group by looking at their ids, labels, prompts, and subtypes. Keep only ids that actually exist in `nodes` AND aren't already in another group (the mutator rejects double-membership with `klass:conflict`).
-3. Decide on title + hue (0–360). Default hue 200 if you have no signal.
-4. **New group** — call the mutator with `addGroup`:
+1. **Read `./workflow.json` + `./canvas_positions.json`.** workflow.json gives you node ids + labels + subtypes; canvas_positions.json gives you each node's `x` / `y` AND the existing `groupFrames` map. Reads are unrestricted; only writes are blocked.
+2. **Pick members.** Identify which nodes belong in the proposed frame by looking at their ids, labels, prompts, and subtypes. Keep only ids that actually exist in `nodes`.
+3. **Evict any member already in another frame.** For each id in your proposed `memberIds`, scan existing `groupFrames`. If you find a frame that contains it:
+   - If the old frame would still have ≥ 2 members after eviction: re-PUT the old frame with `memberIds` minus the evictee (recompute bbox).
+   - If the old frame would have < 2 members: `DELETE /projects/<id>/group-frames/<oldFrameId>` (the frame loses meaning at 0–1 members).
+4. **Compute the bbox** from your members' positions. Use 24px padding (matches the frontend's `FRAME_BBOX_PADDING`). Member widths/heights are determined by `pickSize` in `web/src/pages/CanvasPage/placement.ts:176`. Use these fallbacks per type:
+   - `note`: **280 × 420**  (width hardcoded; height = `NOTE_CARD_FALLBACK_HEIGHT` for first paint)
+   - `image_result`: **290 × 220**  (16:9 default; if `data.metadata.aspect_ratio` is present, scale accordingly)
+   - `video_result`: **290 × 220**  (same caveat; check `data.aspect` or `data.metadata.aspect_ratio`)
+   - `audio_result`: **240 × 64**
+   - `pending` / `pending_generation` / `pending_attachment`: **260 × 200**
+
+   *Heads-up on dynamic heights*: React Flow measures each card's real rendered height after first paint and stores it in `measuredHeights` (see `useCanvasPositions.ts`). The 420 px fallback for `note` is the **maximum** initial height; short notes will measure smaller and the frame may end up taller than needed (harmless — user can drag-resize). If `measured_heights` ever surfaces in `canvas_positions.json`, prefer those values over the fallback.
    ```
-   node "$PAI_REPO_ROOT/server/cli/canvas_mutate.js" \
-     --op addGroup \
-     --payload-json '{"group":{"title":"Scene 1 — Causeway","node_ids":["image_3","video_1","note_2"],"hue":200}}'
+   minX = min(node.x for each member)
+   minY = min(node.y for each member)
+   maxX = max(node.x + node.w for each member)
+   maxY = max(node.y + node.h for each member)
+   x = minX - 24
+   y = minY - 24
+   width  = (maxX - minX) + 48
+   height = (maxY - minY) + 48
    ```
-   Stdout returns `assigned.group_id`. The CLI auto-mints `group_<N>` if you don't pass an explicit id in the payload.
-5. **Extend an existing group** — call the mutator with `updateGroup`, passing the full new `node_ids` list (the mutator replaces the list wholesale and dedupes):
+5. **Decide title + hue.** Default hue 200 if you have no signal.
+6. **PUT the new frame.** Read project id from `./meta.json`'s `id` field. Pick `frameId = frame_<unix_ms>`:
    ```
-   node "$PAI_REPO_ROOT/server/cli/canvas_mutate.js" \
-     --op updateGroup \
-     --payload-json '{"id":"group_3","patch":{"node_ids":["image_3","video_1","note_2","image_5"]}}'
+   curl -X PUT \
+     -H "Content-Type: application/json" \
+     -d '{"memberIds":["image_3","video_1","note_2"],"x":120,"y":80,"width":540,"height":380,"hue":200,"title":"Scene 1 — Causeway"}' \
+     "http://localhost:7488/projects/<projectId>/group-frames/frame_<unix_ms>"
    ```
-6. Confirm to the user in **one sentence**. Example: "Grouped the three Morris reference shots under their own frame."
+   On success the server fans the update out via Socket.IO; the canvas updates within a frame.
+7. **Extending an existing frame** — same PUT, same frameId, full new `memberIds` list, recomputed bbox. PUT is idempotent overwrite.
+8. **Confirm to the user in one sentence.** Example: *"Grouped the three Morris reference shots under their own frame."*
 
 ## What not to do
 
 - Don't propose groupings proactively when there's no clear semantic tie — wait until grouping earns the frame.
 - Don't group as a workaround for layout issues. Groups are for the reader; if the layout needs work, that's a system problem, not a grouping problem.
-- Don't write `x` / `y` / `width` / `height` into a group or its members. The system computes all geometry from the `node_ids` list.
-- Don't nest (put one group's id inside another group's `node_ids`).
-- Don't assign a node to two groups. Pick the most specific one.
+- Don't modify the **member nodes'** `x` / `y` — the renderer positions them. The frame's own `x` / `y` / `width` / `height` is computed from the members' bounding box (recipe step 4).
+- Don't call `canvas_mutate.js --op addGroup` / `updateGroup` / `deleteGroup`. Those write to `workflow.json` → `groups[]`, which no frontend code reads. Use the HTTP `PUT /projects/:id/group-frames/:frameId` route instead (recipe step 6).
+- Don't nest (put one frame's id inside another frame's `memberIds`).
+- Don't assign a node to two frames. Evict from the old frame first (recipe step 3).
