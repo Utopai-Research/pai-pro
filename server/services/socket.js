@@ -38,7 +38,6 @@ import {
   projectDir,
   projectIdFromCanvasUrl,
 } from "../lib/paths.js";
-import { readMeta } from "../lib/readers.js";
 
 const ptys = new Map();
 const socketAttach = new Map();           // socket.id -> projectId
@@ -128,13 +127,7 @@ function registerSocketPtyHandlers({ socket, io, projects, nodePty }) {
       return;
     }
 
-    let meta = project.meta;
-    try {
-      meta = (await readMeta(projectId)) ?? project.meta;
-    } catch {
-      // readMeta already logs soft failures; keep the in-memory copy.
-    }
-    const agentId = resolveAgentIdForMeta(meta);
+    const agentId = resolveAgentIdForMeta(project.meta);
     const provider = getProvider(agentId);
     if (!provider) {
       socket.emit("pty:error", `no provider available for agent '${agentId}'`);
@@ -198,13 +191,10 @@ function registerSocketPtyHandlers({ socket, io, projects, nodePty }) {
     // Auto-launch the owning agent after the shell settles. Resume the most
     // recent session in the project's cwd if the provider can find one.
     setTimeout(async () => {
-      try {
-        meta = (await readMeta(projectId)) ?? meta;
-      } catch { /* keep the launch-time meta */ }
       let latest = null;
       try { latest = await provider.findLatestSession(projectId); }
       catch { /* fall back to fresh launch */ }
-      const input = { projectId, meta, session: latest };
+      const input = { projectId, meta: project.meta, session: latest };
       const cmd = latest
         ? provider.buildResumeCommand(input)
         : provider.buildLaunchCommand(input);

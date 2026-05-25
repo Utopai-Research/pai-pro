@@ -26,7 +26,7 @@ function flagsSuffix(meta = {}) {
     safeCliValue(meta.agent_effort) ? meta.agent_effort
     : safeCliValue(meta.claude_effort) ? meta.claude_effort
     : "max";
-  return ` --model ${model} --effort ${effort}`;
+  return `--model ${model} --effort ${effort}`;
 }
 
 async function binaryOk(name) {
@@ -113,15 +113,13 @@ async function parseHistory(session) {
 
 export const claudeProvider = {
   id: "claude",
-  label: "Claude Code",
-  binary: "claude",
 
   buildLaunchCommand({ meta } = {}) {
-    return `claude${flagsSuffix(meta)}\r`;
+    return `claude ${flagsSuffix(meta)}\r`;
   },
 
   buildResumeCommand({ meta } = {}) {
-    return `claude --continue${flagsSuffix(meta)}\r`;
+    return `claude --continue ${flagsSuffix(meta)}\r`;
   },
 
   filterEnv(env) {
@@ -137,8 +135,7 @@ export const claudeProvider = {
   findLatestSession,
   parseHistory,
 
-  async healthCheck() {
-    const binary = await binaryOk("claude");
-    return { ok: binary, binary };
+  healthCheck() {
+    return binaryOk("claude");
   },
 };

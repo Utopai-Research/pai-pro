@@ -56,13 +56,12 @@ export function registerSystemRoutes({ app, projects, nodePty }) {
   // writable mutability of the projects volume. Returns 503 on any
   // failure so `restart: unless-stopped` can loop a degraded container.
   app.get("/healthz", async (_req, res) => {
-    const [ffmpeg, poppler, claudeHealth, volume_writable] = await Promise.all([
+    const [ffmpeg, poppler, claude_cli, volume_writable] = await Promise.all([
       binaryOk("ffmpeg"),
       binaryOk("pdftotext"),
       getProvider("claude").healthCheck(),
       canWrite(PROJECTS_DIR),
     ]);
-    const claude_cli = !!claudeHealth.binary;
     const checks = { ffmpeg, poppler, claude_cli, volume_writable };
     const ok = Object.values(checks).every(Boolean);
     res.status(ok ? 200 : 503).json({ ok, checks, pty_available: !!nodePty });
