@@ -18,7 +18,7 @@ Keep messages under ~120 words unless the user asks for depth.
 
 ## Skills routing (READ THIS FIRST)
 
-Seven filmmaking skills are installed at `~/.claude/skills/` (via the repo's `./scripts/setup`) and auto-discover by description. Don't re-derive workflows — invoke the matching skill so the canonical recipe runs:
+Five filmmaking skills are installed at `~/.claude/skills/` (via the repo's `./scripts/setup`) and auto-discover by description. Don't re-derive workflows — invoke the matching skill so the canonical recipe runs:
 
 | When the user wants to … | Invoke |
 |---|---|
@@ -27,13 +27,60 @@ Seven filmmaking skills are installed at `~/.claude/skills/` (via the repo's `./
 | design a character voice or attach narration to a character node | `/voice-compose` |
 | draft / iterate / break down a screenplay (only on explicit user intent — never on a bare file drop) | `/script-compose` |
 | group canvas nodes into scenes / act beats / character-reference sets | `/groups-compose` |
-| jot a note ("take a note", "remember that", "save this") onto the canvas | `/add-note` |
-| summarize the canvas ("what do we have", "show the graph", "list the notes") | `/show-dag` |
+
+Two more recipes — "take a note" and "summarize the canvas" — are handled inline below (no skill invocation). They're tiny recipes (well under the 30-50 LOC skill-vs-inline threshold documented in `skills/CLAUDE.md`); the skill-invocation overhead would exceed the body.
 
 Two rules:
 
 - **Use the skill, don't re-invent.** Skills encode the canonical node grammar (subtypes, edges, metadata, mirroring) — duplicating that logic in chat drifts. If a skill matches, invoke it.
 - **Background by default.** Pass `run_in_background: true` on every `generate_*` Bash call. `.claude/hooks/require_background_for_generate.js` blocks foreground attempts — doing it right the first time skips the block-retry round. To wait on a backgrounded call, use `BashOutput` against the bash id you got back — never `cat`/`grep` `/tmp/claude-*/.../tasks/<id>.output` (that's Claude Code's internal task file, not a supported surface), and never lead with `sleep N` (blocked at the env level). Sequence only when chained: if the next call's input is a previous call's output (a second-pass edit, a narratively-linked continuation, a voice attach to a character that doesn't exist yet), `BashOutput`-poll the predecessor before firing the next. `/video-compose`'s "Sequencing" section has the narrative-video decision tree.
+
+## Canvas utilities (inline — no skill invocation)
+
+### Summarize the canvas — "what do we have", "show the graph", "list the notes", "summarize"
+
+1. Read `./workflow.json`. If missing or `nodes` is empty, reply exactly: `Canvas is empty — nothing to show yet.` and stop.
+2. Print a compact rundown. Prefix each note with a tag from `data.subtype` so scripts/shots are visually distinct from generic notes (`📜 script`, `🎬 shot`, no prefix for generic):
+   ```
+   📊 **<title or "Untitled">** — <N> notes
+
+   • `note_0` 📜 script — "<label>" — "<body excerpt ≤60 chars>"
+   • `note_1` 🎬 shot — "<label>" — "<body excerpt ≤60 chars>"
+   • `note_2` — "<label>" — "<body excerpt ≤60 chars>"
+   ```
+3. Keep output under 12 lines. If there are more than 10 notes, show the last 8 prefixed with `<M> earlier notes…`. When a script has many derived shots, collapse the shot family into one line (e.g. `Shots 1–N (15s each) from note_0`) rather than listing each.
+4. Do NOT dump raw JSON.
+
+### Take a note — "take a note", "annotate", "jot down", "save this", "remember that"
+
+Notes persist through the canvas mutator. Don't `Write` or `Edit` `workflow.json` directly — a PreToolUse hook blocks that. Use the mutator CLI.
+
+1. Read `./workflow.json` to find the most recent `note_*` id (largest `note_<N>`). Read-only; the hook only blocks writes.
+2. Build the mutation payload — one note + an edge from the previous note if there is one:
+   ```json
+   {
+     "nodes": [{
+       "type": "note",
+       "data": {
+         "label": "<≤30 char title derived from the first sentence>",
+         "body": "<full user text>",
+         "metadata": { "author": "agent", "timestamp": "<ISO 8601 now>" }
+       }
+     }],
+     "edges": [
+       { "from": "<previous note id, omit this edge if none>", "to": "$0" }
+     ]
+   }
+   ```
+   `$0` is the placeholder for the (yet-to-be-assigned) new note id; the mutator resolves it after assigning the real id.
+3. Call the mutator:
+   ```
+   node "$PAI_REPO_ROOT/server/cli/canvas_mutate.js" \
+     --op addBatch \
+     --payload-json '<the JSON above as one line>'
+   ```
+   Stdout is one JSON line. Read `assigned.node_ids[0]` for the new note's id.
+4. Confirm in ONE short sentence. Do NOT paste the JSON. Do NOT narrate the call. Do NOT set `x`/`y` — the renderer positions nodes automatically.
 
 ## Media CLIs (`server/cli/`)
 
@@ -106,7 +153,7 @@ Three ways into the mutator, all equivalent:
 
 1. **Most generation skills do this for you.** `generate_image`, `generate_video`, `generate_voice`, and `split_image` all write their own result nodes via `--ref-source-id` (byte refs) and `--source-node-id` (one authorship edge) flags. The agent passes the source ids and the CLI handles the mutation; the success JSON now includes `canvas_mutation: { node_id, version, request_id }`. See the per-skill SKILL.md files for the flag set.
 
-2. **For manual mutations** (`/add-note`, `/groups-compose`, script breakdowns) the agent invokes:
+2. **For manual mutations** (the inline "Take a note" recipe above, `/groups-compose`, script breakdowns) the agent invokes:
    ```
    node "$PAI_REPO_ROOT/server/cli/canvas_mutate.js" \
      --op <addNode|updateNode|deleteNode|addEdge|deleteEdge|addGroup|updateGroup|deleteGroup|setTitle|addBatch|updateBatch> \
