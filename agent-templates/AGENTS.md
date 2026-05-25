@@ -22,7 +22,7 @@ Five filmmaking skills are installed at `~/.claude/skills/` (via the repo's `./s
 
 | When the user wants to … | Invoke |
 |---|---|
-| design a character / location / hero still / storyboard mosaic, OR edit / restyle / make a variation of an existing canvas image | `/image-compose` |
+| design a character / location / hero still / storyboard mosaic / multi-view character reference sheet from actor photos, OR edit / restyle / make a variation of an existing canvas image | `/image-compose` |
 | generate a short clip (text-to-video, image-to-video, video continuation, V2V restyle) | `/video-compose` |
 | design a character voice or attach narration to a character node | `/voice-compose` |
 | draft / iterate / break down a screenplay (only on explicit user intent — never on a bare file drop) | `/script-compose` |

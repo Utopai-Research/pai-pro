@@ -1,6 +1,6 @@
 ---
 name: image-compose
-description: Generates or edits images on the filmmaking canvas via the local generate_image.js CLI, following the canvas-aware conventions for subtype stamping, reference wiring, and provenance edges. Use when the user asks to design a character, portrait, hero, or villain; design an establishing still of a script location or setting; edit, change, swap, add, or remove something in an existing canvas image; make a variation, turnaround, 3D version, or alternate-style version of an image; compose a scene featuring one or more existing characters; generate a standalone still unrelated to existing canvas content; or lay out a storyboard mosaic, shot list, keyframe sheet, or image previs from a script's shots and locations. STORYBOARD SHAPE — storyboard / mosaic / 分镜 / shot list / keyframe sheet / coverage / previs = ONE composite image with N×M panels per location, NOT N separate calls. Re-invoke this skill (Pattern 6) before firing the CLI.
+description: Generates or edits images on the filmmaking canvas via the local generate_image.js CLI, following canvas-aware conventions for subtype stamping, reference wiring, and provenance edges. Use when the user asks to design a character, portrait, location, hero still, variation, edit, scene shot, multi-view reference sheet, or storyboard mosaic. CHARACTER DESIGN ROUTING (read first) — Whenever a character will appear in downstream video work (anything the user calls a video / clip / promo / 宣传片 / 短片 / 连续剧 / film / scene / 拍片 / shot — even if the canvas is empty and the character is being designed from scratch), DEFAULT to Pattern 7 (4-panel character reference sheet — Front/Profile/Back/Closeup), NOT Pattern 1 (single portrait). This holds whether the user has uploaded actor reference photos or not. With ≥3 actor refs, Pattern 7 uses multi-ref triangulation; with 0-2 refs, Pattern 7 uses text-only generation but still emits the 4-panel layout, because the video model needs multi-view anchor data to keep the character recognizable across non-front shots. Pattern 1 (single portrait) is only for one-off static stills that will NOT feed video gen — character posters, print art, standalone illustrations. Before any character generation, briefly announce the choice to the user ("Starting with a 4-panel reference sheet for each character so the identity stays locked across video shots — tell me if you want simple portraits instead"). Never silently default to Pattern 1 when video work is implied. STORYBOARD SHAPE — storyboard / mosaic / 分镜 / shot list / keyframe sheet / coverage / previs = ONE composite image with N×M panels per location, NOT N separate calls. Re-invoke this skill (Pattern 6) before firing the CLI.
 ---
 
 ## CLI shape
@@ -29,9 +29,20 @@ Do not attempt to invent images via ASCII art or markdown embedding — call the
 
 Pick the one that fits. When unsure, read `./workflow.json` first to see what's already on the canvas (reads are unrestricted; only writes go through the mutator).
 
-### 1. Character portrait
+**Character-design pre-flight — ALWAYS run this check first when the user mentions characters.** The pivotal question is *will this character appear in downstream video work?* — anything the user calls a video, clip, promo, 宣传片, 短片, 连续剧, film, scene, 拍片, shot, or short film.
 
-Triggers: "design / create / introduce / cast a character / protagonist / antagonist / hero / villain / lead / portrait / headshot".
+1. Read `./workflow.json` to see whether uploaded reference image nodes (`data.subtype = "reference"`, `data.metadata.source = "user_upload"`, not archived) exist for each character the user named.
+2. If the character WILL appear in downstream video work (regardless of ref count) → **use Pattern 7 (4-panel character reference sheet)**, NOT Pattern 1. With ≥3 actor refs, Pattern 7 triangulates from the photos; with 0-2 refs, Pattern 7 still emits the 4-panel layout from a text description alone. Either way, the video model needs multi-view anchor data to keep the character recognizable across non-front shots.
+3. Briefly announce the choice in chat before firing: *"Starting with a 4-panel reference sheet for [character] — locks identity across the video shots. Tell me if you want simple single portraits via Pattern 1 instead."* Give the user one beat to redirect.
+4. If the character is one-off and will NOT feed video gen (a poster, print art, a standalone illustration), use Pattern 1.
+
+This pre-flight is non-negotiable. Pattern 1's single front portrait gives the video model an anchor that's too narrow; identity drifts shot-to-shot. Skipping straight to Pattern 1 for video work is the single most-common mistake.
+
+### 1. Character portrait (one-off static stills only)
+
+Triggers: "design / create / introduce / cast a character / protagonist / antagonist / hero / villain / lead / portrait / headshot" **AND** the output is a one-off static still (poster, print art, single illustration) — NOT character work that will feed video gen.
+
+If the character will appear in downstream video work, **use Pattern 7 instead** — see the pre-flight above. Do not fall through to Pattern 1 for video-bound character work, even when starting from scratch without reference photos.
 
 - `node "$PAI_REPO_ROOT/server/cli/generate_image.js" --prompt "..." --aspect-ratio 9:16 --image-size 2K --subtype character --name "Detective Morris" --role "..." --description "..."` — **no refs**. A character is an identity anchor, not a derivative.
 - Prompt template:
@@ -101,6 +112,33 @@ Triggers: user asks for a storyboard, mosaic, NxN / N×M grid, shot list, covera
 
 - ONE `image_result` node PER mosaic.
 - The CLI uses your `--label` ("Storyboard — <location_name>" if per-location; "Storyboard" if location-less), and stamps `metadata.task_type: "storyboard_mosaic"`, `metadata.grid: "NxM"`, `metadata.location_id` / `metadata.shot_ids` if you pass them via additional metadata flags. (Storyboard-mosaic-specific extras: pass `--ref-source-id <location_id>` and one per shot reference; the CLI emits derived edges from each.)
+
+### 7. Character reference sheet *(default for ANY video-bound character work — with or without actor refs)*
+
+**PROACTIVE TRIGGER — use this pattern WITHOUT being asked** whenever the user names one or more characters that will appear in downstream video work (script, scene brief, promo, 宣传片, 短片, 连续剧, "make a short film with X", "拍一段戏 with characters A and B"). This applies regardless of whether the canvas has uploaded actor photos — see the two modes below.
+
+**Mode A — with ≥3 uploaded actor reference photos.** Use the photos as `--ref-source-id` inputs; the model triangulates identity from the refs and the prompt's REFERENCE-PHOTO PRIORITY clause locks costume to what the refs show. Announce: *"You have [N] refs for [character] — generating a 4-panel reference sheet (front / profile / back / closeup) so the actor stays identity-consistent across video shots."*
+
+**Mode B — 0-2 refs, designing from scratch.** No refs to pass. Use a text-only variant of the 4-panel prompt that describes the character (age, build, wardrobe, distinguishing features) explicitly inside each panel block. The output is still a 4-panel sheet engineered for video-gen consumption — just generated from words instead of photos. Announce: *"Starting with a 4-panel reference sheet for [character] so the identity locks across video shots. Tell me if you'd rather have simple single portraits via Pattern 1."*
+
+Also fires on explicit asks: "design a character sheet / turnaround / reference sheet / character design for [character]", "make a 4-panel character design", "generate a production reference sheet for downstream video work".
+
+The output is a single 4-panel sheet (Front-full / Profile-full / Back-full / Closeup-bust) that downstream video gen consumes directly as `--ref-source-id` without further cropping — validated to outperform single portraits by 11+ points on Gemini-judged video identity consistency.
+
+Distinct from Pattern 1: Pattern 1 produces a single static portrait (poster, print art, illustration) that will NOT be passed to video gen. Pattern 7 produces a multi-view sheet engineered for video-gen consumption. **For any character that will be referenced by a video gen call later, choose Pattern 7 — even without refs.** The 4-panel layout's value is the multi-angle data, not just the multi-ref triangulation; both modes deliver it.
+
+- Pre-flight: read `./workflow.json` and identify reference image nodes (`subtype: "reference"`, ideally ≥3 photos of the same actor from different angles or lighting). Confirm the ref count to the user in one short line before firing.
+- `node "$PAI_REPO_ROOT/server/cli/generate_image.js" --prompt "..." --aspect-ratio 16:9 --image-size 2K --subtype character --name "<character_name>" --role "..." --ref-source-id <ref1> --ref-source-id <ref2> --ref-source-id <ref3> --source-node-id <ref1>` — multi-ref is load-bearing; never fire this pattern with fewer than 3 refs (model overfits to the one angle it has).
+- ONE call. ONE sheet per character.
+- The sheet plugs into `generate_video.js` as `--ref-source-id <sheet_id>` for any downstream shot (front / back / profile) — no cropping needed for typical use.
+
+**For the verbatim 4-panel prompt template, the optional per-angle anchor crop sub-flow, cross-character validation evidence, and the gotchas (no-text rule, photo-priority, exact panel counts)**: see [references/character-sheet.md](references/character-sheet.md).
+
+#### Node fields the CLI sets
+
+- ONE `image_result` node with `data.subtype = "character"`.
+- `data.name`, `data.role`, `data.description` from the CLI flags.
+- One `derived` edge per `--ref-source-id` (so the sheet is provenance-linked to each actor photo it triangulated from).
 
 ## After the CLI returns
 
