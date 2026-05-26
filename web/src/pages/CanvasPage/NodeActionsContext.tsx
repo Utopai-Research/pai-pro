@@ -55,6 +55,8 @@ export interface NodeActionsContextValue {
   onFireDraft?: (jobId: string) => Promise<void>
   /** Unlink a draft sidecar. Idempotent server-side. */
   onDiscardDraft?: (jobId: string) => Promise<void>
+  /** Hide a settled failed generation card after the user sends it to the agent. */
+  onDismissFailedGeneration?: (jobId: string) => void
 }
 
 // Module-level empty value so consumers reading from outside a provider

@@ -488,6 +488,46 @@
 }
 .me-prompt-textarea:focus { border-color: var(--accent); }
 
+.me-failure-box {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 1px solid oklch(0.58 0.14 25 / 0.34);
+  border-radius: 6px;
+  background: oklch(0.23 0.07 25 / 0.24);
+}
+.me-failure-class {
+  width: fit-content;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: oklch(0.58 0.14 25 / 0.18);
+  color: oklch(0.78 0.14 25);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+}
+.me-failure-message {
+  color: oklch(0.82 0.08 25);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.me-failure-command {
+  display: block;
+  padding: 7px 8px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.22);
+  color: var(--ink-1);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 /* Inline reference chips inside the expanded prompt. */
 .me-ref-chip {
   display: inline-flex;
@@ -737,6 +777,24 @@
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: rgba(220, 220, 230, 0.66);
+}
+.media-expand-generating-failed {
+  border: 1px solid oklch(0.58 0.14 25 / 0.40);
+  background: oklch(0.11 0.012 25);
+}
+.media-expand-generating-failed .media-expand-generating-caption {
+  color: oklch(0.78 0.14 25);
+}
+.media-expand-generating-message {
+  position: absolute;
+  left: 24px;
+  right: 24px;
+  bottom: 22px;
+  color: oklch(0.76 0.08 25);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.45;
+  text-align: center;
 }
 
 /* ── CHAT BAR ────────────────────────────────────────────────────── */

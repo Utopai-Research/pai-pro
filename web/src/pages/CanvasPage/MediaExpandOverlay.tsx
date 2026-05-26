@@ -79,6 +79,13 @@ export interface MediaPayload {
    * an editable textarea so the user can revise without leaving the
    * overlay. */
   stage?: 'draft' | 'running' | 'failed'
+  /** Pending failed result context. Durable details live in `.results/<jobId>.json`. */
+  failure?: {
+    klass?: string
+    message?: string
+    sent?: unknown
+    jobId?: string
+  }
 }
 
 export function MediaExpandOverlay({
@@ -149,17 +156,18 @@ export function MediaExpandOverlay({
 
   if (media === null) return null
 
-  const { kind, url, label, meta, prompt, references, id, nodeType, metadata, duration, body, subtype, archived, text, stage } = media
+  const { kind, url, label, meta, prompt, references, id, nodeType, metadata, duration, body, subtype, archived, text, stage, failure } = media
   const refs: MediaRef[] = Array.isArray(references) ? references : []
   const hasPrompt = typeof prompt === 'string' && prompt.trim() !== ''
   const hasRefs = refs.length > 0
   const isGenerating = kind === 'image-generation' || kind === 'video-generation' || kind === 'audio-generation'
   const isDraft = isGenerating && stage === 'draft'
+  const isFailed = isGenerating && stage === 'failed'
   const isNote = kind === 'note'
   const isAudio = kind === 'audio'
   const isArchived = archived === true
   const hasMetadata = !isNote && metadata !== undefined
-  const hasTopContent = !isNote && (hasPrompt || hasRefs || hasMetadata)
+  const hasTopContent = !isNote && (hasPrompt || hasRefs || hasMetadata || failure !== undefined)
   // Archived nodes can't be referenced by agent tools (the
   // `buildProviderRefs` / `postNodeAddBatch` chokepoints reject them),
   // so the chat composer would just lead to a `bad_args` failure. Hide
@@ -321,6 +329,7 @@ export function MediaExpandOverlay({
             metadata={hasMetadata ? metadata : undefined}
             duration={duration}
             cost={cost}
+            failure={failure}
             forceExpanded={isDraft}
             onSavePrompt={
               isDraft && onPatchDraft !== undefined && typeof id === 'string' && id !== ''
@@ -359,6 +368,8 @@ export function MediaExpandOverlay({
             <GeneratingPlaceholder
               kind={kind === 'video-generation' ? 'video' : kind === 'audio-generation' ? 'audio' : 'image'}
               aspectRatio={metadata?.aspect_ratio}
+              failed={isFailed}
+              message={failure?.message}
             />
           ) : isNote ? (
             <NoteExpanded
@@ -472,6 +483,7 @@ interface TopStripProps {
   metadata?: MediaMetadata
   duration?: number | string
   cost?: number | null
+  failure?: MediaPayload['failure']
   /** Draft-only: when present, the PROMPT section in the expanded panel
    * renders an editable textarea instead of the rich PromptText. onBlur
    * fires PATCH /pending/:jobId via the parent. */
@@ -489,7 +501,7 @@ function formatCost(c: number | null | undefined): string | null {
   return `~$${c.toFixed(2)}`
 }
 
-function TopStrip({ prompt, text, refs, refsByKind, expanded, onToggle, nodeType, metadata, duration, cost, onSavePrompt, onSaveText, forceExpanded = false }: TopStripProps): JSX.Element {
+function TopStrip({ prompt, text, refs, refsByKind, expanded, onToggle, nodeType, metadata, duration, cost, failure, onSavePrompt, onSaveText, forceExpanded = false }: TopStripProps): JSX.Element {
   const modelChip =
     nodeType === 'video_result' ? 'video'
     : nodeType === 'audio_result' ? 'voice'
@@ -599,6 +611,26 @@ function TopStrip({ prompt, text, refs, refsByKind, expanded, onToggle, nodeType
                 <span className="me-section-count">{refs.length}</span>
               </header>
               <RefGrid refsByKind={refsByKind} />
+            </section>
+          ) : null}
+          {failure !== undefined ? (
+            <section className="me-section me-failure-section">
+              <header className="me-section-title">FAILURE</header>
+              <div className="me-failure-box">
+                {failure.klass ? (
+                  <div className="me-failure-class">{failure.klass}</div>
+                ) : null}
+                {failure.message ? (
+                  <div className="me-failure-message">{failure.message}</div>
+                ) : (
+                  <div className="me-failure-message">Generation failed.</div>
+                )}
+                {failure.jobId ? (
+                  <code className="me-failure-command">
+                    node "$PAI_REPO_ROOT/server/cli/list_generation_results.js" --job-id {failure.jobId}
+                  </code>
+                ) : null}
+              </div>
             </section>
           ) : null}
           {metadata !== undefined ? (
@@ -824,9 +856,13 @@ function formatRelativeTime(iso: string | undefined): string | null {
 function GeneratingPlaceholder({
   kind,
   aspectRatio,
+  failed = false,
+  message,
 }: {
   kind: 'image' | 'video' | 'audio'
   aspectRatio?: string
+  failed?: boolean
+  message?: string
 }): JSX.Element {
   const m =
     typeof aspectRatio === 'string'
@@ -837,9 +873,17 @@ function GeneratingPlaceholder({
   const ratio = m !== null ? `${m[1]} / ${m[2]}` : '16 / 9'
   const label = kind === 'audio' ? 'voice' : kind
   return (
-    <div className="media-expand-generating" style={{ aspectRatio: ratio }}>
-      <div className="media-expand-generating-shimmer" aria-hidden />
-      <div className="media-expand-generating-caption">Generating {label}…</div>
+    <div
+      className={`media-expand-generating${failed ? ' media-expand-generating-failed' : ''}`}
+      style={{ aspectRatio: ratio }}
+    >
+      {failed ? null : <div className="media-expand-generating-shimmer" aria-hidden />}
+      <div className="media-expand-generating-caption">
+        {failed ? `Failed ${label}` : `Generating ${label}…`}
+      </div>
+      {failed && message ? (
+        <div className="media-expand-generating-message">{message}</div>
+      ) : null}
     </div>
   )
 }

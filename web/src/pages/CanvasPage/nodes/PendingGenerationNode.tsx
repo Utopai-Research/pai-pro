@@ -55,7 +55,7 @@ export function PendingGenerationNode({ id, data, selected }: NodeProps): JSX.El
   // For voice, the body content is the spoken text (the deliverable);
   // the voice design `prompt` is metadata shown only in the overlay.
   // For image/video, it's the prompt verbatim.
-  const bodyText = stage === 'failed' ? failureMessage : isAudio ? text : prompt
+  const bodyText = isAudio ? text : prompt
   const dataState: NodeState =
     stage === 'failed' ? 'failed'
     : stage === 'draft' ? 'pending'
@@ -88,7 +88,13 @@ export function PendingGenerationNode({ id, data, selected }: NodeProps): JSX.El
     .filter((v): v is string => typeof v === 'string' && v !== '')
     .join(' · ')
 
-  const { onExpandMedia, onPatchDraft, onFireDraft, onDiscardDraft } = useNodeActions()
+  const {
+    onExpandMedia,
+    onPatchDraft,
+    onFireDraft,
+    onDiscardDraft,
+    onDismissFailedGeneration,
+  } = useNodeActions()
   const composer = useChatComposer()
   const canExpand = onExpandMedia !== undefined
   const isDraft = stage === 'draft'
@@ -143,6 +149,7 @@ export function PendingGenerationNode({ id, data, selected }: NodeProps): JSX.El
     if (composer === null || failureSent) return
     composer.insertAtCursor(buildFailureAgentPrompt(id, kind, d) + '\r')
     setFailureSent(true)
+    onDismissFailedGeneration?.(id)
   }
   const handleExpand = (e: React.MouseEvent): void => {
     e.stopPropagation()
@@ -180,6 +187,14 @@ export function PendingGenerationNode({ id, data, selected }: NodeProps): JSX.El
       metadata,
       duration: kind === 'video' ? d.duration : undefined,
       stage,
+      failure: isFailed
+        ? {
+            klass: d.klass,
+            message: d.message,
+            sent: d.sent,
+            jobId: id,
+          }
+        : undefined,
     })
   }
   const target = Position.Left, source = Position.Right
@@ -245,6 +260,11 @@ export function PendingGenerationNode({ id, data, selected }: NodeProps): JSX.El
             <span>more details</span>
           </button>
         ) : null}
+        {isFailed ? (
+          <div className="pending-failure-reason" title={failureMessage}>
+            {failureMessage}
+          </div>
+        ) : null}
         {draftError ? (
           <div className="draft-error nodrag" title={draftError}>{draftError}</div>
         ) : null}
@@ -303,6 +323,12 @@ function buildFailureAgentPrompt(
     `Kind: ${kind}`,
     'Status: failed',
   ]
+  if (kind === 'audio') {
+    if (data.text) lines.push(`Text: ${data.text}`)
+    if (data.prompt) lines.push(`Prompt: ${data.prompt}`)
+  } else if (data.prompt) {
+    lines.push(`Prompt: ${data.prompt}`)
+  }
   if (data.klass) lines.push(`Class: ${data.klass}`)
   if (data.message) lines.push(`Message: ${data.message}`)
   const sentSummary = summarizeSent(data.sent)

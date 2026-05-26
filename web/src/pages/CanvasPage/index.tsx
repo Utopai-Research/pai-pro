@@ -74,6 +74,7 @@ const REACT_FLOW_PRO_OPTIONS = { hideAttribution: true }
 const FRAME_BBOX_PADDING = 24
 const DEFAULT_NODE_WIDTH = 260
 const DEFAULT_NODE_HEIGHT = 260
+const DISMISSED_FAILED_RESULTS_PREFIX = 'pai-pro.dismissed-failed-generation-results'
 
 /**
  * Build the overlay payload from a raw workflow node. Mirrors the
@@ -232,6 +233,51 @@ function CanvasPageInner(): JSX.Element | null {
     ReadonlyMap<string, Record<string, unknown>>
   >(() => new Map())
   const [expandedMedia, setExpandedMedia] = useState<MediaPayload | null>(null)
+  const [dismissedFailedResultIds, setDismissedFailedResultIds] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  )
+
+  const dismissedFailedResultStorageKey =
+    projectId === null ? null : `${DISMISSED_FAILED_RESULTS_PREFIX}.${projectId}`
+
+  useEffect(() => {
+    if (dismissedFailedResultStorageKey === null) {
+      setDismissedFailedResultIds(new Set())
+      return
+    }
+    try {
+      const raw = window.localStorage.getItem(dismissedFailedResultStorageKey)
+      const parsed = raw === null ? [] : JSON.parse(raw)
+      setDismissedFailedResultIds(
+        new Set(Array.isArray(parsed) ? parsed.filter((v) => typeof v === 'string') : []),
+      )
+    } catch {
+      setDismissedFailedResultIds(new Set())
+    }
+  }, [dismissedFailedResultStorageKey])
+
+  const dismissFailedGeneration = useCallback(
+    (jobId: string): void => {
+      if (jobId === '') return
+      setDismissedFailedResultIds((prev) => {
+        if (prev.has(jobId)) return prev
+        const next = new Set(prev)
+        next.add(jobId)
+        if (dismissedFailedResultStorageKey !== null) {
+          try {
+            window.localStorage.setItem(
+              dismissedFailedResultStorageKey,
+              JSON.stringify([...next]),
+            )
+          } catch {
+            // Local dismissal is a UI convenience; the durable result remains readable.
+          }
+        }
+        return next
+      })
+    },
+    [dismissedFailedResultStorageKey],
+  )
 
   const nodeActions = useMemo<NodeActionsContextValue>(
     () => ({
@@ -250,8 +296,9 @@ function CanvasPageInner(): JSX.Element | null {
       onDiscardDraft: async (jobId) => {
         await discardPendingDraft(projectId, jobId)
       },
+      onDismissFailedGeneration: dismissFailedGeneration,
     }),
-    [projectId],
+    [projectId, dismissFailedGeneration],
   )
 
   const displayNodes = useMemo(() => {
@@ -269,9 +316,24 @@ function CanvasPageInner(): JSX.Element | null {
             }
             return n
           })
-    if (injectedNodes.length === 0) return base
-    return [...base, ...(injectedNodes as unknown as RFNode[])]
-  }, [rfNodes, imageOverrides, videoOverrides, injectedNodes])
+    const visibleBase =
+      dismissedFailedResultIds.size === 0
+        ? base
+        : base.filter((n) => {
+            if (n.type !== 'pending_generation') return true
+            if (!dismissedFailedResultIds.has(n.id)) return true
+            return (n.data as { stage?: unknown }).stage !== 'failed'
+          })
+    if (injectedNodes.length === 0) return visibleBase
+    return [...visibleBase, ...(injectedNodes as unknown as RFNode[])]
+  }, [rfNodes, imageOverrides, videoOverrides, injectedNodes, dismissedFailedResultIds])
+
+  const displayEdges = useMemo(() => {
+    if (dismissedFailedResultIds.size === 0) return edges
+    return edges.filter(
+      (e) => !dismissedFailedResultIds.has(e.source) && !dismissedFailedResultIds.has(e.target),
+    )
+  }, [edges, dismissedFailedResultIds])
 
   // ── GroupCreateModal state ─────────────────────────────────────────
 
@@ -795,7 +857,7 @@ function CanvasPageInner(): JSX.Element | null {
           <FireConfirmProvider>
           <ReactFlow
             nodes={displayNodes}
-            edges={edges}
+            edges={displayEdges}
             nodeTypes={nodeTypes}
             edgeTypes={edgeTypes}
             fitView={rfNodes.length > 0}
