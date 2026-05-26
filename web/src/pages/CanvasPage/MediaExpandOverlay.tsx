@@ -288,7 +288,7 @@ export function MediaExpandOverlay({
         className={
           'media-expand-content' +
           (topExpanded ? ' media-expand-content-top-open' : '') +
-          (isDraft ? ' media-expand-content-draft' : '')
+          (isDraft || isFailed ? ' media-expand-content-draft' : '')
         }
         onClick={(e) => {
           e.stopPropagation()
@@ -330,7 +330,7 @@ export function MediaExpandOverlay({
             duration={duration}
             cost={cost}
             failure={failure}
-            forceExpanded={isDraft}
+            forceExpanded={isDraft || isFailed}
             onSavePrompt={
               isDraft && onPatchDraft !== undefined && typeof id === 'string' && id !== ''
                 ? (newPrompt) => { onPatchDraft(id, { prompt: newPrompt }).catch((e) => {
@@ -350,7 +350,7 @@ export function MediaExpandOverlay({
           <div className="me-top-spacer" aria-hidden />
         )}
 
-        {isDraft ? null : (
+        {isDraft || isFailed ? null : (
         <div className="media-expand-main">
           {/* Notes carry Download in the panel action bar instead — see NoteExpanded. */}
           {!isNote && !isGenerating && typeof url === 'string' && url !== '' ? (
@@ -368,8 +368,6 @@ export function MediaExpandOverlay({
             <GeneratingPlaceholder
               kind={kind === 'video-generation' ? 'video' : kind === 'audio-generation' ? 'audio' : 'image'}
               aspectRatio={metadata?.aspect_ratio}
-              failed={isFailed}
-              message={failure?.message}
             />
           ) : isNote ? (
             <NoteExpanded
@@ -856,13 +854,9 @@ function formatRelativeTime(iso: string | undefined): string | null {
 function GeneratingPlaceholder({
   kind,
   aspectRatio,
-  failed = false,
-  message,
 }: {
   kind: 'image' | 'video' | 'audio'
   aspectRatio?: string
-  failed?: boolean
-  message?: string
 }): JSX.Element {
   const m =
     typeof aspectRatio === 'string'
@@ -873,17 +867,9 @@ function GeneratingPlaceholder({
   const ratio = m !== null ? `${m[1]} / ${m[2]}` : '16 / 9'
   const label = kind === 'audio' ? 'voice' : kind
   return (
-    <div
-      className={`media-expand-generating${failed ? ' media-expand-generating-failed' : ''}`}
-      style={{ aspectRatio: ratio }}
-    >
-      {failed ? null : <div className="media-expand-generating-shimmer" aria-hidden />}
-      <div className="media-expand-generating-caption">
-        {failed ? `Failed ${label}` : `Generating ${label}…`}
-      </div>
-      {failed && message ? (
-        <div className="media-expand-generating-message">{message}</div>
-      ) : null}
+    <div className="media-expand-generating" style={{ aspectRatio: ratio }}>
+      <div className="media-expand-generating-shimmer" aria-hidden />
+      <div className="media-expand-generating-caption">Generating {label}…</div>
     </div>
   )
 }

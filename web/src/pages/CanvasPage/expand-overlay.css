@@ -778,24 +778,6 @@
   text-transform: uppercase;
   color: rgba(220, 220, 230, 0.66);
 }
-.media-expand-generating-failed {
-  border: 1px solid oklch(0.58 0.14 25 / 0.40);
-  background: oklch(0.11 0.012 25);
-}
-.media-expand-generating-failed .media-expand-generating-caption {
-  color: oklch(0.78 0.14 25);
-}
-.media-expand-generating-message {
-  position: absolute;
-  left: 24px;
-  right: 24px;
-  bottom: 22px;
-  color: oklch(0.76 0.08 25);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  line-height: 1.45;
-  text-align: center;
-}
 
 /* ── CHAT BAR ────────────────────────────────────────────────────── */
 
