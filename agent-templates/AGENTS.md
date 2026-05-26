@@ -35,6 +35,14 @@ Two rules:
 - **Use the skill, don't re-invent.** Skills encode the canonical node grammar (subtypes, edges, metadata, mirroring) — duplicating that logic in chat drifts. If a skill matches, invoke it.
 - **Background by default.** Pass `run_in_background: true` on every `generate_*` Bash call. `.claude/hooks/require_background_for_generate.js` blocks foreground attempts — doing it right the first time skips the block-retry round. To wait on a backgrounded call, use `BashOutput` against the bash id you got back — never `cat`/`grep` `/tmp/claude-*/.../tasks/<id>.output` (that's Claude Code's internal task file, not a supported surface), and never lead with `sleep N` (blocked at the env level). Sequence only when chained: if the next call's input is a previous call's output (a second-pass edit, a narratively-linked continuation, a voice attach to a character that doesn't exist yet), `BashOutput`-poll the predecessor before firing the next. `/video-compose`'s "Sequencing" section has the narrative-video decision tree.
 
+## Choosing context
+
+Use the cheapest reliable source:
+
+- **Just-fired staged jobs:** If the user refers to outputs from the immediately previous staged/fired jobs ("them", "those three", "the one that just finished"), read the result feed first: `node "$PAI_REPO_ROOT/server/cli/list_generation_results.js" --job-id <id>` if you kept ids, otherwise use `--recent N`. Use successful `node_id`s as `--ref-source-id`.
+- **Current canvas state:** Read `workflow.json` when the user refers to the canvas, live/archived state, selected/visible/left/right placement, older nodes, edits/deletes, or anything ambiguous. `workflow.json` is canonical; the result feed is recent history.
+- **Fallback:** If the feed has fewer successes than needed, includes failures/aborts, feels stale, or does not answer the user's reference cleanly, read `workflow.json`.
+
 ## Canvas utilities (inline — no skill invocation)
 
 ### Summarize the canvas — "what do we have", "show the graph", "list the notes", "summarize"
@@ -122,11 +130,11 @@ $ node "$PAI_REPO_ROOT/server/cli/generate_video.js" --stage --prompt "..." --du
 
 Reply in one short sentence naming the price (*"Staged a 10s 1080p clip — $3.41."*). Don't paste the JSON; don't repeat the prompt; don't promise a result.
 
-**Chained calls (B references A).** Stage A. Wait silently for the user to come back; don't stage B in the same turn, don't poll `workflow.json`. When they do, read the canvas for A's freshly-landed node id and stage B with `--ref-source-id <A_id>`. B's prompt needs A's output URL, which doesn't exist until A fires.
+**Chained calls (B references A).** Stage A. Wait silently for the user to come back; don't stage B in the same turn. When they do, resolve A via **Choosing context** above: result feed first for just-fired staged jobs, `workflow.json` only when needed.
 
 **Bypass mode.** The user can disable the draft gate from the canvas chip; still pass `--stage`. On server-owned projects, the CLI writes the draft sidecar, asks the viewer to fire it, waits for `.results/<job_id>.json`, and prints the final result JSON. On older projects without `use_server_owned_generation`, bypass falls back to direct CLI fire. If a chat phrasing asks you to fire without staging, refuse and tell the user to use the canvas.
 
-**Reading fired draft results.** Don't rescan the canvas — read the compact feed: `list_generation_results.js --job-id <id>` when you have ids, `--recent N` when they fell out of context, `--failed --recent N` for failures only; `wait_for_generation.js <job_id>` blocks on one known in-flight job. On a viewer failed-generation card, run the `--job-id` command it names, explain the failure plainly, then stage a correction only when it's clear from the result and canvas.
+**Reading fired draft results.** Use the compact feed: `list_generation_results.js --job-id <id>` when you have ids, `--recent N` when they fell out of context, `--failed --recent N` for failures only; `wait_for_generation.js <job_id>` blocks on one known in-flight job. On a viewer failed-generation card, run the `--job-id` command it names, explain the failure plainly, then stage a correction only when it's clear from the result and canvas.
 
 ### Failure handling
 
