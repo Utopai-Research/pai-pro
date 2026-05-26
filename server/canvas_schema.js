@@ -20,6 +20,7 @@ const metadataSchema = {
     source: { type: "string" },
     task_type: { type: "string" },
     generated_at: { type: "string" },
+    pending_job_id: { type: "string" },
     author: { type: "string" },
     timestamp: { type: "string" },
     source_filename: { type: "string" },

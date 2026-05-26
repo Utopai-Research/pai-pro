@@ -278,6 +278,7 @@ try {
       // PAI's signed GCS URL (~24h TTL). Surfaced for future re-download
       // paths; the canvas URL itself is always derived from local_path.
       provider_output_url: videoUrl,
+      pending_job_id: jobId,
     },
   };
   // Merge audio source-ids into the --ref-source-id list so
