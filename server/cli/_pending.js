@@ -55,18 +55,6 @@ export async function isBypassEnabled(cwd = process.cwd()) {
   }
 }
 
-export async function isServerOwnedGenerationEnabled(cwd = process.cwd()) {
-  if (process.env.PAI_SERVER_OWNED_GENERATION === "0") return false;
-  try {
-    const meta = JSON.parse(
-      await fsp.readFile(path.join(cwd, "meta.json"), "utf8"),
-    );
-    return meta.use_server_owned_generation === true;
-  } catch {
-    return false;
-  }
-}
-
 export function defaultWaitTimeoutMsForKind(kind) {
   return kind === "video" ? VIDEO_WAIT_TIMEOUT_MS : DEFAULT_WAIT_TIMEOUT_MS;
 }
@@ -128,58 +116,32 @@ export async function waitForResult(jobId, {
   }
 }
 
-function viewerBaseUrl() {
-  const host = process.env.VIEWER_HOST || "localhost";
-  const port = process.env.VIEWER_PORT || "7488";
-  return `http://${host}:${port}`;
-}
-
-export async function fireAndWait({ projectId, jobId, kind, timeoutMs } = {}) {
-  if (!projectId || !jobId) {
-    return {
-      ok: false,
-      job_id: jobId || null,
-      klass: "bad_args",
-      message: "fireAndWait requires projectId and jobId",
-    };
-  }
-  const url = new URL(
-    `/projects/${encodeURIComponent(projectId)}/pending/${encodeURIComponent(jobId)}/generate`,
-    viewerBaseUrl(),
-  );
-  url.searchParams.set("source", "bypass");
-  let response;
+// Write the durable terminal record for a CLI-owned generation to
+// `<cwd>/.results/<jobId>.json`. The viewer's chokidar watcher picks it up
+// and broadcasts `generation-results`; `list_generation_results.js` and
+// `wait_for_generation.js` read it back. Write-once and best-effort: the
+// link fails EEXIST if a result already exists (e.g. boot recovery beat us
+// to it), so we never clobber and never throw into the CLI's finally.
+export async function writeResultSidecar(jobId, result, { cwd = process.cwd() } = {}) {
+  if (!jobId || !result || typeof result !== "object") return false;
+  const dir = path.join(cwd, RESULTS_DIR_NAME);
+  const target = path.join(dir, `${jobId}.json`);
+  const payload = {
+    ...result,
+    job_id: jobId,
+    completed_at: result.completed_at || new Date().toISOString(),
+  };
+  const tmp = `${target}.${process.pid}.${Date.now()}.tmp`;
   try {
-    response = await fetch(url, { method: "POST" });
-  } catch (e) {
-    return {
-      ok: false,
-      job_id: jobId,
-      klass: "infra",
-      message: `viewer fire request failed: ${e.message}`,
-    };
+    await fsp.mkdir(dir, { recursive: true });
+    await fsp.writeFile(tmp, JSON.stringify(payload) + "\n");
+    await fsp.link(tmp, target);
+    return true;
+  } catch {
+    return false;
+  } finally {
+    try { await fsp.unlink(tmp); } catch {}
   }
-  if (!response.ok) {
-    let message = `viewer fire request returned HTTP ${response.status}`;
-    try {
-      const body = await response.json();
-      if (body?.error) message = String(body.error);
-    } catch {
-      try {
-        const text = await response.text();
-        if (text.trim()) message = text.trim().slice(0, 400);
-      } catch {
-        /* keep status message */
-      }
-    }
-    return {
-      ok: false,
-      job_id: jobId,
-      klass: response.status === 404 ? "bad_args" : "infra",
-      message,
-    };
-  }
-  return waitForResult(jobId, { kind, timeoutMs });
 }
 
 // Write `<cwd>/.pending/<jobId>.json` describing the in-flight or staged

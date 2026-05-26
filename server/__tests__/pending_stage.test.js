@@ -12,7 +12,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { mkdtemp, mkdir, readFile, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, readdir, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
@@ -158,7 +158,6 @@ test("generate_image.js --stage without --prompt fails bad_args", async (t) => {
 import {
   defaultWaitTimeoutMsForKind,
   isBypassEnabled,
-  isServerOwnedGenerationEnabled,
   writePending,
 } from "../cli/_pending.js";
 import { writeFile } from "node:fs/promises";
@@ -189,29 +188,7 @@ test("isBypassEnabled false when flag missing, false, or meta absent", async (t)
   assert.strictEqual(await isBypassEnabled(cwd), false);
 });
 
-test("isServerOwnedGenerationEnabled reads meta flag and honors kill switch", async (t) => {
-  const cwd = await setupCwd();
-  t.after(() => rm(cwd, { recursive: true, force: true }));
-  const prior = process.env.PAI_SERVER_OWNED_GENERATION;
-  t.after(() => {
-    if (prior === undefined) delete process.env.PAI_SERVER_OWNED_GENERATION;
-    else process.env.PAI_SERVER_OWNED_GENERATION = prior;
-  });
-
-  await writeFile(join(cwd, "meta.json"), JSON.stringify({ id: "x", title: "x" }));
-  assert.strictEqual(await isServerOwnedGenerationEnabled(cwd), false);
-
-  await writeFile(
-    join(cwd, "meta.json"),
-    JSON.stringify({ id: "x", title: "x", use_server_owned_generation: true }),
-  );
-  assert.strictEqual(await isServerOwnedGenerationEnabled(cwd), true);
-
-  process.env.PAI_SERVER_OWNED_GENERATION = "0";
-  assert.strictEqual(await isServerOwnedGenerationEnabled(cwd), false);
-});
-
-test("default wait timeout is longer for video bypass waits", () => {
+test("default wait timeout is longer for video", () => {
   assert.equal(defaultWaitTimeoutMsForKind("image"), 10 * 60 * 1000);
   assert.equal(defaultWaitTimeoutMsForKind("audio"), 10 * 60 * 1000);
   assert.equal(defaultWaitTimeoutMsForKind("video"), 35 * 60 * 1000);
@@ -373,6 +350,20 @@ test("generate_image.js running flow emits structured failure (no stray refs)", 
   assert.strictEqual(reply.ok, false);
   assert.strictEqual(reply.klass, "bad_args");
   assert.match(reply.message, /local_path/);
+
+  // A direct/bypass run persists its own durable result so the feed sees
+  // generations the agent fired without staging through the viewer route.
+  // job_id is stamped at the write site (like the fire route does), not in
+  // the failure stdout, so verify the record by scanning .results/.
+  const resultFiles = await readdir(join(cwd, ".results"));
+  assert.strictEqual(resultFiles.length, 1, "one durable result written");
+  const result = JSON.parse(
+    await readFile(join(cwd, ".results", resultFiles[0]), "utf8"),
+  );
+  assert.strictEqual(result.ok, false);
+  assert.match(result.job_id, /^pending_/);
+  assert.strictEqual(result.kind, "image");
+  assert.strictEqual(result.klass, "bad_args");
 });
 
 test("generate_video.js running flow emits structured failure (no stray refs)", async (t) => {

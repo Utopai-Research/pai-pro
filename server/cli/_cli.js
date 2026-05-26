@@ -22,11 +22,15 @@ export function parseArgs(options) {
 }
 
 export function emitSuccess(payload) {
-  process.stdout.write(JSON.stringify({ ok: true, ...payload }) + "\n");
+  const obj = { ok: true, ...payload };
+  process.stdout.write(JSON.stringify(obj) + "\n");
+  return obj;
 }
 
 export function emitFailure(klass, message, extra = {}) {
-  process.stdout.write(JSON.stringify({ ok: false, klass, message, ...extra }) + "\n");
+  const obj = { ok: false, klass, message, ...extra };
+  process.stdout.write(JSON.stringify(obj) + "\n");
+  return obj;
 }
 
 export function classify(e) {

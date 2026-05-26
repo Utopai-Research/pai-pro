@@ -19,11 +19,10 @@ import {
 } from "../local_mirror.js";
 import { postMutation } from "./_mutate_helper.js";
 import {
-  fireAndWait,
   isBypassEnabled,
-  isServerOwnedGenerationEnabled,
   newJobId,
   writePending,
+  writeResultSidecar,
   removePending,
   removePendingSync,
 } from "./_pending.js";
@@ -53,7 +52,7 @@ function buildSent() {
 }
 
 function fail(klass, message, extra = {}) {
-  emitFailure(klass, message, { limits: VOICE_LIMITS, sent: buildSent(), ...extra });
+  return emitFailure(klass, message, { limits: VOICE_LIMITS, sent: buildSent(), ...extra });
 }
 
 if (!args.text)   { fail("bad_args", "missing --text");   process.exit(2); }
@@ -64,38 +63,23 @@ const jobId = args["existing-job-id"] || newJobId();
 const routeOwnedPending = !!args["existing-job-id"];
 const sourceNodeId = args["source-node-id"] || null;
 
-if (args.stage) {
-  const bypassEnabled = await isBypassEnabled();
-  const serverOwned = bypassEnabled && await isServerOwnedGenerationEnabled();
-  if (!bypassEnabled || serverOwned) {
-    const costUsd = getCost(PLANNED_MODEL, { text: args.text });
-    await writePending({
-      jobId,
-      kind: "audio",
-      stage: "draft",
-      prompt: args.prompt,
-      sourceNodeId,
-      referenceSourceIds: [],
-      model: PLANNED_MODEL,
-      costUsd,
-      script: "generate_voice.js",
-      argv: rawArgv.filter((a) => a !== "--stage"),
-      text: args.text,
-    });
-    if (!bypassEnabled) {
-      emitSuccess({ stage: "draft", job_id: jobId, model: PLANNED_MODEL, cost_usd: costUsd });
-      process.exit(0);
-    }
-    try {
-      const projectId = args["project-id"] || (await readActiveProject());
-      const result = await fireAndWait({ projectId, jobId, kind: "audio" });
-      process.stdout.write(JSON.stringify(result) + "\n");
-      process.exit(result.ok ? 0 : 1);
-    } catch (e) {
-      fail(classify(e), e.message);
-      process.exit(1);
-    }
-  }
+if (args.stage && !(await isBypassEnabled())) {
+  const costUsd = getCost(PLANNED_MODEL, { text: args.text });
+  await writePending({
+    jobId,
+    kind: "audio",
+    stage: "draft",
+    prompt: args.prompt,
+    sourceNodeId,
+    referenceSourceIds: [],
+    model: PLANNED_MODEL,
+    costUsd,
+    script: "generate_voice.js",
+    argv: rawArgv.filter((a) => a !== "--stage"),
+    text: args.text,
+  });
+  emitSuccess({ stage: "draft", job_id: jobId, model: PLANNED_MODEL, cost_usd: costUsd });
+  process.exit(0);
 }
 
 if (!routeOwnedPending) {
@@ -115,6 +99,7 @@ await writePending({
 });
 
 let exitCode = 0;
+let emitted = null;
 try {
   const projectId = args["project-id"] || (await readActiveProject());
 
@@ -215,11 +200,16 @@ try {
     ...(canvasMutationFragment || {}),
   };
 
-  emitSuccess(payload);
+  emitted = emitSuccess(payload);
 } catch (e) {
-  fail(classify(e), e.message, e.retryAfterSec ? { retryAfterSec: e.retryAfterSec } : {});
+  emitted = fail(classify(e), e.message, e.retryAfterSec ? { retryAfterSec: e.retryAfterSec } : {});
   exitCode = 1;
 } finally {
-  if (!routeOwnedPending) await removePending(jobId);
+  // Route-owned fires get their durable result written by the fire route
+  // from captured stdout; a direct/bypass CLI run persists its own.
+  if (!routeOwnedPending) {
+    if (emitted) await writeResultSidecar(jobId, { ...emitted, kind: "audio" });
+    await removePending(jobId);
+  }
 }
 process.exit(exitCode);

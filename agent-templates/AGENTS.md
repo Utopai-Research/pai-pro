@@ -124,19 +124,9 @@ Reply in one short sentence naming the price (*"Staged a 10s 1080p clip — $3.4
 
 **Chained calls (B references A).** Stage A. Wait silently for the user to come back; don't stage B in the same turn, don't poll `workflow.json`. When they do, read the canvas for A's freshly-landed node id and stage B with `--ref-source-id <A_id>`. B's prompt needs A's output URL, which doesn't exist until A fires.
 
-**Bypass mode.** The user can disable the draft gate from the canvas chip; when they do, the CLI itself reads `meta.json` and downgrades `--stage` to a direct fire. On newer projects the viewer owns that fire and the CLI waits on `.results/<job_id>.json`; the stdout JSON shape is the same. Always pass `--stage` — the CLI handles the rest. If a chat phrasing asks you to fire without staging, refuse and tell the user to use the canvas.
+**Bypass mode.** The user can disable the draft gate from the canvas chip; when they do, the CLI itself reads `meta.json` and downgrades `--stage` to a direct fire. Always pass `--stage` — the CLI handles the rest. If a chat phrasing asks you to fire without staging, refuse and tell the user to use the canvas.
 
-**Reading fired draft results.** If the user fired staged drafts from the canvas, do not scan the whole canvas first. Check the compact result feed:
-
-```
-node "$PAI_REPO_ROOT/server/cli/list_generation_results.js" --job-id <job_id>
-node "$PAI_REPO_ROOT/server/cli/list_generation_results.js" --recent 3
-node "$PAI_REPO_ROOT/server/cli/list_generation_results.js" --failed --recent 10
-```
-
-Use exact `--job-id` lookups when you have the ids. Use `--recent N` only when the ids fell out of context. Use `wait_for_generation.js <job_id>` only when you intentionally want to block on one known in-flight job that may not have completed yet.
-
-If the viewer sends you a failed generation card, start with the exact `list_generation_results.js --job-id ...` command in the message. Explain the failure in plain language, then stage a corrected generation only when the correction is clear from the result and current canvas.
+**Reading fired draft results.** Don't rescan the canvas — read the compact feed: `list_generation_results.js --job-id <id>` when you have ids, `--recent N` when they fell out of context, `--failed --recent N` for failures only; `wait_for_generation.js <job_id>` blocks on one known in-flight job. On a viewer failed-generation card, run the `--job-id` command it names, explain the failure plainly, then stage a correction only when it's clear from the result and canvas.
 
 ### Failure handling
 

@@ -27,11 +27,10 @@ import {
 } from "../local_mirror.js";
 import { postNodeAddBatch } from "./_mutate_helper.js";
 import {
-  fireAndWait,
   isBypassEnabled,
-  isServerOwnedGenerationEnabled,
   newJobId,
   writePending,
+  writeResultSidecar,
   removePending,
   removePendingSync,
 } from "./_pending.js";
@@ -80,8 +79,14 @@ function buildSent() {
   };
 }
 
+// Last terminal object emitted to stdout, captured so the finally block can
+// persist it as the durable result sidecar (failures fire from several inner
+// sites and throw, so we funnel capture through fail() rather than each site).
+let emitted = null;
+
 function fail(klass, message, extra = {}) {
-  emitFailure(klass, message, { limits: VIDEO_LIMITS, sent: buildSent(), ...extra });
+  emitted = emitFailure(klass, message, { limits: VIDEO_LIMITS, sent: buildSent(), ...extra });
+  return emitted;
 }
 
 if (!args.prompt) {
@@ -106,49 +111,34 @@ function countUniqueRefs() {
   return sids.size;
 }
 
-if (args.stage) {
-  const bypassEnabled = await isBypassEnabled();
-  const serverOwned = bypassEnabled && await isServerOwnedGenerationEnabled();
-  if (!bypassEnabled || serverOwned) {
-    const videoCost = getCost(plannedModel, {
-      resolution: args.resolution,
-      duration: durationPlanned,
-    });
-    const refCount = countUniqueRefs();
-    const assetCost = refCount * (getCost("video-generation-assets") ?? 0.01);
-    const costUsd = +(Number(videoCost ?? 0) + assetCost).toFixed(3);
-    await writePending({
-      jobId,
-      kind: "video",
-      stage: "draft",
-      prompt: args.prompt,
-      aspectRatio: args["aspect-ratio"],
-      // --ref-source-id (image + video) and --ref-audio-source-id (audio)
-      // both feed the same source-id channel for the projection's dashed
-      // edges — match the edges postNodeAddBatch will emit on the final.
-      sourceNodeId: args["source-node-id"] || null,
-      referenceSourceIds: [...refSourcesArg, ...audSrcIds],
-      model: plannedModel,
-      resolution: args.resolution,
-      duration: durationPlanned,
-      costUsd,
-      script: "generate_video.js",
-      argv: rawArgv.filter((a) => a !== "--stage"),
-    });
-    if (!bypassEnabled) {
-      emitSuccess({ stage: "draft", job_id: jobId, model: plannedModel, cost_usd: costUsd });
-      process.exit(0);
-    }
-    try {
-      const projectId = args["project-id"] || (await readActiveProject());
-      const result = await fireAndWait({ projectId, jobId, kind: "video" });
-      process.stdout.write(JSON.stringify(result) + "\n");
-      process.exit(result.ok ? 0 : 1);
-    } catch (e) {
-      fail(classify(e), e.message);
-      process.exit(1);
-    }
-  }
+if (args.stage && !(await isBypassEnabled())) {
+  const videoCost = getCost(plannedModel, {
+    resolution: args.resolution,
+    duration: durationPlanned,
+  });
+  const refCount = countUniqueRefs();
+  const assetCost = refCount * (getCost("video-generation-assets") ?? 0.01);
+  const costUsd = +(Number(videoCost ?? 0) + assetCost).toFixed(3);
+  await writePending({
+    jobId,
+    kind: "video",
+    stage: "draft",
+    prompt: args.prompt,
+    aspectRatio: args["aspect-ratio"],
+    // --ref-source-id (image + video) and --ref-audio-source-id (audio)
+    // both feed the same source-id channel for the projection's dashed
+    // edges — match the edges postNodeAddBatch will emit on the final.
+    sourceNodeId: args["source-node-id"] || null,
+    referenceSourceIds: [...refSourcesArg, ...audSrcIds],
+    model: plannedModel,
+    resolution: args.resolution,
+    duration: durationPlanned,
+    costUsd,
+    script: "generate_video.js",
+    argv: rawArgv.filter((a) => a !== "--stage"),
+  });
+  emitSuccess({ stage: "draft", job_id: jobId, model: plannedModel, cost_usd: costUsd });
+  process.exit(0);
 }
 
 if (!routeOwnedPending) {
@@ -317,13 +307,18 @@ try {
   };
   if (mutResult) Object.assign(payload, mutResult);
 
-  emitSuccess(payload);
+  emitted = emitSuccess(payload);
 } catch (e) {
   if (exitCode === 0) {
     fail(classify(e), e.message, e.retryAfterSec ? { retryAfterSec: e.retryAfterSec } : {});
     exitCode = 1;
   }
 } finally {
-  if (!routeOwnedPending) await removePending(jobId);
+  // Route-owned fires get their durable result written by the fire route
+  // from captured stdout; a direct/bypass CLI run persists its own.
+  if (!routeOwnedPending) {
+    if (emitted) await writeResultSidecar(jobId, { ...emitted, kind: "video" });
+    await removePending(jobId);
+  }
 }
 process.exit(exitCode);

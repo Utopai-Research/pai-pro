@@ -1,7 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { createServer } from "node:http";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve, dirname } from "node:path";
@@ -77,34 +76,4 @@ test("wait_for_generation times out with structured failure", async (t) => {
   assert.equal(reply.ok, false);
   assert.equal(reply.job_id, "pending_missing");
   assert.equal(reply.klass, "timeout");
-});
-
-test("fireAndWait maps viewer 404 to existing bad_args taxonomy", async () => {
-  const { fireAndWait } = await import(`../cli/_pending.js?fire=${Date.now()}`);
-  const server = createServer((_req, res) => {
-    res.writeHead(404, { "content-type": "application/json" });
-    res.end(JSON.stringify({ error: "draft not found" }));
-  });
-  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
-  const port = server.address().port;
-  const priorHost = process.env.VIEWER_HOST;
-  const priorPort = process.env.VIEWER_PORT;
-  process.env.VIEWER_HOST = "127.0.0.1";
-  process.env.VIEWER_PORT = String(port);
-  try {
-    const result = await fireAndWait({
-      projectId: "missing",
-      jobId: "pending_missing",
-      timeoutMs: 1,
-    });
-    assert.equal(result.ok, false);
-    assert.equal(result.klass, "bad_args");
-    assert.equal(result.message, "draft not found");
-  } finally {
-    await new Promise((resolve) => server.close(resolve));
-    if (priorHost === undefined) delete process.env.VIEWER_HOST;
-    else process.env.VIEWER_HOST = priorHost;
-    if (priorPort === undefined) delete process.env.VIEWER_PORT;
-    else process.env.VIEWER_PORT = priorPort;
-  }
 });
