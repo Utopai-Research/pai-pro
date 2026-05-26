@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -12,6 +12,7 @@ const LIST_CLI = resolve(__dirname, "..", "cli", "list_generation_results.js");
 const projectsRoot = await mkdtemp(join(tmpdir(), "generation-results-"));
 process.env.PAI_PROJECTS_DIR = projectsRoot;
 const readers = await import(`../lib/readers.js?generation=${Date.now()}`);
+const writers = await import(`../lib/writers.js?generation=${Date.now()}`);
 
 test.after(async () => {
   await rm(projectsRoot, { recursive: true, force: true });
@@ -141,6 +142,36 @@ test("readResultDir treats canvas mutation errors as failed results", async () =
   assert.equal(results[0].message, "canvas rejected the result");
   assert.equal(results[0].prompt, "new image");
   assert.equal(results[0].aspect_ratio, "1:1");
+});
+
+test("result normalization keeps failure messages non-empty", async () => {
+  const id = "reader_failure_message_fallback";
+  await setupProject(id);
+  await writers.writeResult(id, "pending_blank", {
+    ok: false,
+    kind: "image",
+    klass: "infra",
+    message: "",
+  });
+  await writeResultFile(id, "pending_provider_raw", {
+    ok: false,
+    kind: "video",
+    klass: "infra",
+    raw_response: {
+      error: { message: "provider raw validation failed" },
+    },
+    completed_at: "2026-02-05T00:00:00.000Z",
+  });
+
+  const blankRaw = JSON.parse(
+    await readFile(join(projectsRoot, id, ".results", "pending_blank.json"), "utf8"),
+  );
+  assert.match(blankRaw.message, /without provider error details/);
+
+  const results = await readers.readResultDir(id, { jobIds: ["pending_provider_raw", "pending_blank"] });
+  const byId = new Map(results.map((r) => [r.job_id, r]));
+  assert.equal(byId.get("pending_provider_raw").message, "provider raw validation failed");
+  assert.match(byId.get("pending_blank").message, /without provider error details/);
 });
 
 test("list_generation_results lists recent and reports missing ids", async () => {

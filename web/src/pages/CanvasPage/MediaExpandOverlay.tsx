@@ -24,10 +24,12 @@
 import { useEffect, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import { useChatComposer } from '@/contexts/ChatComposerContext'
+import { useCanvasFocus } from '@/contexts/CanvasFocusContext'
 import { MediaExpandChat } from './MediaExpandChat'
+import { buildGenerationFailureAgentPrompt } from './generationFailurePrompt'
 import { downloadHref } from './nodeData'
 import { useNodeActions } from './NodeActionsContext'
-import { useCanvasFocus } from '@/contexts/CanvasFocusContext'
 import { mutateCanvas } from '@/lib/canvas-stub'
 import { useFireConfirm } from './FireConfirmProvider'
 import { useCost } from '@/lib/useModels'
@@ -103,7 +105,8 @@ export function MediaExpandOverlay({
   const [noteEditLabel, setNoteEditLabel] = useState('')
   const [noteSaving, setNoteSaving] = useState(false)
   const [noteSaveError, setNoteSaveError] = useState<string | null>(null)
-  const { onSaveNote, onPatchDraft, onFireDraft, onDiscardDraft } = useNodeActions()
+  const { onSaveNote, onPatchDraft, onFireDraft, onDiscardDraft, onDismissFailedGeneration } = useNodeActions()
+  const composer = useChatComposer()
   const [fireError, setFireError] = useState<string | null>(null)
   // First-fire gate: routes the overlay's Generate click through the
   // centered confirmation modal owned by FireConfirmProvider. Same
@@ -173,6 +176,7 @@ export function MediaExpandOverlay({
   // so the chat composer would just lead to a `bad_args` failure. Hide
   // it and surface a Restore CTA in the same slot instead.
   const canChat = !isGenerating && !isArchived && typeof id === 'string' && id !== ''
+  const failureJobId = failure?.jobId ?? (isFailed && typeof id === 'string' ? id : undefined)
 
   const onFireFromOverlay = (): void => {
     if (onFireDraft === undefined || typeof id !== 'string' || id === '') return
@@ -197,6 +201,18 @@ export function MediaExpandOverlay({
     }).catch((err) => {
       setFireError(err instanceof Error ? err.message : String(err))
     })
+  }
+  const onSendFailureToAgent = (): void => {
+    if (!isFailed || composer === null || typeof failureJobId !== 'string' || failureJobId === '') return
+    composer.insertAtCursor(buildGenerationFailureAgentPrompt({
+      jobId: failureJobId,
+      kind: kind === 'video-generation' ? 'video' : kind === 'audio-generation' ? 'audio' : 'image',
+      klass: failure?.klass,
+      message: failure?.message,
+      sent: failure?.sent,
+    }) + '\r')
+    onDismissFailedGeneration?.(failureJobId)
+    onClose()
   }
 
   const onRestore = async (): Promise<void> => {
@@ -455,6 +471,21 @@ export function MediaExpandOverlay({
                 {`Generate${typeof cost === 'number' && Number.isFinite(cost) ? ` · $${cost.toFixed(2)}` : ''}`}
               </button>
             </div>
+          </div>
+        ) : isFailed ? (
+          <div className="media-expand-failure-bar">
+            <span className="media-expand-failure-note">
+              Send the failure reason to the agent, then hide this failed card.
+            </span>
+            <button
+              type="button"
+              className="media-expand-failure-cta"
+              onClick={onSendFailureToAgent}
+              disabled={composer === null || typeof failureJobId !== 'string' || failureJobId === ''}
+              title={composer === null ? 'Terminal not ready' : 'Send this failure to the agent'}
+            >
+              Send failure to agent
+            </button>
           </div>
         ) : canChat ? (
           <MediaExpandChat nodeId={id!} projectId={projectId} />

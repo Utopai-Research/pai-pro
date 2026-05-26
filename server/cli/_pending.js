@@ -17,6 +17,10 @@ import crypto from "node:crypto";
 import path from "node:path";
 import fs from "node:fs";
 import fsp from "node:fs/promises";
+import {
+  normalizeResultForRead,
+  normalizeResultForWrite,
+} from "../lib/generation_result_normalize.js";
 
 const PENDING_DIR_NAME = ".pending";
 const RESULTS_DIR_NAME = ".results";
@@ -97,7 +101,7 @@ export async function waitForResult(jobId, {
       const raw = await fsp.readFile(resultPath(jobId, cwd), "utf8");
       const parsed = JSON.parse(raw);
       if (parsed && typeof parsed === "object" && typeof parsed.ok === "boolean") {
-        return coerceCanvasMutationError(parsed);
+        return normalizeResultForRead(jobId, parsed);
       }
       return {
         ok: false,
@@ -210,20 +214,6 @@ async function pendingContextForResult(jobId, cwd) {
   }
 }
 
-function coerceCanvasMutationError(result) {
-  if (result?.ok !== true || !result.canvas_mutation_error) return result;
-  const err = result.canvas_mutation_error;
-  return {
-    ...result,
-    ok: false,
-    klass: typeof err.klass === "string" && err.klass !== "" ? err.klass : "infra",
-    message:
-      typeof err.message === "string" && err.message !== ""
-        ? err.message
-        : "canvas mutation failed after provider generation",
-  };
-}
-
 // Write the durable terminal record for a CLI-owned generation to
 // `<cwd>/.results/<jobId>.json`. The viewer's chokidar watcher picks it up
 // and broadcasts `generation-results`; `list_generation_results.js` and
@@ -234,11 +224,9 @@ export async function writeResultSidecar(jobId, result, { cwd = process.cwd() } 
   if (!jobId || !result || typeof result !== "object") return false;
   const dir = path.join(cwd, RESULTS_DIR_NAME);
   const target = path.join(dir, `${jobId}.json`);
-  const payload = coerceCanvasMutationError({
+  const payload = normalizeResultForWrite(jobId, {
     ...(await pendingContextForResult(jobId, cwd)),
     ...result,
-    job_id: jobId,
-    completed_at: result.completed_at || new Date().toISOString(),
   });
   const tmp = `${target}.${process.pid}.${Date.now()}.tmp`;
   try {

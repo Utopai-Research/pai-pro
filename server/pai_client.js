@@ -68,6 +68,34 @@ export function err(klass, message, extra = {}) {
   return e;
 }
 
+function candidateText(v) {
+  if (typeof v === "string" && v.trim() !== "") return v.trim();
+  if (Array.isArray(v) && v.length > 0) {
+    const joined = v.map(candidateText).filter(Boolean).join("; ");
+    return joined || null;
+  }
+  if (v && typeof v === "object") {
+    if (typeof v.Code === "string" && typeof v.Message === "string") {
+      return `${v.Code}: ${v.Message}`;
+    }
+    for (const key of ["message", "Message", "error_message", "detail"]) {
+      const nested = candidateText(v[key]);
+      if (nested) return nested;
+    }
+  }
+  return null;
+}
+
+function responseErrorMessage(body) {
+  return candidateText(body?.detail)
+    || candidateText(body?.error_message)
+    || candidateText(body?.message)
+    || candidateText(body?.error)
+    || candidateText(body?.raw_response?.error)
+    || candidateText(body?.ResponseMetadata?.Error)
+    || null;
+}
+
 function authHeaders() {
   return {
     Authorization: `Bearer ${paiToken()}`,
@@ -101,7 +129,7 @@ function classifyHttpFailure(status, errMsg, retryAfterSec) {
 // classifyTerminalStatus.
 function classifySubmitBodyFailure(body) {
   const code = body?.code;
-  const msg = body?.message || body?.error_message || `PAI submit failed (code=${code})`;
+  const msg = responseErrorMessage(body) || `PAI submit failed (code=${code})`;
   if (code === 2001) return err("infra", `PAI 2001 (insufficient balance): ${msg}`);
   if (code === 2002) return err("infra", `PAI 2002 (key invalid/revoked): ${msg}`);
   if (code === 2003) return err("rate_limited", `PAI 2003 (rate limited): ${msg}`, {
@@ -126,7 +154,7 @@ function classifySubmitBodyFailure(body) {
 // Used by pai_video_client.js when poll status returns FAILED.
 export function classifyTerminalStatus(statusResp) {
   const cat = String(statusResp?.error_category || "").toLowerCase();
-  const msg = statusResp?.error_message || "PAI task failed with no error_message";
+  const msg = responseErrorMessage(statusResp) || "PAI task failed with no error details";
   if (cat === "client_input") return err("bad_args", `PAI task failed (client_input): ${msg}`);
   if (cat === "content") return err("content_filtered", `PAI task failed (content moderation): ${msg}`);
   if (cat === "provider" || cat === "timeout") return err("infra", `PAI task failed (${cat}): ${msg}`);
@@ -162,13 +190,7 @@ async function postOnce({ path, body, timeoutMs }) {
   try { parsed = rawBody ? JSON.parse(rawBody) : null; } catch { /* not JSON */ }
 
   if (!res.ok) {
-    const responseMetadataError = parsed?.ResponseMetadata?.Error;
-    const errMsg = parsed?.detail
-      || parsed?.message
-      || parsed?.error?.message
-      || (responseMetadataError?.Code && responseMetadataError?.Message
-        ? `${responseMetadataError.Code}: ${responseMetadataError.Message}`
-        : null)
+    const errMsg = responseErrorMessage(parsed)
       || rawBody.slice(0, 300)
       || `HTTP ${res.status}`;
     const ra = parseInt(res.headers.get("retry-after") || "", 10);
@@ -206,8 +228,7 @@ async function getOnce({ path, timeoutMs }) {
   try { parsed = rawBody ? JSON.parse(rawBody) : null; } catch { /* not JSON */ }
 
   if (!res.ok) {
-    const errMsg = parsed?.detail
-      || parsed?.message
+    const errMsg = responseErrorMessage(parsed)
       || rawBody.slice(0, 300)
       || `HTTP ${res.status}`;
     const ra = parseInt(res.headers.get("retry-after") || "", 10);

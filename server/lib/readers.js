@@ -18,6 +18,7 @@ import {
   PENDING_STALE_RUNNING_MS,
   PENDING_STALE_DRAFT_MS,
 } from "./paths.js";
+import { normalizeResultForRead } from "./generation_result_normalize.js";
 
 export const EMPTY_POSITIONS = () => ({ positions: {}, groupFrames: {} });
 export const GENERATION_RESULTS_BUNDLE_LIMIT = 50;
@@ -187,22 +188,8 @@ function canvasMutationNodeId(raw) {
   return typeof id === "string" && id !== "" ? id : null;
 }
 
-function effectiveResult(raw) {
-  if (raw?.ok !== true || !raw?.canvas_mutation_error) return raw;
-  const err = raw.canvas_mutation_error;
-  return {
-    ...raw,
-    ok: false,
-    klass: typeof err.klass === "string" && err.klass !== "" ? err.klass : "infra",
-    message:
-      typeof err.message === "string" && err.message !== ""
-        ? err.message
-        : "canvas mutation failed after provider generation",
-  };
-}
-
 export function normalizeResultEntry(jobId, raw, { mtimeMs = 0 } = {}) {
-  raw = effectiveResult(raw);
+  raw = normalizeResultForRead(jobId, raw);
   if (!raw || typeof raw !== "object" || typeof raw.ok !== "boolean") return null;
   const out = {
     job_id: typeof raw.job_id === "string" && raw.job_id !== "" ? raw.job_id : jobId,

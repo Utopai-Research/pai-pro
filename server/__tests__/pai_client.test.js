@@ -21,3 +21,18 @@ test("terminal client_input video failure classifies as bad_args", () => {
   assert.match(e.message, /client_input/);
   assert.match(e.message, /content field cannot be empty/);
 });
+
+test("terminal failure falls back to raw provider message", () => {
+  const e = classifyTerminalStatus({
+    status: "FAILED",
+    error_category: "client_input",
+    raw_response: {
+      error: {
+        message: "source image is no longer available",
+      },
+    },
+  });
+
+  assert.equal(e.klass, "bad_args");
+  assert.match(e.message, /source image is no longer available/);
+});

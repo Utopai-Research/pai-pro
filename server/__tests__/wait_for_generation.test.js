@@ -63,6 +63,23 @@ test("wait_for_generation prints existing failure result and exits 1", async (t)
   assert.equal(reply.klass, "bad_args");
 });
 
+test("wait_for_generation fills empty failure messages", async (t) => {
+  const cwd = await mkdtemp(join(tmpdir(), "wait-generation-"));
+  t.after(() => rm(cwd, { recursive: true, force: true }));
+  await mkdir(join(cwd, ".results"), { recursive: true });
+  await writeFile(
+    join(cwd, ".results", "pending_fail_empty.json"),
+    JSON.stringify({ ok: false, job_id: "pending_fail_empty", kind: "image", klass: "infra", message: "" }) + "\n",
+  );
+
+  const { code, stdout, stderr } = await runWait({ cwd, jobId: "pending_fail_empty" });
+  assert.equal(code, 1, stderr);
+  const reply = parseReply(stdout);
+  assert.equal(reply.ok, false);
+  assert.equal(reply.klass, "infra");
+  assert.match(reply.message, /without provider error details/);
+});
+
 test("wait_for_generation treats canvas mutation error as failure", async (t) => {
   const cwd = await mkdtemp(join(tmpdir(), "wait-generation-"));
   t.after(() => rm(cwd, { recursive: true, force: true }));

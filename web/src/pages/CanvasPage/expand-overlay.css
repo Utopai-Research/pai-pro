@@ -214,6 +214,48 @@
 .media-expand-generate-cta:hover { background: oklch(0.68 0.17 145); }
 .media-expand-generate-cta:disabled { opacity: 0.55; cursor: progress; }
 
+.media-expand-failure-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 20px;
+  background: oklch(0.11 0.018 25 / 0.72);
+  border-top: 1px solid oklch(0.65 0.18 25 / 0.35);
+  border-radius: 0 0 12px 12px;
+}
+.media-expand-failure-note {
+  font-size: 12px;
+  color: var(--ink-2);
+  line-height: 1.4;
+}
+.media-expand-failure-cta {
+  flex-shrink: 0;
+  height: 34px;
+  padding: 0 18px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  background: oklch(0.55 0.14 145);
+  color: white;
+  border-radius: 6px;
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  line-height: 1;
+  white-space: nowrap;
+}
+.media-expand-failure-cta:hover {
+  background: oklch(0.62 0.16 145);
+}
+.media-expand-failure-cta:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 /* Audio-only stage: center an HTML5 audio element and (for TTS rows)
    the spoken text above it. */
 .media-expand-audio-stage {

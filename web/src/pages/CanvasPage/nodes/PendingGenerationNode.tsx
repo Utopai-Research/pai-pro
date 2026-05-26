@@ -14,6 +14,7 @@ import type { NodeProps } from '@xyflow/react'
 import { Handle, Position } from '@xyflow/react'
 import { useChatComposer } from '@/contexts/ChatComposerContext'
 import { useFireConfirm } from '../FireConfirmProvider'
+import { buildGenerationFailureAgentPrompt } from '../generationFailurePrompt'
 import { parseAspectRatio, sizeForAspect, type NodeState } from '../nodeData'
 import { useNodeActions } from '../NodeActionsContext'
 import { NodeHead } from './_shared'
@@ -147,7 +148,13 @@ export function PendingGenerationNode({ id, data, selected }: NodeProps): JSX.El
   const handleSendFailure = (e: React.MouseEvent): void => {
     e.stopPropagation()
     if (composer === null || failureSent) return
-    composer.insertAtCursor(buildFailureAgentPrompt(id, kind, d) + '\r')
+    composer.insertAtCursor(buildGenerationFailureAgentPrompt({
+      jobId: id,
+      kind,
+      klass: d.klass,
+      message: d.message,
+      sent: d.sent,
+    }) + '\r')
     setFailureSent(true)
     onDismissFailedGeneration?.(id)
   }
@@ -309,53 +316,4 @@ export function PendingGenerationNode({ id, data, selected }: NodeProps): JSX.El
       <Handle type="source" position={source} />
     </div>
   )
-}
-
-function buildFailureAgentPrompt(
-  jobId: string,
-  kind: 'image' | 'video' | 'audio',
-  data: PendingGenerationData,
-): string {
-  const lines = [
-    'A browser-fired generation failed.',
-    '',
-    `Job: ${jobId}`,
-    `Kind: ${kind}`,
-    'Status: failed',
-  ]
-  if (kind === 'audio') {
-    if (data.text) lines.push(`Text: ${data.text}`)
-    if (data.prompt) lines.push(`Prompt: ${data.prompt}`)
-  } else if (data.prompt) {
-    lines.push(`Prompt: ${data.prompt}`)
-  }
-  if (data.klass) lines.push(`Class: ${data.klass}`)
-  if (data.message) lines.push(`Message: ${data.message}`)
-  const sentSummary = summarizeSent(data.sent)
-  if (sentSummary) lines.push(`Request summary: ${sentSummary}`)
-  lines.push(
-    '',
-    'Please inspect this result with:',
-    `node "$PAI_REPO_ROOT/server/cli/list_generation_results.js" --job-id ${jobId}`,
-    '',
-    'Then explain the cause and stage a corrected generation if appropriate.',
-  )
-  return lines.join('\n')
-}
-
-function summarizeSent(sent: unknown): string | null {
-  if (!sent || typeof sent !== 'object') return null
-  const rec = sent as Record<string, unknown>
-  const parts: string[] = []
-  const refIds = rec.ref_source_ids
-  if (Array.isArray(refIds) && refIds.length > 0) {
-    parts.push(`ref_source_ids=${refIds.filter((v) => typeof v === 'string').join(',')}`)
-  }
-  for (const key of ['aspect_ratio', 'image_size', 'resolution', 'duration']) {
-    const value = rec[key]
-    if (typeof value === 'string' || typeof value === 'number') {
-      parts.push(`${key}=${String(value)}`)
-    }
-  }
-  return parts.length > 0 ? parts.join('; ') : null
 }

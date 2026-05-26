@@ -20,6 +20,7 @@ import {
   metaPath,
   resultsDir,
 } from "./paths.js";
+import { normalizeResultForWrite } from "./generation_result_normalize.js";
 
 export async function writeMeta(id, meta) {
   await fsp.writeFile(metaPath(id), JSON.stringify(meta, null, 2) + "\n");
@@ -39,11 +40,7 @@ export async function writeResult(id, jobId, result) {
   const dir = resultsDir(id);
   await fsp.mkdir(dir, { recursive: true });
   const target = path.join(dir, `${jobId}.json`);
-  const payload = {
-    ...result,
-    job_id: jobId,
-    completed_at: result.completed_at || new Date().toISOString(),
-  };
+  const payload = normalizeResultForWrite(jobId, result);
   const tmp = `${target}.${process.pid}.${Date.now()}.tmp`;
   try {
     await fsp.writeFile(tmp, JSON.stringify(payload) + "\n");
