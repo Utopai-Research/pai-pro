@@ -55,6 +55,18 @@ export async function isBypassEnabled(cwd = process.cwd()) {
   }
 }
 
+export async function isServerOwnedGenerationEnabled(cwd = process.cwd()) {
+  if (process.env.PAI_SERVER_OWNED_GENERATION === "0") return false;
+  try {
+    const meta = JSON.parse(
+      await fsp.readFile(path.join(cwd, "meta.json"), "utf8"),
+    );
+    return meta.use_server_owned_generation === true;
+  } catch {
+    return false;
+  }
+}
+
 export function defaultWaitTimeoutMsForKind(kind) {
   return kind === "video" ? VIDEO_WAIT_TIMEOUT_MS : DEFAULT_WAIT_TIMEOUT_MS;
 }
@@ -114,6 +126,60 @@ export async function waitForResult(jobId, {
     }
     await sleep(Math.min(pollMs, deadline - now));
   }
+}
+
+function viewerBaseUrl() {
+  const host = process.env.VIEWER_HOST || "localhost";
+  const port = process.env.VIEWER_PORT || "7488";
+  return `http://${host}:${port}`;
+}
+
+export async function fireAndWait({ projectId, jobId, kind, timeoutMs } = {}) {
+  if (!projectId || !jobId) {
+    return {
+      ok: false,
+      job_id: jobId || null,
+      klass: "bad_args",
+      message: "fireAndWait requires projectId and jobId",
+    };
+  }
+  const url = new URL(
+    `/projects/${encodeURIComponent(projectId)}/pending/${encodeURIComponent(jobId)}/generate`,
+    viewerBaseUrl(),
+  );
+  url.searchParams.set("source", "bypass");
+  let response;
+  try {
+    response = await fetch(url, { method: "POST" });
+  } catch (e) {
+    return {
+      ok: false,
+      job_id: jobId,
+      klass: "infra",
+      message: `viewer fire request failed: ${e.message}`,
+    };
+  }
+  if (!response.ok) {
+    let message = `viewer fire request returned HTTP ${response.status}`;
+    try {
+      const body = await response.json();
+      if (body?.error) message = String(body.error);
+    } catch {
+      try {
+        const text = await response.text();
+        if (text.trim()) message = text.trim().slice(0, 400);
+      } catch {
+        /* keep status message */
+      }
+    }
+    return {
+      ok: false,
+      job_id: jobId,
+      klass: response.status === 404 ? "bad_args" : "infra",
+      message,
+    };
+  }
+  return waitForResult(jobId, { kind, timeoutMs });
 }
 
 // Write the durable terminal record for a CLI-owned generation to

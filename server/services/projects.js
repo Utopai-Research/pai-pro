@@ -248,6 +248,7 @@ export async function primeProjects(projects) {
       created_at: now,
       last_active_at: now,
       agent_id: resolveAgentIdForNewProject(),
+      use_server_owned_generation: true,
     });
     await loadProject(projects, id);
     await writeActive(id);

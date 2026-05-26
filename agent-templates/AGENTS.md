@@ -124,7 +124,7 @@ Reply in one short sentence naming the price (*"Staged a 10s 1080p clip — $3.4
 
 **Chained calls (B references A).** Stage A. Wait silently for the user to come back; don't stage B in the same turn, don't poll `workflow.json`. When they do, read the canvas for A's freshly-landed node id and stage B with `--ref-source-id <A_id>`. B's prompt needs A's output URL, which doesn't exist until A fires.
 
-**Bypass mode.** The user can disable the draft gate from the canvas chip; when they do, the CLI itself reads `meta.json` and downgrades `--stage` to a direct fire. Always pass `--stage` — the CLI handles the rest. If a chat phrasing asks you to fire without staging, refuse and tell the user to use the canvas.
+**Bypass mode.** The user can disable the draft gate from the canvas chip; still pass `--stage`. On server-owned projects, the CLI writes the draft sidecar, asks the viewer to fire it, waits for `.results/<job_id>.json`, and prints the final result JSON. On older projects without `use_server_owned_generation`, bypass falls back to direct CLI fire. If a chat phrasing asks you to fire without staging, refuse and tell the user to use the canvas.
 
 **Reading fired draft results.** Don't rescan the canvas — read the compact feed: `list_generation_results.js --job-id <id>` when you have ids, `--recent N` when they fell out of context, `--failed --recent N` for failures only; `wait_for_generation.js <job_id>` blocks on one known in-flight job. On a viewer failed-generation card, run the `--job-id` command it names, explain the failure plainly, then stage a correction only when it's clear from the result and canvas.
 

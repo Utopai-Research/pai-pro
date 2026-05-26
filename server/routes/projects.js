@@ -65,6 +65,7 @@ export function registerProjectsRoutes({ app, io, projects, mutatorHooks }) {
         created_at: now,
         last_active_at: now,
         agent_id: resolveAgentIdForNewProject(),
+        use_server_owned_generation: true,
       };
       await fsp.writeFile(
         workflowPath(id),

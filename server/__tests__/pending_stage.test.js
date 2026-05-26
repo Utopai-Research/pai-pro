@@ -158,6 +158,7 @@ test("generate_image.js --stage without --prompt fails bad_args", async (t) => {
 import {
   defaultWaitTimeoutMsForKind,
   isBypassEnabled,
+  isServerOwnedGenerationEnabled,
   writePending,
 } from "../cli/_pending.js";
 import { writeFile } from "node:fs/promises";
@@ -186,6 +187,28 @@ test("isBypassEnabled false when flag missing, false, or meta absent", async (t)
     JSON.stringify({ id: "x", title: "x", dangerously_skip_draft_gate: false }),
   );
   assert.strictEqual(await isBypassEnabled(cwd), false);
+});
+
+test("isServerOwnedGenerationEnabled reads meta flag and honors kill switch", async (t) => {
+  const cwd = await setupCwd();
+  t.after(() => rm(cwd, { recursive: true, force: true }));
+  const prior = process.env.PAI_SERVER_OWNED_GENERATION;
+  t.after(() => {
+    if (prior === undefined) delete process.env.PAI_SERVER_OWNED_GENERATION;
+    else process.env.PAI_SERVER_OWNED_GENERATION = prior;
+  });
+
+  await writeFile(join(cwd, "meta.json"), JSON.stringify({ id: "x", title: "x" }));
+  assert.strictEqual(await isServerOwnedGenerationEnabled(cwd), false);
+
+  await writeFile(
+    join(cwd, "meta.json"),
+    JSON.stringify({ id: "x", title: "x", use_server_owned_generation: true }),
+  );
+  assert.strictEqual(await isServerOwnedGenerationEnabled(cwd), true);
+
+  process.env.PAI_SERVER_OWNED_GENERATION = "0";
+  assert.strictEqual(await isServerOwnedGenerationEnabled(cwd), false);
 });
 
 test("default wait timeout is longer for video", () => {
