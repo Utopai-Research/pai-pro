@@ -6,8 +6,8 @@
 // and unlinked on settle (success OR failure). The viewer chokidar-watches
 // `projects/<id>/.pending/` and re-broadcasts to every browser tab.
 //
-// Lifetime is exactly the wall-clock of the CLI. The viewer also runs a
-// 15-minute safety prune for crashed CLIs that never reached the finally.
+// Lifetime is exactly the wall-clock of the CLI. The viewer hides stale
+// running sidecars after 15 minutes when a crashed CLI never reaches finally.
 //
 // The CLI's cwd is `projects/<active>/` (set by the agent's pty), so we
 // resolve the sidecar relative to that. If the CLI is run from elsewhere,
@@ -151,7 +151,6 @@ export async function fireAndWait({ projectId, jobId, kind, timeoutMs } = {}) {
     `/projects/${encodeURIComponent(projectId)}/pending/${encodeURIComponent(jobId)}/generate`,
     viewerBaseUrl(),
   );
-  url.searchParams.set("source", "bypass");
   let response;
   try {
     response = await fetch(url, { method: "POST" });

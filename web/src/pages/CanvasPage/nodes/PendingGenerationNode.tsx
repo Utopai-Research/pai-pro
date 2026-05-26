@@ -1,9 +1,9 @@
 /**
  * PendingGenerationNode — chrome for optimistic placeholders during
- * in-flight generation. Driven by the `pending-generations` Socket.IO
- * channel, not workflow.json — these nodes never persist, they're
- * synthesized client-side from `.pending/<jobId>.json` sidecars and
- * vanish when the real image_result / video_result / audio_result lands.
+ * in-flight generation. Driven by viewer sidecar Socket.IO channels,
+ * not workflow.json. Running/draft pads come from `.pending/<jobId>.json`;
+ * failed pads are synthesized from durable
+ * `.results/<jobId>.json` until the user sends/dismisses them.
  *
  * Audio drafts/running share the same chrome as image — taller body
  * with the spoken text (the deliverable) editable on draft. The voice

@@ -1,4 +1,4 @@
-export interface GenerationFailurePromptInput {
+interface GenerationFailurePromptInput {
   jobId: string
   kind: 'image' | 'video' | 'audio'
   klass?: string

@@ -11,10 +11,9 @@
  * bottom lets the user fire edit instructions directly to the
  * agent's pty session, pre-scoped to the current node.
  *
- * Three media kinds:
- *   - 'image' / 'video' — the real asset
- *   - 'image-generation' / 'video-generation' — pending placeholder
- *     shown while the agent's compose tool is in flight (PendingGenerationNode invokes this).
+ * Real media (`image` / `video` / `audio`) render the asset; generation
+ * media (`*-generation`) render draft/running/failed pending pads opened
+ * from PendingGenerationNode.
  *
  * Mention chips inside the prompt (`@Image1`, `@Video1`, `@Audio1`)
  * render as inline thumbnails when their indexed reference is present;
@@ -474,9 +473,6 @@ export function MediaExpandOverlay({
           </div>
         ) : isFailed ? (
           <div className="media-expand-failure-bar">
-            <span className="media-expand-failure-note">
-              Send the failure reason to the agent, then hide this failed card.
-            </span>
             <button
               type="button"
               className="media-expand-failure-cta"

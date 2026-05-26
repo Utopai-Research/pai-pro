@@ -33,7 +33,7 @@
 //   canvas-state              — workflow.json on every disk change
 //   canvas-positions          — sidecar on every disk change
 //   generation-results        — completed .results sidecars
-//   title                     — { projectId, title } on meta change
+//   title                     — project meta slice on meta change
 //
 //   pty:spawn { projectId?, cols?, rows? }  — start a new agent pty
 //   pty:input data            — keystrokes from browser → pty stdin

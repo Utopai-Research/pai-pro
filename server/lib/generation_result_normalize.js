@@ -33,7 +33,7 @@ function firstFailureMessage(result) {
     || candidateText(result?.raw_response?.ResponseMetadata?.Error);
 }
 
-export function coerceCanvasMutationError(result) {
+function coerceCanvasMutationError(result) {
   if (result?.ok !== true || !result.canvas_mutation_error) return result;
   const err = result.canvas_mutation_error;
   return {

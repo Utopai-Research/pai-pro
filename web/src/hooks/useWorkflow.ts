@@ -6,7 +6,8 @@
  * `canvas-state`, `canvas-positions`, `pending-generations`, and
  * `generation-results` on
  * every disk change (chokidar watcher + our HTTP write endpoints both
- * cause these to fire). The hook returns the latest event payload.
+ * cause these to fire). Failed generation results are folded into the
+ * pending-generation list so the canvas has one placeholder surface.
  */
 import { useEffect, useMemo, useState } from 'react'
 import { getSocket, VIEWER_URL } from '@/lib/socket'
@@ -24,7 +25,6 @@ interface UseWorkflowResult {
   workflow: Workflow | null
   canvasPositions: CanvasPositionsState
   pendingGenerations: PendingGeneration[]
-  generationResults: GenerationResult[]
   assetStatuses: ReadonlyMap<string, AssetStatusEntry>
   bundle: ProjectBundle | null
   loading: boolean
@@ -209,7 +209,6 @@ export function useWorkflow(projectId: string | null): UseWorkflowResult {
     workflow,
     canvasPositions,
     pendingGenerations: visiblePendingGenerations,
-    generationResults,
     assetStatuses,
     bundle,
     loading,
