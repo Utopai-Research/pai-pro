@@ -57,7 +57,7 @@ import {
   type AABB,
   type Viewport,
 } from './placement'
-import { ghostMatchKey, projectWorkflowToCanvas } from './projection'
+import { projectWorkflowToCanvas, resultPendingJobId } from './projection'
 import { useCanvasSaveStatus } from './saveStatusContext'
 import { tidyAll } from './tidy'
 
@@ -231,13 +231,12 @@ export function useCanvasPositions({
     const prev = rfNodesRef.current
     const prevById = new Map(prev.map((n) => [n.id, n]))
     // Ghost handoff: a real image_result / video_result / audio_result
-    // landing fresh inherits its matching pending pad's position. Key
-    // is the deliverable (prompt for image/video, text for voice).
-    const ghostsByKey = new Map<string, RFNode>()
+    // landing fresh inherits its exact pending pad's position. Match by
+    // pending job id; prompt/text matching is ambiguous for regenerations.
+    const ghostsByJobId = new Map<string, RFNode>()
     for (const n of prev) {
       if (n.type !== 'pending_generation') continue
-      const key = ghostMatchKey('pending_generation', n.data)
-      if (key !== null) ghostsByKey.set(key, n)
+      ghostsByJobId.set(n.id, n)
     }
 
     // Running AABB set for spiral placement. Seeded from `prev`
@@ -297,8 +296,8 @@ export function useCanvasPositions({
     // independent spirals or a row-major sweep that depends on
     // viewport width.
     const ghostMatches = (n: RFNode | (typeof projectedNodes)[number]): boolean => {
-      const key = ghostMatchKey(n.type ?? '', n.data)
-      return key !== null && ghostsByKey.has(key)
+      const jobId = resultPendingJobId(n.type ?? '', n.data)
+      return jobId !== null && ghostsByJobId.has(jobId)
     }
     const freshPositions = new Map<string, { x: number; y: number }>()
     const batchCandidates: Array<{
@@ -355,14 +354,14 @@ export function useCanvasPositions({
         return { ...n, position: old.position }
       }
 
-      // Handoff: a real result lands fresh and matches a prior pending
-      // pad by its deliverable (prompt for image/video, text for voice).
+      // Handoff: a real result lands fresh and matches its prior pending
+      // pad by pending job id.
       // Inherit the pad's last-seen position (including drag). Skipped
       // when projection already produced that exact position (within
       // DRAG_EPSILON) — saves a redundant sidecar PATCH.
-      if (ghostsByKey.size > 0) {
-        const key = ghostMatchKey(n.type ?? '', n.data)
-        const ghost = key !== null ? ghostsByKey.get(key) : undefined
+      if (ghostsByJobId.size > 0) {
+        const jobId = resultPendingJobId(n.type ?? '', n.data)
+        const ghost = jobId !== null ? ghostsByJobId.get(jobId) : undefined
         if (ghost !== undefined) {
           const dx = Math.abs(ghost.position.x - n.position.x)
           const dy = Math.abs(ghost.position.y - n.position.y)

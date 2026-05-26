@@ -15,6 +15,8 @@ export interface NodeMetadataBase {
   source?: string
   task_type?: string
   generated_at?: string
+  /** Generation job that minted this node; used for exact pending-card handoff. */
+  pending_job_id?: string
 }
 
 export type NoteSubtype = 'script' | 'shot'

@@ -152,6 +152,7 @@ try {
         model: modelName,
         ...(durationSec !== null ? { duration_sec: durationSec } : {}),
         generated_at: generatedAt,
+        pending_job_id: jobId,
       },
     };
     const mutPayload = {

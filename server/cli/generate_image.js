@@ -184,6 +184,7 @@ try {
       aspect_ratio: args["aspect-ratio"],
       image_size: args["image-size"],
       generated_at: isoNow(),
+      pending_job_id: jobId,
     },
     ...(args.subtype ? { subtype: args.subtype } : {}),
     ...(args.name ? { name: args.name } : {}),

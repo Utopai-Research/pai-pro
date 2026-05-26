@@ -132,30 +132,15 @@ const rfNodeCache = new WeakMap<CanvasNode, CachedRfNode>()
 const rfEdgeCache = new WeakMap<WfEdge, Edge>()
 
 /**
- * Match key for ghost-handoff + pending suppression. Image/video match
- * on prompt (the deliverable); voice matches on text (the spoken line —
- * voice design prompt isn't unique). Prefix keeps cross-kind collisions
- * impossible. Returns null when the relevant field is empty.
- *
- * Accepts either a workflow result node (`image_result` / `video_result`
- * / `audio_result`) or a pending pad (`pending_generation` whose data
- * carries `kind`). Both shapes share `prompt` + `text` field names.
+ * Exact generation handoff key. Generated result nodes carry the pending
+ * job id that minted them, so duplicate prompts never collide.
  */
-export function ghostMatchKey(type: string, data: unknown): string | null {
-  const d = data as { kind?: string; prompt?: string; text?: string }
-  let kind: 'image' | 'video' | 'audio' | null = null
-  if (type === 'pending_generation') {
-    kind = d.kind === 'image' || d.kind === 'video' || d.kind === 'audio' ? d.kind : null
-  } else if (type === 'image_result') kind = 'image'
-  else if (type === 'video_result') kind = 'video'
-  else if (type === 'audio_result') kind = 'audio'
-  if (kind === null) return null
-  if (kind === 'audio') {
-    const t = String(d.text ?? '').trim()
-    return t !== '' ? `audio:${t}` : null
+export function resultPendingJobId(type: string, data: unknown): string | null {
+  if (type !== 'image_result' && type !== 'video_result' && type !== 'audio_result') {
+    return null
   }
-  const p = String(d.prompt ?? '').trim()
-  return p !== '' ? `media:${p}` : null
+  const id = (data as { metadata?: { pending_job_id?: unknown } }).metadata?.pending_job_id
+  return typeof id === 'string' && id !== '' ? id : null
 }
 
 export interface ProjectionInput {
@@ -215,6 +200,7 @@ function imageNodeData(n: ImageResultNode, shortId: string, derivedRefs: MediaRe
       model: d.metadata?.model,
       source: d.metadata?.source,
       generated_at: d.metadata?.generated_at,
+      pending_job_id: d.metadata?.pending_job_id,
     },
   }
 }
@@ -225,14 +211,16 @@ function audioNodeData(n: AudioResultNode, shortId: string, derivedRefs: MediaRe
     audio_url: d.audio_url,
     label: d.label,
     subtype: d.subtype,
-    // `text` is the deliverable key ghostMatchKey reads for audio —
-    // without it, undragged pending voice pads can't be handed off to
-    // their real audio_result and snap to a fresh spiral position.
+    // `text` is the audio deliverable and still feeds prompt/text based
+    // grouping elsewhere in the UI.
     text: d.text,
     state: 'complete' as const,
     shortId,
     derived_refs: derivedRefs,
-    metadata: { duration_sec: d.metadata?.duration_sec },
+    metadata: {
+      duration_sec: d.metadata?.duration_sec,
+      pending_job_id: d.metadata?.pending_job_id,
+    },
   }
 }
 
@@ -254,6 +242,7 @@ function videoNodeData(n: VideoResultNode, shortId: string, derivedRefs: MediaRe
       model: d.metadata?.model,
       source: d.metadata?.source,
       generated_at: d.metadata?.generated_at,
+      pending_job_id: d.metadata?.pending_job_id,
     },
   }
 }
@@ -289,26 +278,24 @@ export function projectWorkflowToCanvas(
   // Pending pads are emitted as `pending_generation` RFNodes at (0,0);
   // useCanvasPositions's spiral placement assigns them a visible spot.
   //
-  // Suppression matches on the deliverable key (prompt for image/video,
-  // text for voice). When the real result lands, the placeholder can
-  // vanish even if the watcher's unlink event is still in flight.
-  const liveKeys = new Set<string>()
+  // Suppression matches the exact pending job id stamped on the result
+  // node. Prompt/text matching is ambiguous when a user regenerates the
+  // same deliverable, so it must not decide whether a running pad hides.
+  const completedPendingJobIds = new Set<string>()
   for (const wfNode of wfNodes) {
-    const key = ghostMatchKey(wfNode.type, wfNode.data)
-    if (key !== null) liveKeys.add(key)
+    if (archivedIds.has(wfNode.id)) continue
+    const jobId = resultPendingJobId(wfNode.type, wfNode.data)
+    if (jobId !== null) completedPendingJobIds.add(jobId)
   }
   const visiblePending: PendingGeneration[] = []
   for (const pg of input.pendingGenerations ?? []) {
     // Drafts and failed pads are explicit user-visible states — never
-    // auto-suppress them just because another node shares the prompt.
+    // auto-suppress them.
     if (pg.stage === 'draft' || pg.stage === 'failed') {
       visiblePending.push(pg)
       continue
     }
-    const key = ghostMatchKey('pending_generation', {
-      kind: pg.kind, prompt: pg.prompt, text: pg.text,
-    })
-    if (key !== null && liveKeys.has(key)) continue
+    if (completedPendingJobIds.has(pg.id)) continue
     visiblePending.push(pg)
   }
 
