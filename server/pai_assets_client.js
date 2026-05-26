@@ -192,7 +192,7 @@ async function ensureAssetGroup() {
       _groupIdPromise = null;
       throw err("infra", `CreateAssetGroup returned no Id: ${JSON.stringify(data).slice(0, 300)}`);
     }
-    console.log(`[pai-assets] asset group ready: ${groupId}`);
+    console.error(`[pai-assets] asset group ready: ${groupId}`);
     return groupId;
   })().catch((e) => {
     _groupIdPromise = null;

@@ -22,10 +22,9 @@
  * which runs server-side ffmpeg concat over every shot-id'd clip and
  * streams the MP4 back as a download.
  *
- * Drag-reorder uses native HTML5 DnD with the dragged node's id in
- * dataTransfer. Reorder math runs client-side, then we PATCH all
- * affected nodes in one batch via /projects/:id/nodes/batch-data so
- * the server emits a single canvas-state update.
+ * Drag-reorder uses dnd-kit. Reorder math runs client-side, then we
+ * PATCH all affected nodes in one batch via /projects/:id/nodes/batch-data
+ * so the server emits a single canvas-state update.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
@@ -91,7 +90,7 @@ function formatTime(secs: number): string {
 
 async function patchBatch(projectId: string, updates: BatchUpdate[]) {
   if (updates.length === 0) return
-  await fetch(
+  const res = await fetch(
     `${VIEWER_URL}/projects/${encodeURIComponent(projectId)}/nodes/batch-data`,
     {
       method: 'PATCH',
@@ -99,6 +98,10 @@ async function patchBatch(projectId: string, updates: BatchUpdate[]) {
       body: JSON.stringify({ updates }),
     },
   )
+  if (!res.ok) {
+    const txt = await res.text().catch(() => '')
+    throw new Error(`PATCH /nodes/batch-data failed: ${res.status} ${res.statusText}${txt ? ` ${txt}` : ''}`)
+  }
 }
 
 export function TimelinePanel({
@@ -477,10 +480,7 @@ export function TimelinePanel({
     setTime(t)
   }
 
-  // ---- Drag-and-drop reorder / move between sections ----
-  //
-  // Source contract: the dragged element's onDragStart calls
-  // dataTransfer.setData(DRAG_MIME, nodeId).
+  // ---- Timeline reorder / move between sections ----
   //
   // Drop targets:
   //   - slot N        → insert source at position N (0..reel.length).
@@ -549,26 +549,20 @@ export function TimelinePanel({
     await reorderTo(nodeId, { kind: 'slot', index: reel.length })
   }
 
-  // ---- dnd-kit reorder + cross-region drag (Stage 1 + 2) ------------
+  // ---- dnd-kit reorder + cross-region drag -------------------------
   //
-  // Stage 1 wired intra-reel reorder. Stage 2 (in-progress) wires
-  // cross-region drag (Available card ↔ reel) via the same DndContext.
-  // The legacy HTML5 paths (DRAG_MIME, onCardDragStart, container-level
-  // onDragOver/onDrop) are gone — dnd-kit owns every drag surface.
-  // Remove (✕ on each reel card) and +Reel (on each Available card) stay
-  // as explicit button-driven alternatives to the drag paths.
+  // Dnd-kit owns every drag surface. Remove and +Reel remain as explicit
+  // button-driven alternatives to dragging.
   //
-  // Optimistic-order pattern (handover §5.3): the user sees the new
-  // order instantly via `optimisticOrder` overriding the truth-derived
-  // order; PATCH fires in the background; `useEffect` clears optimistic
-  // when the canvas-state catch-up makes truth match.
+  // The user sees the new order instantly via `optimisticOrder`
+  // overriding the truth-derived order; PATCH fires in the background;
+  // `useEffect` clears optimistic when the canvas-state catch-up matches.
   const [optimisticOrder, setOptimisticOrder] = useState<string[] | null>(null)
   const [activeDragId, setActiveDragId] = useState<string | null>(null)
   const dragBaselineRef = useRef<string[] | null>(null)
-  // Sticky-over collision target (handover §5.7-C). Persists the last
-  // valid over.id so cursor wobble in dead-zone padding (between reel
-  // grid rows, between sections) doesn't oscillate between two closest
-  // droppables and strobe the preview.
+  // Sticky-over collision target. Persists the last valid over.id so
+  // cursor wobble in dead-zone padding does not oscillate between two
+  // closest droppables and strobe the preview.
   const lastOverIdRef = useRef<string | null>(null)
 
   // Truth, derived from the live shot_id sort.
@@ -585,12 +579,8 @@ export function TimelinePanel({
   // user sees the new order the instant they drop, before the round-
   // trip lands.
   //
-  // byId pulls from BOTH reel and available — cross-region drag
-  // (Stage 2) splices an Available source's id into optimisticOrder
-  // mid-drag, and the preview needs to render that source as a member
-  // of the reel grid. Without Available in the lookup, the splice
-  // would show in effectiveOrder but the .map would filter out the
-  // source's node data and the visual preview would silently break.
+  // byId pulls from both reel and available because cross-region drag
+  // splices an Available source into optimisticOrder mid-drag.
   const effectiveReel = useMemo<VideoResultNode[]>(() => {
     if (optimisticOrder == null) return reel
     const byId = new Map<string, VideoResultNode>()
@@ -601,13 +591,9 @@ export function TimelinePanel({
       .filter((n): n is VideoResultNode => Boolean(n))
   }, [reel, available, optimisticOrder])
 
-  // Available rendered as `effectiveAvailable` (Stage 2 fix): when the
-  // cross-region preview engages, optimisticOrder includes the source
-  // id and the source is rendered inside the reel grid. Without
-  // excluding it from Available, the source would visually appear in
-  // both places (and dnd-kit registers double droppables for it). The
-  // pai-next "partition from effective order, not truth" pattern
-  // (handover §3 data-model contract).
+  // When the cross-region preview engages, optimisticOrder includes
+  // the source id and the source is rendered inside the reel grid. Keep
+  // it out of Available so it is not visible in both sections.
   const effectiveAvailable = useMemo<VideoResultNode[]>(() => {
     if (optimisticOrder == null) return available
     const optSet = new Set(optimisticOrder)
@@ -666,12 +652,10 @@ export function TimelinePanel({
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   )
 
-  // Strobe killer C (handover §5.7-C): once the cursor commits to a
-  // droppable, stay committed until it explicitly enters a different
-  // droppable's rect. Without this, sub-pixel cursor wobble in dead-
-  // zone padding (between reel grid rows, between the reel and
-  // Available sections) flips `closestCenter`'s result frame-to-frame
-  // and the preview strobes.
+  // Once the cursor commits to a droppable, stay committed until it
+  // explicitly enters a different droppable's rect. Without this,
+  // sub-pixel cursor wobble in dead-zone padding flips `closestCenter`
+  // frame-to-frame and the preview strobes.
   //
   // Reset lastOverIdRef in handleDragStart / handleDragEnd /
   // handleDragCancel so a leftover from the previous drag can't bias
@@ -699,10 +683,10 @@ export function TimelinePanel({
     [optimisticOrder, truthOrder],
   )
 
-  // Cross-region preview (handover §5.6). Cross-region drag from
-  // Available splices the source into the reel at the over index
-  // mid-drag so neighbors reflow before release. Intra-reel drag is
-  // skipped — dnd-kit's natural transform-based reorder handles it.
+  // Cross-region drag from Available splices the source into the reel
+  // at the over index mid-drag so neighbors reflow before release.
+  // Intra-reel drag is skipped because dnd-kit's sortable transform
+  // handles it.
   //
   // Critical: splice against `baseline` (pre-drag snapshot), NOT
   // against the current optimistic state. Otherwise each pointer move
@@ -718,9 +702,9 @@ export function TimelinePanel({
       const over = event.over
       if (over) {
         const overId = String(over.id)
-        // Strobe killer A (handover §5.7-A): once preview engages, the
-        // source's <SortableClip> registers as a droppable. pointerWithin
-        // can pick it as `over`. Without this guard, the splice loops:
+        // Once preview engages, the source's <SortableClip> registers
+        // as a droppable. pointerWithin can pick it as `over`. Without
+        // this guard, the splice loops:
         // "source not in baseline → clear preview → cursor on real clip
         // → re-engage → strobe."
         if (overId === sourceId) return
@@ -785,8 +769,7 @@ export function TimelinePanel({
       const sourceInReel = oldIndex >= 0
       const overInReel = newIndex >= 0
 
-      // Four drag classes (handover §5.6 + the empty-reel polish from
-      // handover §9.2 / Proposal 04 §5.4 — baseline is pre-drag truth):
+      // Four drag classes, using the pre-drag truth as the baseline:
       //   1. Reel → Available (overId === 'archive'): clear shot_id via
       //      applyOptimisticOrder with the source filtered out. The
       //      null-clear branch of applyOptimisticOrder emits
@@ -835,9 +818,9 @@ export function TimelinePanel({
     }
   }, [truthOrder])
 
-  // Cross-region drag (Stage 2) introduces sources that aren't in `reel`
-  // yet — fall back to `available` so the cursor ghost (ClipGhostBody)
-  // renders for Available → reel drags as well as intra-reel.
+  // Cross-region drag introduces sources that are not in `reel` yet.
+  // Fall back to `available` so the cursor ghost renders for Available
+  // -> reel drags as well as intra-reel.
   const activeDragNode = useMemo(() => {
     if (activeDragId === null) return null
     return (
@@ -847,13 +830,9 @@ export function TimelinePanel({
     )
   }, [activeDragId, reel, available])
 
-  // Strobe killer B (handover §5.7-B): when a cross-region drag engages
-  // (Available source mounting in the reel via preview), the source's
-  // <DraggableCompactCard> unmounts from Available. Without a ghost
-  // placeholder, Available's grid reflows from N tiles to N-1, changing
-  // its bounding rect and feeding `closestCenter` an oscillating
-  // boundary near the divider. Rendering a transparent dashed-border
-  // tile in Available at the source's slot keeps the rect stable.
+  // When a cross-region drag previews an Available clip in the reel, the
+  // source card unmounts from Available. Keep a placeholder in its slot
+  // so the grid does not reflow under the pointer.
   //
   // ghostClipId === null when no cross-region preview is in flight.
   const ghostClipId =
@@ -1087,12 +1066,8 @@ export function TimelinePanel({
         {/* Reel section: the whole grid is one drop target. Position is
             taken from the cursor's left/right half of whichever card
             it's over; empty trailing space falls through to "append". */}
-        {/* Lifted DndContext — wraps both reel and Available sections so
-            cross-region drag (Available → reel slot, reel → Available)
-            can transition the same id between useDraggable and
-            useSortable within one drag (handover §8.7). Sensors,
-            collision detection, and handlers are shared across the
-            whole timeline DnD surface. */}
+        {/* One DndContext wraps both reel and Available so cross-region drag
+            can transition the same id between useDraggable and useSortable. */}
         <DndContext
           sensors={sensors}
           collisionDetection={collisionDetection}
@@ -1153,7 +1128,6 @@ export function TimelinePanel({
                             }}
                             onAction={() => removeFromReel(n.id)}
                             actionLabel="Remove"
-                            // No HTML5 drag handlers — dnd-kit owns this card.
                           />
                         </SortableClip>
                       )
@@ -1197,10 +1171,7 @@ export function TimelinePanel({
                     </DraggableCompactCard>
                   )
                 })}
-                {/* Strobe killer B (handover §5.7-B): rect-stable placeholder
-                    for the in-flight cross-region source. Same grid cell
-                    footprint as a real Available card, keeping the grid's
-                    child count constant during the drag. */}
+                {/* Rect-stable placeholder for the in-flight cross-region source. */}
                 {ghostClipId !== null && (
                   <GhostPlaceholder key={`ghost-${ghostClipId}`} />
                 )}
@@ -1253,10 +1224,6 @@ function ReelCard({
   onClick,
   onAction,
   actionLabel,
-  onDragStart,
-  onDragOver,
-  onDragLeave,
-  onDrop,
 }: {
   node: VideoResultNode
   active: boolean
@@ -1265,32 +1232,14 @@ function ReelCard({
   onClick: () => void
   onAction: () => void
   actionLabel: 'Remove'
-  // HTML5 drag handlers are optional — when this card is rendered inside
-  // a SortableClip wrapper (dnd-kit), the wrapper owns drag and these
-  // are undefined; the card then renders as draggable={false}.
-  onDragStart?: (e: React.DragEvent) => void
-  onDragOver?: (e: React.DragEvent) => void
-  onDragLeave?: () => void
-  onDrop?: (e: React.DragEvent) => void
 }): JSX.Element {
   const url = node.data.video_url
   const shotId = node.data.shot_id
   const label = node.data.label ?? 'untitled'
   const aspect = node.data.aspect ?? '16:9'
   const duration = node.data.duration
-  // dnd-kit-wrapped cards (intra-reel reorder) have no HTML5 handlers and
-  // must NOT be `draggable` or the browser-level drag steals pointer
-  // events from dnd-kit's MouseSensor. HTML5-only callers (legacy
-  // Available section fallback during Stage 1) pass the handlers and get
-  // `draggable=true`.
-  const html5Drag = typeof onDragStart === 'function'
   return (
     <div
-      draggable={html5Drag}
-      onDragStart={onDragStart}
-      onDragOver={onDragOver}
-      onDragLeave={onDragLeave}
-      onDrop={onDrop}
       className={
         'group relative overflow-hidden rounded-md border bg-neutral-950 transition-colors ' +
         (active

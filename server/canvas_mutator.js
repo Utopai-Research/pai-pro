@@ -123,6 +123,12 @@ function findNodeIndex(draft, id) {
   return draft.nodes.findIndex((n) => n.id === id);
 }
 
+function assertNodeExists(draft, id, role) {
+  if (findNodeIndex(draft, id) === -1) {
+    throw new MutatorError("not_found", `edge ${role} node not found: ${id}`);
+  }
+}
+
 function findGroupIndex(draft, id) {
   if (!Array.isArray(draft.groups)) return -1;
   return draft.groups.findIndex((g) => g.id === id);
@@ -242,6 +248,8 @@ function reduceAddEdge(draft, { edge }) {
     (e) => e.from === edge.from && e.to === edge.to && (e.kind || null) === (edge.kind || null)
   );
   if (existing) return {}; // silent dedupe
+  assertNodeExists(draft, edge.from, "source");
+  assertNodeExists(draft, edge.to, "target");
   const out = { from: edge.from, to: edge.to };
   if (edge.kind) out.kind = edge.kind;
   draft.edges.push(out);
