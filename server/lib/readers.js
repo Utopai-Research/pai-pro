@@ -100,6 +100,10 @@ export async function readPendingEntry(id, jobId) {
     if (typeof parsed.script === "string" && parsed.script !== "") out.script = parsed.script;
     if (Array.isArray(parsed.argv)) out.argv = parsed.argv.filter((v) => typeof v === "string");
     if (typeof parsed.text === "string" && parsed.text !== "") out.text = parsed.text;
+    if (typeof parsed.klass === "string" && parsed.klass !== "") out.klass = parsed.klass;
+    if (typeof parsed.message === "string" && parsed.message !== "") out.message = parsed.message;
+    if (typeof parsed.completed_at === "string" && parsed.completed_at !== "") out.completed_at = parsed.completed_at;
+    if (parsed.sent && typeof parsed.sent === "object") out.sent = parsed.sent;
     // Sidecar-persisted drag position survives refresh and stage
     // transitions (writePending preserves it via read-modify-write).
     if (parsed.position && typeof parsed.position === "object"
@@ -163,7 +167,7 @@ export async function readResultEntry(id, jobId) {
 }
 
 function resultStatus(raw) {
-  if (raw?.ok === true) return "succeeded";
+  if (raw?.ok === true && !raw?.canvas_mutation_error) return "succeeded";
   if (raw?.klass === "aborted") return "aborted";
   if (raw?.klass === "timeout") return "timeout";
   return "failed";
@@ -183,7 +187,22 @@ function canvasMutationNodeId(raw) {
   return typeof id === "string" && id !== "" ? id : null;
 }
 
+function effectiveResult(raw) {
+  if (raw?.ok !== true || !raw?.canvas_mutation_error) return raw;
+  const err = raw.canvas_mutation_error;
+  return {
+    ...raw,
+    ok: false,
+    klass: typeof err.klass === "string" && err.klass !== "" ? err.klass : "infra",
+    message:
+      typeof err.message === "string" && err.message !== ""
+        ? err.message
+        : "canvas mutation failed after provider generation",
+  };
+}
+
 export function normalizeResultEntry(jobId, raw, { mtimeMs = 0 } = {}) {
+  raw = effectiveResult(raw);
   if (!raw || typeof raw !== "object" || typeof raw.ok !== "boolean") return null;
   const out = {
     job_id: typeof raw.job_id === "string" && raw.job_id !== "" ? raw.job_id : jobId,
@@ -208,6 +227,24 @@ export function normalizeResultEntry(jobId, raw, { mtimeMs = 0 } = {}) {
   if (typeof raw.local_path === "string" && raw.local_path !== "") out.local_path = raw.local_path;
   if (typeof raw.output_url === "string" && raw.output_url !== "") out.output_url = raw.output_url;
   if (typeof raw.model === "string" && raw.model !== "") out.model = raw.model;
+  if (typeof raw.prompt === "string") out.prompt = raw.prompt;
+  if (typeof raw.aspect_ratio === "string" && raw.aspect_ratio !== "") out.aspect_ratio = raw.aspect_ratio;
+  if (typeof raw.image_size === "string" && raw.image_size !== "") out.image_size = raw.image_size;
+  if (typeof raw.resolution === "string" && raw.resolution !== "") out.resolution = raw.resolution;
+  if (typeof raw.duration === "number" && Number.isFinite(raw.duration)) out.duration = raw.duration;
+  if (typeof raw.cost_usd === "number" && Number.isFinite(raw.cost_usd)) out.cost_usd = raw.cost_usd;
+  if (typeof raw.text === "string" && raw.text !== "") out.text = raw.text;
+  if (raw.position && typeof raw.position === "object"
+      && typeof raw.position.x === "number" && Number.isFinite(raw.position.x)
+      && typeof raw.position.y === "number" && Number.isFinite(raw.position.y)) {
+    out.position = { x: raw.position.x, y: raw.position.y };
+  }
+  if (Array.isArray(raw.reference_source_ids)) {
+    out.reference_source_ids = raw.reference_source_ids.filter((v) => typeof v === "string" && v !== "");
+  }
+  if (typeof raw.source_node_id === "string" && raw.source_node_id !== "") {
+    out.source_node_id = raw.source_node_id;
+  }
   if (raw.sent && typeof raw.sent === "object") out.sent = raw.sent;
   if (raw.limits && typeof raw.limits === "object") out.limits = raw.limits;
   return out;

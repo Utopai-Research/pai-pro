@@ -3,7 +3,7 @@
 // see server/canvas_mutator.js for the op surface.
 
 import { isoNow } from "./_cli.js";
-import { readActiveProject, readNodeArchived } from "../local_mirror.js";
+import { readActiveProject } from "../local_mirror.js";
 
 const DEFAULT_PORT = parseInt(process.env.VIEWER_PORT ?? "7488", 10);
 const DEFAULT_HOST = process.env.VIEWER_HOST || "localhost";
@@ -100,21 +100,6 @@ export async function postNodeAddBatch({ args, type, data, actor, tmpPath, pendi
   if (args["no-canvas-write"]) return null;
   const sourceNodeId = typeof args["source-node-id"] === "string" ? args["source-node-id"] : null;
   const refSourceIds = Array.isArray(args["ref-source-id"]) ? args["ref-source-id"] : [];
-  // Refuse archived authorship source before constructing the edge.
-  // (buildProviderRefs catches archived --ref-source-id at the ref level;
-  // this is the parallel check for --source-node-id.)
-  if (sourceNodeId) {
-    const projectId = typeof args["project-id"] === "string" ? args["project-id"] : undefined;
-    if (await readNodeArchived({ nodeId: sourceNodeId, projectId })) {
-      return {
-        canvas_mutation_error: {
-          klass: "bad_args",
-          message: `Source node ${sourceNodeId} is archived. Pick a live node, or ask the user to restore it.`,
-          request_id: typeof args["request-id"] === "string" ? args["request-id"] : null,
-        },
-      };
-    }
-  }
   const edges = [];
   if (sourceNodeId) {
     edges.push({ from: sourceNodeId, to: "$0", kind: "derived" });

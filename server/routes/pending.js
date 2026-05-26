@@ -100,6 +100,40 @@ function fallbackResult({ jobId, code, signal, spawnError }) {
   };
 }
 
+function pendingContext(entry) {
+  const out = {};
+  for (const key of [
+    "prompt",
+    "aspect_ratio",
+    "model",
+    "image_size",
+    "resolution",
+    "duration",
+    "cost_usd",
+    "text",
+    "position",
+    "reference_source_ids",
+    "source_node_id",
+  ]) {
+    if (entry?.[key] !== undefined) out[key] = entry[key];
+  }
+  return out;
+}
+
+function coerceCanvasMutationError(result) {
+  if (result?.ok !== true || !result.canvas_mutation_error) return result;
+  const err = result.canvas_mutation_error;
+  return {
+    ...result,
+    ok: false,
+    klass: typeof err.klass === "string" && err.klass !== "" ? err.klass : "infra",
+    message:
+      typeof err.message === "string" && err.message !== ""
+        ? err.message
+        : "canvas mutation failed after provider generation",
+  };
+}
+
 export function registerPendingRoutes({ app, projects, broadcasters }) {
   app.patch("/projects/:id/pending/:jobId", async (req, res) => {
     const { id, jobId } = req.params;
@@ -206,11 +240,12 @@ export function registerPendingRoutes({ app, projects, broadcasters }) {
         if (!parsed && code === 0) {
           console.warn(`[viewer] ${entry.script} for ${id}/${jobId} exited 0 without result JSON`);
         }
-        const result = {
+        const result = coerceCanvasMutationError({
+          ...pendingContext(entry),
           ...(parsed || fallbackResult({ jobId, code, signal, spawnError })),
           job_id: jobId,
           kind: entry.kind,
-        };
+        });
         try {
           const wrote = await writeResult(id, jobId, result);
           if (wrote) {

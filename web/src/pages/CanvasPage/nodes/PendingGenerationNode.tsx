@@ -12,6 +12,7 @@
 import { useState } from 'react'
 import type { NodeProps } from '@xyflow/react'
 import { Handle, Position } from '@xyflow/react'
+import { useChatComposer } from '@/contexts/ChatComposerContext'
 import { useFireConfirm } from '../FireConfirmProvider'
 import { parseAspectRatio, sizeForAspect, type NodeState } from '../nodeData'
 import { useNodeActions } from '../NodeActionsContext'
@@ -31,6 +32,9 @@ interface PendingGenerationData {
   cost_usd?: number
   /** Audio drafts: the spoken line for voice generations. */
   text?: string
+  klass?: string
+  message?: string
+  sent?: unknown
 }
 
 // Cards narrower than this get the portrait/narrow-only layout fixes
@@ -47,10 +51,11 @@ export function PendingGenerationNode({ id, data, selected }: NodeProps): JSX.El
   const prompt = d.prompt ?? ''
   const text = d.text ?? ''
   const isAudio = kind === 'audio'
+  const failureMessage = d.message ?? d.klass ?? 'Generation failed'
   // For voice, the body content is the spoken text (the deliverable);
   // the voice design `prompt` is metadata shown only in the overlay.
   // For image/video, it's the prompt verbatim.
-  const bodyText = isAudio ? text : prompt
+  const bodyText = stage === 'failed' ? failureMessage : isAudio ? text : prompt
   const dataState: NodeState =
     stage === 'failed' ? 'failed'
     : stage === 'draft' ? 'pending'
@@ -84,14 +89,17 @@ export function PendingGenerationNode({ id, data, selected }: NodeProps): JSX.El
     .join(' · ')
 
   const { onExpandMedia, onPatchDraft, onFireDraft, onDiscardDraft } = useNodeActions()
+  const composer = useChatComposer()
   const canExpand = onExpandMedia !== undefined
   const isDraft = stage === 'draft'
+  const isFailed = stage === 'failed'
 
   // Textarea is uncontrolled (defaultValue + onBlur PATCH); a controlled
   // input would re-mount on every keystroke as the socket fans the new
   // sidecar back. `firing` stays true between click and the running flip.
   const [firing, setFiring] = useState(false)
   const [draftError, setDraftError] = useState<string | null>(null)
+  const [failureSent, setFailureSent] = useState(false)
   // First-fire gate: routes the very first Generate click in this
   // browser through a centered confirmation modal owned by
   // FireConfirmProvider. Subsequent clicks run `onConfirm` immediately.
@@ -129,6 +137,12 @@ export function PendingGenerationNode({ id, data, selected }: NodeProps): JSX.El
     onDiscardDraft(id).catch((err) => {
       setDraftError(err instanceof Error ? err.message : String(err))
     })
+  }
+  const handleSendFailure = (e: React.MouseEvent): void => {
+    e.stopPropagation()
+    if (composer === null || failureSent) return
+    composer.insertAtCursor(buildFailureAgentPrompt(id, kind, d) + '\r')
+    setFailureSent(true)
   }
   const handleExpand = (e: React.MouseEvent): void => {
     e.stopPropagation()
@@ -258,6 +272,16 @@ export function PendingGenerationNode({ id, data, selected }: NodeProps): JSX.El
                 : `Generate${d.cost_usd !== undefined ? ` · $${d.cost_usd.toFixed(2)}` : ''}`}
             </button>
           </>
+        ) : isFailed ? (
+          <button
+            type="button"
+            className="btn-generate-primary pending-send-agent"
+            onClick={handleSendFailure}
+            disabled={composer === null || failureSent}
+            title={composer === null ? 'Terminal not ready' : 'Send this failure to the agent'}
+          >
+            {failureSent ? 'Sent' : 'Send failure to agent'}
+          </button>
         ) : (
           <span>{footMeta}</span>
         )}
@@ -265,4 +289,47 @@ export function PendingGenerationNode({ id, data, selected }: NodeProps): JSX.El
       <Handle type="source" position={source} />
     </div>
   )
+}
+
+function buildFailureAgentPrompt(
+  jobId: string,
+  kind: 'image' | 'video' | 'audio',
+  data: PendingGenerationData,
+): string {
+  const lines = [
+    'A browser-fired generation failed.',
+    '',
+    `Job: ${jobId}`,
+    `Kind: ${kind}`,
+    'Status: failed',
+  ]
+  if (data.klass) lines.push(`Class: ${data.klass}`)
+  if (data.message) lines.push(`Message: ${data.message}`)
+  const sentSummary = summarizeSent(data.sent)
+  if (sentSummary) lines.push(`Request summary: ${sentSummary}`)
+  lines.push(
+    '',
+    'Please inspect this result with:',
+    `node "$PAI_REPO_ROOT/server/cli/list_generation_results.js" --job-id ${jobId}`,
+    '',
+    'Then explain the cause and stage a corrected generation if appropriate.',
+  )
+  return lines.join('\n')
+}
+
+function summarizeSent(sent: unknown): string | null {
+  if (!sent || typeof sent !== 'object') return null
+  const rec = sent as Record<string, unknown>
+  const parts: string[] = []
+  const refIds = rec.ref_source_ids
+  if (Array.isArray(refIds) && refIds.length > 0) {
+    parts.push(`ref_source_ids=${refIds.filter((v) => typeof v === 'string').join(',')}`)
+  }
+  for (const key of ['aspect_ratio', 'image_size', 'resolution', 'duration']) {
+    const value = rec[key]
+    if (typeof value === 'string' || typeof value === 'number') {
+      parts.push(`${key}=${String(value)}`)
+    }
+  }
+  return parts.length > 0 ? parts.join('; ') : null
 }

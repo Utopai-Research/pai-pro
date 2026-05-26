@@ -225,6 +225,8 @@ test("POST /generate writes durable result sidecar and removes pending", async (
   assert.equal(result.job_id, jobId);
   assert.equal(result.kind, "image");
   assert.equal(result.klass, "bad_args");
+  assert.equal(result.prompt, "a test cat");
+  assert.equal(result.aspect_ratio, "1:1");
   assert.ok(result.completed_at);
   const bundle = await fetch(`${baseUrl}/projects/${TEST_PROJECT_ID}`).then((res) => res.json());
   const summary = bundle.generation_results.find((r) => r.job_id === jobId);

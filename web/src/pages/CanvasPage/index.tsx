@@ -43,7 +43,6 @@ import { useMediaExpandRegistration } from '@/contexts/MediaExpandContext'
 import { ProjectProvider } from '@/contexts/ProjectContext'
 import { useWorkflow } from '@/hooks/useWorkflow'
 import { FireConfirmProvider } from './FireConfirmProvider'
-import { GenerationResultsPanel } from './GenerationResultsPanel'
 import { GroupCreateModal } from './GroupCreateModal'
 import { HighlightEdge } from './HighlightEdge'
 import {
@@ -164,7 +163,6 @@ function CanvasPageInner(): JSX.Element | null {
   const {
     workflow,
     pendingGenerations,
-    generationResults,
     assetStatuses,
     loading,
     error,
@@ -777,7 +775,6 @@ function CanvasPageInner(): JSX.Element | null {
         <span style={{ pointerEvents: 'none' }}>
           Empty canvas — generate something or drop a file to seed it.
         </span>
-        <GenerationResultsPanel results={generationResults} />
         <UploadOverlay />
       </div>
     )
@@ -851,7 +848,6 @@ function CanvasPageInner(): JSX.Element | null {
             <ZoomBar onTidy={onTidy} />
             <SelectionToolbar onGroup={openCreateModal} onArchive={archiveNodes} />
           </ReactFlow>
-          <GenerationResultsPanel results={generationResults} />
           {/* Inside NodeActionsProvider so the overlay's useNodeActions() resolves.
               Inside FireConfirmProvider so the overlay's Generate button can
               raise the first-fire modal the same way the card does. */}

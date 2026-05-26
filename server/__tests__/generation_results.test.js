@@ -118,6 +118,31 @@ test("readResultDir filters failures, since, and exact job ids", async () => {
   assert.deepEqual(exact.map((r) => r.job_id), ["pending_bad"]);
 });
 
+test("readResultDir treats canvas mutation errors as failed results", async () => {
+  const id = "reader_canvas_mutation_error";
+  await setupProject(id);
+  await writeResultFile(id, "pending_canvas_failed", {
+    ok: true,
+    kind: "image",
+    completed_at: "2026-02-04T00:00:00.000Z",
+    prompt: "new image",
+    aspect_ratio: "1:1",
+    image_size: "2K",
+    canvas_mutation_error: {
+      klass: "bad_args",
+      message: "canvas rejected the result",
+    },
+  });
+
+  const results = await readers.readResultDir(id, { limit: 10 });
+  assert.equal(results[0].status, "failed");
+  assert.equal(results[0].ok, false);
+  assert.equal(results[0].klass, "bad_args");
+  assert.equal(results[0].message, "canvas rejected the result");
+  assert.equal(results[0].prompt, "new image");
+  assert.equal(results[0].aspect_ratio, "1:1");
+});
+
 test("list_generation_results lists recent and reports missing ids", async () => {
   const id = "cli_list";
   const cwd = await setupProject(id);

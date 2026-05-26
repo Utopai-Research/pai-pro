@@ -299,8 +299,9 @@ export function projectWorkflowToCanvas(
   }
   const visiblePending: PendingGeneration[] = []
   for (const pg of input.pendingGenerations ?? []) {
-    // Drafts are explicit user-staged calls — never auto-suppress them.
-    if (pg.stage === 'draft') {
+    // Drafts and failed pads are explicit user-visible states — never
+    // auto-suppress them just because another node shares the prompt.
+    if (pg.stage === 'draft' || pg.stage === 'failed') {
       visiblePending.push(pg)
       continue
     }

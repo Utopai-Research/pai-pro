@@ -8,7 +8,7 @@
  * every disk change (chokidar watcher + our HTTP write endpoints both
  * cause these to fire). The hook returns the latest event payload.
  */
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { getSocket, VIEWER_URL } from '@/lib/socket'
 import { mergeWorkflow, synthesizeAssetUrls } from '@/lib/workflowMerge'
 import type {
@@ -35,6 +35,42 @@ const EMPTY_POSITIONS: CanvasPositionsState = { positions: {}, groupFrames: {} }
 const EMPTY_PENDING: PendingGeneration[] = []
 const EMPTY_RESULTS: GenerationResult[] = []
 const EMPTY_ASSET_STATUSES: ReadonlyMap<string, AssetStatusEntry> = new Map()
+
+function failedResultToPending(result: GenerationResult): PendingGeneration | null {
+  if (result.status === 'succeeded') return null
+  return {
+    id: result.job_id,
+    kind: result.kind,
+    stage: 'failed',
+    prompt: result.prompt ?? '',
+    aspect_ratio: result.aspect_ratio ?? '16:9',
+    created_at: result.completed_at ?? null,
+    model: result.model,
+    image_size: result.image_size,
+    resolution: result.resolution,
+    duration: result.duration,
+    cost_usd: result.cost_usd,
+    text: result.text,
+    position: result.position,
+    reference_source_ids: result.reference_source_ids,
+    source_node_id: result.source_node_id,
+    klass: result.klass,
+    message: result.message,
+    completed_at: result.completed_at,
+    sent: result.sent,
+  }
+}
+
+function mergeFailedResultsIntoPending(
+  pending: PendingGeneration[],
+  results: GenerationResult[],
+): PendingGeneration[] {
+  const pendingIds = new Set(pending.map((p) => p.id))
+  const failed = results
+    .map(failedResultToPending)
+    .filter((p): p is PendingGeneration => p !== null && !pendingIds.has(p.id))
+  return failed.length === 0 ? pending : [...pending, ...failed]
+}
 
 export function useWorkflow(projectId: string | null): UseWorkflowResult {
   const [workflow, setWorkflow] = useState<Workflow | null>(null)
@@ -164,10 +200,15 @@ export function useWorkflow(projectId: string | null): UseWorkflowResult {
     }
   }, [projectId])
 
+  const visiblePendingGenerations = useMemo(
+    () => mergeFailedResultsIntoPending(pendingGenerations, generationResults),
+    [pendingGenerations, generationResults],
+  )
+
   return {
     workflow,
     canvasPositions,
-    pendingGenerations,
+    pendingGenerations: visiblePendingGenerations,
     generationResults,
     assetStatuses,
     bundle,

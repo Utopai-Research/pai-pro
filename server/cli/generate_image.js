@@ -204,6 +204,11 @@ try {
   if (!assignedNodeId) {
     await fs.unlink(tmpAbsPath).catch(() => {});
   }
+  if (mutResult?.canvas_mutation_error) {
+    const err = new Error(mutResult.canvas_mutation_error.message || "canvas mutation failed");
+    err.klass = mutResult.canvas_mutation_error.klass || "infra";
+    throw err;
+  }
   const localPath = assignedNodeId
     ? `assets/images/${assignedNodeId}${ext}`
     : null;

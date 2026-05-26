@@ -395,6 +395,54 @@ test("addBatch: missing edge endpoint rolls back the whole batch", async () => {
   }
 });
 
+test("addBatch: archived authorship source does not block result node landing", async () => {
+  const { p, dir, workflowPath } = await setupProject({
+    version: 2,
+    workflow_id: "t",
+    title: "T",
+    nodes: [
+      {
+        id: "image_1",
+        type: "image_result",
+        data: {
+          label: "archived source",
+          local_path: "assets/images/source.png",
+          archived: true,
+          metadata: { source: "t" },
+        },
+      },
+    ],
+    edges: [],
+  });
+  try {
+    const r = await mutate(p, {
+      request_id: newRid(),
+      op: "addBatch",
+      payload: {
+        nodes: [
+          {
+            type: "image_result",
+            data: {
+              label: "new image",
+              local_path: "assets/images/new.png",
+              metadata: { source: "pai" },
+            },
+          },
+        ],
+        edges: [{ from: "image_1", to: "$0", kind: "derived" }],
+      },
+    });
+    assert.equal(r.ok, true);
+    assert.deepEqual(r.assigned.node_ids, ["image_2"]);
+    const onDisk = await readWorkflow(workflowPath);
+    assert.equal(onDisk.nodes.length, 2);
+    assert.equal(onDisk.nodes[1].id, "image_2");
+    assert.deepEqual(onDisk.edges, [{ from: "image_1", to: "image_2", kind: "derived" }]);
+  } finally {
+    await teardown(dir);
+  }
+});
+
 test("updateBatch: N patches land atomically; invalid mid-batch rolls back all", async () => {
   const { p, dir, workflowPath } = await setupProject({
     version: 2,

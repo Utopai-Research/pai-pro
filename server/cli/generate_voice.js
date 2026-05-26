@@ -190,6 +190,11 @@ try {
   if (!assignedNodeId) {
     await fs.unlink(tmpAbsPath).catch(() => {});
   }
+  if (canvasMutationFragment?.canvas_mutation_error) {
+    const err = new Error(canvasMutationFragment.canvas_mutation_error.message || "canvas mutation failed");
+    err.klass = canvasMutationFragment.canvas_mutation_error.klass || "infra";
+    throw err;
+  }
   const localPath = assignedNodeId
     ? `assets/audios/${assignedNodeId}${ext}`
     : null;

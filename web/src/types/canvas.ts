@@ -253,6 +253,11 @@ export interface PendingGeneration {
   script?: string
   /** Audio-only: the spoken line for voice drafts. */
   text?: string
+  /** Failed result class/message, when a settled result is shown as a failed pad. */
+  klass?: string
+  message?: string
+  completed_at?: string
+  sent?: unknown
   /** Sidecar-persisted drag position. Survives refresh + stage
    * transitions so dragged draft/running pads keep their spot. */
   position?: { x: number; y: number }
@@ -281,6 +286,16 @@ export interface GenerationResult {
   local_path?: string | null
   output_url?: string | null
   model?: string
+  prompt?: string
+  aspect_ratio?: string
+  image_size?: string
+  resolution?: string
+  duration?: number
+  cost_usd?: number
+  text?: string
+  position?: { x: number; y: number }
+  reference_source_ids?: string[]
+  source_node_id?: string
   sent?: unknown
   limits?: unknown
 }

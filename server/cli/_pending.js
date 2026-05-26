@@ -97,7 +97,7 @@ export async function waitForResult(jobId, {
       const raw = await fsp.readFile(resultPath(jobId, cwd), "utf8");
       const parsed = JSON.parse(raw);
       if (parsed && typeof parsed === "object" && typeof parsed.ok === "boolean") {
-        return parsed;
+        return coerceCanvasMutationError(parsed);
       }
       return {
         ok: false,
@@ -182,6 +182,48 @@ export async function fireAndWait({ projectId, jobId, kind, timeoutMs } = {}) {
   return waitForResult(jobId, { kind, timeoutMs });
 }
 
+async function pendingContextForResult(jobId, cwd) {
+  try {
+    const parsed = JSON.parse(
+      await fsp.readFile(path.join(cwd, PENDING_DIR_NAME, `${jobId}.json`), "utf8"),
+    );
+    if (!parsed || typeof parsed !== "object") return {};
+    const out = {};
+    for (const key of [
+      "prompt",
+      "aspect_ratio",
+      "model",
+      "image_size",
+      "resolution",
+      "duration",
+      "cost_usd",
+      "text",
+      "position",
+      "reference_source_ids",
+      "source_node_id",
+    ]) {
+      if (parsed[key] !== undefined) out[key] = parsed[key];
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+function coerceCanvasMutationError(result) {
+  if (result?.ok !== true || !result.canvas_mutation_error) return result;
+  const err = result.canvas_mutation_error;
+  return {
+    ...result,
+    ok: false,
+    klass: typeof err.klass === "string" && err.klass !== "" ? err.klass : "infra",
+    message:
+      typeof err.message === "string" && err.message !== ""
+        ? err.message
+        : "canvas mutation failed after provider generation",
+  };
+}
+
 // Write the durable terminal record for a CLI-owned generation to
 // `<cwd>/.results/<jobId>.json`. The viewer's chokidar watcher picks it up
 // and broadcasts `generation-results`; `list_generation_results.js` and
@@ -192,11 +234,12 @@ export async function writeResultSidecar(jobId, result, { cwd = process.cwd() } 
   if (!jobId || !result || typeof result !== "object") return false;
   const dir = path.join(cwd, RESULTS_DIR_NAME);
   const target = path.join(dir, `${jobId}.json`);
-  const payload = {
+  const payload = coerceCanvasMutationError({
+    ...(await pendingContextForResult(jobId, cwd)),
     ...result,
     job_id: jobId,
     completed_at: result.completed_at || new Date().toISOString(),
-  };
+  });
   const tmp = `${target}.${process.pid}.${Date.now()}.tmp`;
   try {
     await fsp.mkdir(dir, { recursive: true });

@@ -441,6 +441,19 @@
 .node.pending.failed .pending-gen-prompt {
   color: oklch(0.65 0.1 25);
 }
+.node.pending.failed .node-foot {
+  justify-content: stretch;
+}
+.pending-send-agent {
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pending-send-agent:disabled {
+  cursor: default;
+}
 .pending-gen-hint {
   position: absolute;
   left: 50%;
@@ -744,4 +757,3 @@
    the body scrolls; offset clears the head bar that owns the top 36px. */
 .node.note > .media-expand-btn { top: 36px; }
 .node.note > .media-download-btn { top: 36px; }
-
