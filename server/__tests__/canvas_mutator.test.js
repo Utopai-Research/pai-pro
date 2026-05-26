@@ -220,6 +220,49 @@ test("addEdge: dedupe is silent no-op", async () => {
   }
 });
 
+test("addEdge: rejects missing source or target nodes", async () => {
+  const { p, dir } = await setupProject({
+    version: 2,
+    workflow_id: "t",
+    title: "T",
+    nodes: [
+      { id: "note_1", type: "note", data: { label: "a", body: "A" } },
+      { id: "note_2", type: "note", data: { label: "b", body: "B" } },
+    ],
+    edges: [],
+  });
+  try {
+    const ok = await mutate(p, {
+      request_id: newRid(),
+      op: "addEdge",
+      payload: { edge: { from: "note_1", to: "note_2", kind: "derived" } },
+    });
+    assert.equal(ok.ok, true);
+    assert.equal(p.canvasState.edges.length, 1);
+
+    const missingSource = await mutate(p, {
+      request_id: newRid(),
+      op: "addEdge",
+      payload: { edge: { from: "note_404", to: "note_2", kind: "derived" } },
+    });
+    assert.equal(missingSource.ok, false);
+    assert.equal(missingSource.klass, "not_found");
+    assert.match(missingSource.message, /source node not found/);
+
+    const missingTarget = await mutate(p, {
+      request_id: newRid(),
+      op: "addEdge",
+      payload: { edge: { from: "note_1", to: "note_404", kind: "derived" } },
+    });
+    assert.equal(missingTarget.ok, false);
+    assert.equal(missingTarget.klass, "not_found");
+    assert.match(missingTarget.message, /target node not found/);
+    assert.equal(p.canvasState.edges.length, 1);
+  } finally {
+    await teardown(dir);
+  }
+});
+
 test("deleteEdge: removes; missing returns not_found", async () => {
   const { p, dir } = await setupProject({
     version: 2,
@@ -313,6 +356,40 @@ test("addBatch: nodes + edges with $N + group, atomic on disk", async () => {
     assert.equal(onDisk.edges.length, 2);
     assert.deepEqual(onDisk.edges.map((e) => e.to), ["image_2", "image_3"]);
     assert.deepEqual(onDisk.groups[0].node_ids, ["image_2", "image_3"]);
+  } finally {
+    await teardown(dir);
+  }
+});
+
+test("addBatch: missing edge endpoint rolls back the whole batch", async () => {
+  const { p, dir, workflowPath } = await setupProject({
+    version: 2,
+    workflow_id: "t",
+    title: "T",
+    nodes: [
+      { id: "image_1", type: "image_result", data: { label: "source", local_path: "assets/images/source.png", metadata: { source: "t" } } },
+    ],
+    edges: [],
+  });
+  try {
+    const before = structuredClone(p.canvasState);
+    await writeFile(workflowPath, JSON.stringify(before, null, 2) + "\n");
+    const r = await mutate(p, {
+      request_id: newRid(),
+      op: "addBatch",
+      payload: {
+        nodes: [
+          { type: "image_result", data: { label: "child", local_path: "assets/images/child.png", metadata: { source: "t" } } },
+        ],
+        edges: [
+          { from: "image_missing", to: "$0", kind: "derived" },
+        ],
+      },
+    });
+    assert.equal(r.ok, false);
+    assert.equal(r.klass, "not_found");
+    assert.deepEqual(p.canvasState, before);
+    assert.deepEqual(await readWorkflow(workflowPath), before);
   } finally {
     await teardown(dir);
   }

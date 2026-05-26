@@ -238,7 +238,7 @@ export async function setCanvasGroupFramePosition(
 
 export interface UploadedNode {
   id: string
-  type: 'image_result' | 'video_result' | 'note'
+  type: 'image_result' | 'video_result' | 'audio_result' | 'note'
   data: Record<string, unknown>
 }
 

@@ -222,7 +222,7 @@ async function withTransientRetry({ logTag, attempt }) {
     return await attempt();
   } catch (e) {
     if (e.klass !== "transient") throw e;
-    console.log(`[${logTag}] transient retry in ${TRANSIENT_RETRY_BACKOFF_MS / 1000}s: ${e.message.slice(0, 120)}`);
+    console.error(`[${logTag}] transient retry in ${TRANSIENT_RETRY_BACKOFF_MS / 1000}s: ${e.message.slice(0, 120)}`);
     await new Promise((r) => setTimeout(r, TRANSIENT_RETRY_BACKOFF_MS));
     try {
       return await attempt();

@@ -167,18 +167,20 @@ export function mergeWorkflow(
   const mergedNodes = mergeNodes(prev.nodes, next.nodes)
   const mergedEdges = mergeEdges(prev.edges, next.edges)
   const mergedGroups = mergeGroups(prev.groups, next.groups)
+  const mergedNextIds = deepEqual(prev.next_ids, next.next_ids) ? prev.next_ids : next.next_ids
 
   const scalarsEqual =
     prev.version === next.version &&
     prev.workflow_id === next.workflow_id &&
     prev.title === next.title
 
-  const arraysIdentical =
+  const mergedReferencesIdentical =
     mergedNodes === prev.nodes &&
     mergedEdges === prev.edges &&
-    mergedGroups === prev.groups
+    mergedGroups === prev.groups &&
+    mergedNextIds === prev.next_ids
 
-  if (scalarsEqual && arraysIdentical) return prev
+  if (scalarsEqual && mergedReferencesIdentical) return prev
 
   return {
     version: next.version,
@@ -187,5 +189,6 @@ export function mergeWorkflow(
     nodes: mergedNodes,
     edges: mergedEdges,
     groups: mergedGroups,
+    next_ids: mergedNextIds,
   }
 }
