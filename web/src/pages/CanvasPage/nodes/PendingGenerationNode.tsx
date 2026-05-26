@@ -158,6 +158,10 @@ export function PendingGenerationNode({ id, data, selected }: NodeProps): JSX.El
     setFailureSent(true)
     onDismissFailedGeneration?.(id)
   }
+  const handleDismissFailure = (e: React.MouseEvent): void => {
+    e.stopPropagation()
+    onDismissFailedGeneration?.(id)
+  }
   const handleExpand = (e: React.MouseEvent): void => {
     e.stopPropagation()
     if (!canExpand) return
@@ -300,15 +304,26 @@ export function PendingGenerationNode({ id, data, selected }: NodeProps): JSX.El
             </button>
           </>
         ) : isFailed ? (
-          <button
-            type="button"
-            className="btn-generate-primary pending-send-agent"
-            onClick={handleSendFailure}
-            disabled={composer === null || failureSent}
-            title={composer === null ? 'Terminal not ready' : 'Send this failure to the agent'}
-          >
-            {failureSent ? 'Sent' : 'Send failure to agent'}
-          </button>
+          <div className="pending-failure-actions">
+            <button
+              type="button"
+              className="btn-cancel pending-dismiss-failure"
+              onClick={handleDismissFailure}
+              disabled={onDismissFailedGeneration === undefined}
+              title="Dismiss this failed generation"
+            >
+              Dismiss
+            </button>
+            <button
+              type="button"
+              className="btn-generate-primary pending-send-agent"
+              onClick={handleSendFailure}
+              disabled={composer === null || failureSent}
+              title={composer === null ? 'Terminal not ready' : 'Send this failure to the agent'}
+            >
+              {failureSent ? 'Sent' : 'Send failure to agent'}
+            </button>
+          </div>
         ) : (
           <span>{footMeta}</span>
         )}

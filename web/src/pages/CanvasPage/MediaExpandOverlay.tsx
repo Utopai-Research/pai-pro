@@ -213,6 +213,11 @@ export function MediaExpandOverlay({
     onDismissFailedGeneration?.(failureJobId)
     onClose()
   }
+  const onDismissFailure = (): void => {
+    if (!isFailed || typeof failureJobId !== 'string' || failureJobId === '') return
+    onDismissFailedGeneration?.(failureJobId)
+    onClose()
+  }
 
   const onRestore = async (): Promise<void> => {
     if (projectId === null || typeof id !== 'string' || id === '') return
@@ -303,7 +308,8 @@ export function MediaExpandOverlay({
         className={
           'media-expand-content' +
           (topExpanded ? ' media-expand-content-top-open' : '') +
-          (isDraft || isFailed ? ' media-expand-content-draft' : '')
+          (isDraft ? ' media-expand-content-draft' : '') +
+          (isFailed ? ' media-expand-content-failed' : '')
         }
         onClick={(e) => {
           e.stopPropagation()
@@ -473,6 +479,15 @@ export function MediaExpandOverlay({
           </div>
         ) : isFailed ? (
           <div className="media-expand-failure-bar">
+            <button
+              type="button"
+              className="media-expand-failure-dismiss"
+              onClick={onDismissFailure}
+              disabled={typeof failureJobId !== 'string' || failureJobId === ''}
+              title="Dismiss this failed generation"
+            >
+              Dismiss
+            </button>
             <button
               type="button"
               className="media-expand-failure-cta"

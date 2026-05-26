@@ -465,8 +465,17 @@
 .node.pending.failed .node-foot {
   justify-content: stretch;
 }
-.pending-send-agent {
+.pending-failure-actions {
+  display: flex;
+  gap: 6px;
   width: 100%;
+  min-width: 0;
+}
+.pending-dismiss-failure {
+  flex: 0 0 auto;
+}
+.pending-send-agent {
+  flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;

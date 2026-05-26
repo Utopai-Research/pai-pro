@@ -111,11 +111,11 @@
   border-color: var(--accent);
 }
 
-/* ── Draft overlay ──────────────────────────────────────────────────
-   Drafts skip the media-expand-main row entirely (no GENERATING
-   placeholder); the TopStrip's panel becomes the main content, and
-   the bottom row carries Cancel + Generate. */
-.media-expand-content.media-expand-content-draft {
+/* ── Draft / failed overlays ────────────────────────────────────────
+   These skip the media-expand-main row entirely; the TopStrip's panel
+   becomes the main content and the bottom row carries the action bar. */
+.media-expand-content.media-expand-content-draft,
+.media-expand-content.media-expand-content-failed {
   grid-template-rows: 1fr auto;
 }
 .me-top.me-top-static {
@@ -140,16 +140,16 @@
    section/textarea classes) flex-fills the leftover space below
    REFERENCES + DETAILS. Mirrors `.note-expand-textarea` inside
    `.note-expand-body` further down in this file. */
-.me-top.me-top-static .me-prompt-section {
+.media-expand-content-draft .me-top.me-top-static .me-prompt-section {
   flex: 1 1 auto;
   min-height: 0;
 }
-.me-top.me-top-static .me-prompt-section .me-prompt {
+.media-expand-content-draft .me-top.me-top-static .me-prompt-section .me-prompt {
   flex: 1 1 auto;
   min-height: 0;
   display: flex;
 }
-.me-top.me-top-static .me-prompt-section .me-prompt-textarea {
+.media-expand-content-draft .me-top.me-top-static .me-prompt-section .me-prompt-textarea {
   flex: 1 1 auto;
   min-height: 0;
   resize: none;
@@ -247,6 +247,32 @@
   background: oklch(0.62 0.16 145);
 }
 .media-expand-failure-cta:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.media-expand-failure-dismiss {
+  flex-shrink: 0;
+  height: 34px;
+  padding: 0 18px;
+  display: grid;
+  place-items: center;
+  border: 1px solid oklch(0.65 0.18 25 / 0.35);
+  background: transparent;
+  color: var(--ink-1);
+  border-radius: 6px;
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  line-height: 1;
+  white-space: nowrap;
+}
+.media-expand-failure-dismiss:hover {
+  background: oklch(0.20 0.03 25 / 0.72);
+}
+.media-expand-failure-dismiss:disabled {
   opacity: 0.45;
   cursor: not-allowed;
 }
