@@ -19,6 +19,10 @@ import fs from "node:fs";
 import fsp from "node:fs/promises";
 
 const PENDING_DIR_NAME = ".pending";
+const RESULTS_DIR_NAME = ".results";
+const DEFAULT_WAIT_TIMEOUT_MS = 10 * 60 * 1000;
+const VIDEO_WAIT_TIMEOUT_MS = 35 * 60 * 1000;
+const DEFAULT_WAIT_INTERVAL_MS = 1000;
 
 function pendingDir() {
   return path.join(process.cwd(), PENDING_DIR_NAME);
@@ -26,6 +30,10 @@ function pendingDir() {
 
 function pendingPath(jobId) {
   return path.join(pendingDir(), `${jobId}.json`);
+}
+
+function resultPath(jobId, cwd = process.cwd()) {
+  return path.join(cwd, RESULTS_DIR_NAME, `${jobId}.json`);
 }
 
 export function newJobId() {
@@ -45,6 +53,133 @@ export async function isBypassEnabled(cwd = process.cwd()) {
   } catch {
     return false;
   }
+}
+
+export async function isServerOwnedGenerationEnabled(cwd = process.cwd()) {
+  if (process.env.PAI_SERVER_OWNED_GENERATION === "0") return false;
+  try {
+    const meta = JSON.parse(
+      await fsp.readFile(path.join(cwd, "meta.json"), "utf8"),
+    );
+    return meta.use_server_owned_generation === true;
+  } catch {
+    return false;
+  }
+}
+
+export function defaultWaitTimeoutMsForKind(kind) {
+  return kind === "video" ? VIDEO_WAIT_TIMEOUT_MS : DEFAULT_WAIT_TIMEOUT_MS;
+}
+
+function parseWaitTimeout(timeoutMs, kind) {
+  if (typeof timeoutMs === "number" && Number.isFinite(timeoutMs) && timeoutMs >= 0) {
+    return timeoutMs;
+  }
+  const fromEnv = Number(process.env.PAI_WAIT_TIMEOUT_MS);
+  return Number.isFinite(fromEnv) && fromEnv >= 0 ? fromEnv : defaultWaitTimeoutMsForKind(kind);
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+export async function waitForResult(jobId, {
+  cwd = process.cwd(),
+  kind,
+  timeoutMs,
+  intervalMs = DEFAULT_WAIT_INTERVAL_MS,
+} = {}) {
+  const waitMs = parseWaitTimeout(timeoutMs, kind);
+  const pollMs = Math.max(10, Number(intervalMs) || DEFAULT_WAIT_INTERVAL_MS);
+  const deadline = Date.now() + waitMs;
+  while (true) {
+    try {
+      const raw = await fsp.readFile(resultPath(jobId, cwd), "utf8");
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === "object" && typeof parsed.ok === "boolean") {
+        return parsed;
+      }
+      return {
+        ok: false,
+        job_id: jobId,
+        klass: "infra",
+        message: `result sidecar ${jobId} has invalid shape`,
+      };
+    } catch (e) {
+      if (e.code !== "ENOENT" && e.code !== "ENOTDIR") {
+        return {
+          ok: false,
+          job_id: jobId,
+          klass: "infra",
+          message: `result sidecar ${jobId} is unreadable: ${e.message}`,
+        };
+      }
+    }
+    const now = Date.now();
+    if (now >= deadline) {
+      return {
+        ok: false,
+        job_id: jobId,
+        klass: "timeout",
+        message: `timed out waiting for generation result ${jobId}`,
+      };
+    }
+    await sleep(Math.min(pollMs, deadline - now));
+  }
+}
+
+function viewerBaseUrl() {
+  const host = process.env.VIEWER_HOST || "localhost";
+  const port = process.env.VIEWER_PORT || "7488";
+  return `http://${host}:${port}`;
+}
+
+export async function fireAndWait({ projectId, jobId, kind, timeoutMs } = {}) {
+  if (!projectId || !jobId) {
+    return {
+      ok: false,
+      job_id: jobId || null,
+      klass: "bad_args",
+      message: "fireAndWait requires projectId and jobId",
+    };
+  }
+  const url = new URL(
+    `/projects/${encodeURIComponent(projectId)}/pending/${encodeURIComponent(jobId)}/generate`,
+    viewerBaseUrl(),
+  );
+  url.searchParams.set("source", "bypass");
+  let response;
+  try {
+    response = await fetch(url, { method: "POST" });
+  } catch (e) {
+    return {
+      ok: false,
+      job_id: jobId,
+      klass: "infra",
+      message: `viewer fire request failed: ${e.message}`,
+    };
+  }
+  if (!response.ok) {
+    let message = `viewer fire request returned HTTP ${response.status}`;
+    try {
+      const body = await response.json();
+      if (body?.error) message = String(body.error);
+    } catch {
+      try {
+        const text = await response.text();
+        if (text.trim()) message = text.trim().slice(0, 400);
+      } catch {
+        /* keep status message */
+      }
+    }
+    return {
+      ok: false,
+      job_id: jobId,
+      klass: response.status === 404 ? "bad_args" : "infra",
+      message,
+    };
+  }
+  return waitForResult(jobId, { kind, timeoutMs });
 }
 
 // Write `<cwd>/.pending/<jobId>.json` describing the in-flight or staged

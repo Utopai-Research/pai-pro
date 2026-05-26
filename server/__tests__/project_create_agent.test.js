@@ -70,6 +70,7 @@ test("POST /projects stores claude agent_id when PAI_AGENT is unset", async () =
   try {
     const meta = await createProjectAndReadMeta(handle, "Agent Default");
     assert.equal(meta.agent_id, "claude");
+    assert.equal(meta.use_server_owned_generation, true);
   } finally {
     await stopViewer(handle);
   }

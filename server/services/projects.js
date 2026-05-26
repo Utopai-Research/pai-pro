@@ -15,14 +15,16 @@ import {
   projectDir,
   workflowPath,
   mutationLogPath,
+  pendingDir,
 } from "../lib/paths.js";
 import {
   readMeta,
   readCanvas,
   readCanvasPositions,
   readPendingDir,
+  readResultEntry,
 } from "../lib/readers.js";
-import { writeMeta, writeActive } from "../lib/writers.js";
+import { writeMeta, writeActive, writeResult } from "../lib/writers.js";
 
 // Per-project Claude wrapper. The `@./AGENTS.md` import pulls in the
 // canonical agent operating manual; everything below it is Claude-Code-
@@ -146,6 +148,54 @@ async function fileExists(p) {
   }
 }
 
+async function unlinkPendingSidecar(id, jobId) {
+  try {
+    await fsp.unlink(path.join(pendingDir(id), `${jobId}.json`));
+  } catch (e) {
+    if (e.code !== "ENOENT") throw e;
+  }
+}
+
+export async function recoverPendingResults(id) {
+  let entries;
+  try {
+    entries = await fsp.readdir(pendingDir(id), { withFileTypes: true });
+  } catch (e) {
+    if (e.code === "ENOENT") return;
+    throw e;
+  }
+
+  for (const entry of entries) {
+    if (!entry.isFile() || !entry.name.endsWith(".json")) continue;
+    const jobId = entry.name.slice(0, -".json".length);
+    let pending;
+    try {
+      pending = JSON.parse(
+        await fsp.readFile(path.join(pendingDir(id), entry.name), "utf8"),
+      );
+    } catch (e) {
+      console.warn(`[viewer] pending recovery skipped unreadable ${id}/${jobId}: ${e.message}`);
+      continue;
+    }
+    if (pending?.stage !== "running") continue;
+
+    const existing = await readResultEntry(id, jobId);
+    if (!existing) {
+      await writeResult(id, jobId, {
+        ok: false,
+        job_id: jobId,
+        kind:
+          pending.kind === "video" ? "video"
+          : pending.kind === "audio" ? "audio"
+          : "image",
+        klass: "aborted",
+        message: "viewer restart",
+      });
+    }
+    await unlinkPendingSidecar(id, jobId);
+  }
+}
+
 export async function loadProject(projects, id) {
   const meta = await readMeta(id);
   if (!meta) return null;
@@ -171,6 +221,7 @@ export async function primeProjects(projects) {
     if (!e.isDirectory()) continue;
     if (!isValidId(e.name)) continue;
     await ensureProjectStructure(e.name);
+    await recoverPendingResults(e.name);
     await loadProject(projects, e.name);
   }
   if (projects.size === 0) {
@@ -187,6 +238,7 @@ export async function primeProjects(projects) {
       created_at: now,
       last_active_at: now,
       agent_id: resolveAgentIdForNewProject(),
+      use_server_owned_generation: true,
     });
     await loadProject(projects, id);
     await writeActive(id);

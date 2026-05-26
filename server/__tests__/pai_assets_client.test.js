@@ -96,6 +96,16 @@ const GET_FAILED = (id = "asset-test-1", reason = "content rejected") => ({
 const ERR_INVALID_WIDTH = {
   detail: "video-generation-assets [CreateAsset]: InvalidParameter.WidthTooSmall — Width must be between 300px and 6000px.",
 };
+const ERR_INVALID_WIDTH_400 = {
+  ResponseMetadata: {
+    Action: "CreateAsset",
+    Error: {
+      Code: "InvalidParameter.WidthTooSmall",
+      Message: "Width must be between 300px and 6000px.",
+      Data: null,
+    },
+  },
+};
 const ERR_GROUP_NOTFOUND = {
   detail: "video-generation-assets [CreateAsset]: NotFound.group_id — The specified asset_group is not found.",
 };
@@ -192,6 +202,30 @@ test("InvalidParameter 502 (after retry) → bad_args assetRejected", withFakeTi
     restore();
   }
 }));
+
+test("InvalidParameter 400 ResponseMetadata.Error → bad_args assetRejected", async () => {
+  const client = await freshClient();
+  const fetchMock = makeFetchMock(({ action }) => {
+    if (action === "CreateAssetGroup") return GROUP_OK;
+    if (action === "CreateAsset") return { status: 400, body: ERR_INVALID_WIDTH_400 };
+    throw new Error(`unexpected action: ${action}`);
+  });
+  const restore = installFetch(fetchMock);
+  try {
+    await assert.rejects(
+      () => client.uploadReferenceUrl("https://ex.com/d2.png", "image"),
+      (e) => {
+        assert.equal(e.klass, "bad_args");
+        assert.equal(e.assetRejected, true);
+        assert.match(e.message, /InvalidParameter\.WidthTooSmall/);
+        return true;
+      },
+    );
+    assert.equal(client.snapshotAssetStates()["https://ex.com/d2.png"]?.status, "rejected");
+  } finally {
+    restore();
+  }
+});
 
 test("group TTL: NotFound.group_id recreates group, retries CreateAsset once", withFakeTimers(async () => {
   const client = await freshClient();

@@ -50,6 +50,7 @@ export function projectDir(id)        { return path.join(PROJECTS_DIR, id); }
 export function metaPath(id)          { return path.join(projectDir(id), "meta.json"); }
 export function workflowPath(id)      { return path.join(projectDir(id), "workflow.json"); }
 export function pendingDir(id)        { return path.join(projectDir(id), ".pending"); }
+export function resultsDir(id)        { return path.join(projectDir(id), ".results"); }
 export function canvasPositionsPath(id) {
   return path.join(projectDir(id), "canvas_positions.json");
 }

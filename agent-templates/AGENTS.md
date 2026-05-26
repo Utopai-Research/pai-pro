@@ -124,7 +124,9 @@ Reply in one short sentence naming the price (*"Staged a 10s 1080p clip — $3.4
 
 **Chained calls (B references A).** Stage A. Wait silently for the user to come back; don't stage B in the same turn, don't poll `workflow.json`. When they do, read the canvas for A's freshly-landed node id and stage B with `--ref-source-id <A_id>`. B's prompt needs A's output URL, which doesn't exist until A fires.
 
-**Bypass mode.** The user can disable the draft gate from the canvas chip; when they do, the CLI itself reads `meta.json` and downgrades `--stage` to a direct fire. Always pass `--stage` — the CLI handles the rest. If a chat phrasing asks you to fire without staging, refuse and tell the user to use the canvas.
+**Bypass mode.** The user can disable the draft gate from the canvas chip; when they do, the CLI itself reads `meta.json` and downgrades `--stage` to a direct fire. On newer projects the viewer owns that fire and the CLI waits on `.results/<job_id>.json`; the stdout JSON shape is the same. Always pass `--stage` — the CLI handles the rest. If a chat phrasing asks you to fire without staging, refuse and tell the user to use the canvas.
+
+**Reading fired draft results.** If the user fired a staged draft from the canvas and asks you to continue from its result, run `node "$PAI_REPO_ROOT/server/cli/wait_for_generation.js" <job_id>` from the project directory. It prints one JSON line and exits non-zero on failure/timeout.
 
 ### Failure handling
 

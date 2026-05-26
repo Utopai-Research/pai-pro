@@ -30,7 +30,15 @@ import {
   readActiveProject,
 } from "../local_mirror.js";
 import { postNodeAddBatch } from "./_mutate_helper.js";
-import { isBypassEnabled, newJobId, writePending, removePending, removePendingSync } from "./_pending.js";
+import {
+  fireAndWait,
+  isBypassEnabled,
+  isServerOwnedGenerationEnabled,
+  newJobId,
+  writePending,
+  removePending,
+  removePendingSync,
+} from "./_pending.js";
 import { getDefault, getCost } from "../model_registry.js";
 import { kickPreupload } from "./_preupload_hook.js";
 import { IMAGE_LIMITS } from "./_limits.js";
@@ -81,31 +89,49 @@ if (refSources.length > IMAGE_LIMITS.max_image_refs) {
   process.exit(2);
 }
 const jobId = args["existing-job-id"] || newJobId();
+const routeOwnedPending = !!args["existing-job-id"];
 const plannedModel = getDefault("image").id;
 
-if (args.stage && !(await isBypassEnabled())) {
-  const costUsd = getCost(plannedModel, { image_size: args["image-size"] });
-  await writePending({
-    jobId,
-    kind: "image",
-    stage: "draft",
-    prompt: args.prompt,
-    aspectRatio: args["aspect-ratio"],
-    sourceNodeId: args["source-node-id"] || null,
-    referenceSourceIds: refSources,
-    model: plannedModel,
-    imageSize: args["image-size"],
-    costUsd,
-    script: "generate_image.js",
-    argv: rawArgv.filter((a) => a !== "--stage"),
-  });
-  emitSuccess({ stage: "draft", job_id: jobId, model: plannedModel, cost_usd: costUsd });
-  process.exit(0);
+if (args.stage) {
+  const bypassEnabled = await isBypassEnabled();
+  const serverOwned = bypassEnabled && await isServerOwnedGenerationEnabled();
+  if (!bypassEnabled || serverOwned) {
+    const costUsd = getCost(plannedModel, { image_size: args["image-size"] });
+    await writePending({
+      jobId,
+      kind: "image",
+      stage: "draft",
+      prompt: args.prompt,
+      aspectRatio: args["aspect-ratio"],
+      sourceNodeId: args["source-node-id"] || null,
+      referenceSourceIds: refSources,
+      model: plannedModel,
+      imageSize: args["image-size"],
+      costUsd,
+      script: "generate_image.js",
+      argv: rawArgv.filter((a) => a !== "--stage"),
+    });
+    if (!bypassEnabled) {
+      emitSuccess({ stage: "draft", job_id: jobId, model: plannedModel, cost_usd: costUsd });
+      process.exit(0);
+    }
+    try {
+      const projectId = args["project-id"] || (await readActiveProject());
+      const result = await fireAndWait({ projectId, jobId, kind: "image" });
+      process.stdout.write(JSON.stringify(result) + "\n");
+      process.exit(result.ok ? 0 : 1);
+    } catch (e) {
+      fail(classify(e), e.message);
+      process.exit(1);
+    }
+  }
 }
 
-const cleanup = () => removePendingSync(jobId);
-process.on("SIGINT",  () => { cleanup(); process.exit(130); });
-process.on("SIGTERM", () => { cleanup(); process.exit(143); });
+if (!routeOwnedPending) {
+  const cleanup = () => removePendingSync(jobId);
+  process.on("SIGINT",  () => { cleanup(); process.exit(130); });
+  process.on("SIGTERM", () => { cleanup(); process.exit(143); });
+}
 
 await writePending({
   jobId,
@@ -204,6 +230,6 @@ try {
   fail(classify(e), e.message, e.retryAfterSec ? { retryAfterSec: e.retryAfterSec } : {});
   exitCode = 1;
 } finally {
-  await removePending(jobId);
+  if (!routeOwnedPending) await removePending(jobId);
 }
 process.exit(exitCode);

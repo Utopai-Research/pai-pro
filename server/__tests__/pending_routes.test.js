@@ -83,6 +83,26 @@ function sidecarPath(jobId) {
   return join(projectsDir, TEST_PROJECT_ID, ".pending", `${jobId}.json`);
 }
 
+function projectPath(...parts) {
+  return join(projectsDir, TEST_PROJECT_ID, ...parts);
+}
+
+function resultPath(jobId) {
+  return projectPath(".results", `${jobId}.json`);
+}
+
+async function waitForResult(jobId, timeoutMs = 5000) {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    try {
+      return JSON.parse(await readFile(resultPath(jobId), "utf8"));
+    } catch {
+      await new Promise((r) => setTimeout(r, 50));
+    }
+  }
+  throw new Error(`result sidecar did not appear for ${jobId}`);
+}
+
 async function seedDraft({ jobId, overrides = {} } = {}) {
   const id = jobId || `pending_${Math.random().toString(36).slice(2, 10)}`;
   const payload = {
@@ -110,6 +130,34 @@ async function seedDraft({ jobId, overrides = {} } = {}) {
 
 async function readSidecar(jobId) {
   return JSON.parse(await readFile(sidecarPath(jobId), "utf8"));
+}
+
+function runCli({ script, args }) {
+  return new Promise((resolve) => {
+    let stdout = "";
+    let stderr = "";
+    const child = spawn(
+      process.execPath,
+      [join(__dirname, "..", "cli", script), ...args],
+      {
+        cwd: projectPath(),
+        env: {
+          ...process.env,
+          VIEWER_PORT: String(port),
+          PAI_WAIT_TIMEOUT_MS: "5000",
+        },
+        stdio: ["ignore", "pipe", "pipe"],
+      },
+    );
+    child.stdout.on("data", (d) => { stdout += d; });
+    child.stderr.on("data", (d) => { stderr += d; });
+    child.on("exit", (code) => resolve({ code, stdout, stderr }));
+  });
+}
+
+function parseReply(stdout) {
+  const lines = stdout.trim().split("\n").filter((l) => l.trim().startsWith("{"));
+  return JSON.parse(lines[lines.length - 1]);
 }
 
 test.before(async () => { await startViewer(); });
@@ -158,8 +206,10 @@ test("PATCH on a running entry → 409", async () => {
   assert.equal(r.status, 409);
 });
 
-test("POST /generate returns 202 + spawn fires the CLI", async () => {
-  const { jobId } = await seedDraft();
+test("POST /generate writes durable result sidecar and removes pending", async () => {
+  const { jobId } = await seedDraft({
+    overrides: { argv: ["--definitely-unknown-flag"] },
+  });
   const r = await fetch(`${baseUrl}/projects/${TEST_PROJECT_ID}/pending/${jobId}/generate`, {
     method: "POST",
   });
@@ -168,6 +218,14 @@ test("POST /generate returns 202 + spawn fires the CLI", async () => {
   assert.equal(body.ok, true);
   assert.equal(body.job_id, jobId);
   assert.ok(typeof body.pid === "number");
+
+  const result = await waitForResult(jobId);
+  assert.equal(result.ok, false);
+  assert.equal(result.job_id, jobId);
+  assert.equal(result.kind, "image");
+  assert.equal(result.klass, "bad_args");
+  assert.ok(result.completed_at);
+  await assert.rejects(stat(sidecarPath(jobId)), /ENOENT/);
 });
 
 test("POST /generate with non-whitelisted script → 400", async () => {
@@ -180,6 +238,41 @@ test("POST /generate with non-whitelisted script → 400", async () => {
   assert.equal(r.status, 400);
   const body = await r.json();
   assert.match(body.error, /unknown script/);
+});
+
+test("new-project bypass mode fires through viewer and waits on result sidecar", async () => {
+  const now = new Date().toISOString();
+  await writeFile(
+    projectPath("meta.json"),
+    JSON.stringify({
+      id: TEST_PROJECT_ID,
+      title: "T",
+      created_at: now,
+      last_active_at: now,
+      dangerously_skip_draft_gate: true,
+      use_server_owned_generation: true,
+    }, null, 2) + "\n",
+  );
+
+  const { code, stdout, stderr } = await runCli({
+    script: "generate_image.js",
+    args: [
+      "--stage",
+      "--prompt", "x",
+      "--ref-source-id", "image_missing",
+      "--project-id", TEST_PROJECT_ID,
+    ],
+  });
+  assert.equal(code, 1, `stderr:\n${stderr}`);
+  const reply = parseReply(stdout);
+  assert.equal(reply.ok, false);
+  assert.match(reply.job_id, /^pending_/);
+  assert.equal(reply.kind, "image");
+  assert.equal(reply.klass, "bad_args");
+
+  const result = await waitForResult(reply.job_id);
+  assert.deepEqual(result, reply);
+  await assert.rejects(stat(sidecarPath(reply.job_id)), /ENOENT/);
 });
 
 test("DELETE unlinks the sidecar; second DELETE is idempotent", async () => {

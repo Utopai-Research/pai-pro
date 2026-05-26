@@ -18,7 +18,8 @@
 // The error model carries `.klass` so _cli.js can tag failure banners.
 // Class mapping is consistent across all PAI capabilities:
 //
-//   bad_args            HTTP 400, 422 (validation)
+//   bad_args            HTTP 400, 422 (validation);
+//                       terminal video error_category=client_input
 //   infra               HTTP 401 (auth) / 402 (insufficient balance) /
 //                       body code 2001 / 2002 / error_category in
 //                       {provider, timeout, auth}
@@ -126,6 +127,7 @@ function classifySubmitBodyFailure(body) {
 export function classifyTerminalStatus(statusResp) {
   const cat = String(statusResp?.error_category || "").toLowerCase();
   const msg = statusResp?.error_message || "PAI task failed with no error_message";
+  if (cat === "client_input") return err("bad_args", `PAI task failed (client_input): ${msg}`);
   if (cat === "content") return err("content_filtered", `PAI task failed (content moderation): ${msg}`);
   if (cat === "provider" || cat === "timeout") return err("infra", `PAI task failed (${cat}): ${msg}`);
   if (cat === "auth") return err("infra", `PAI task failed (auth): ${msg}`);
@@ -160,9 +162,13 @@ async function postOnce({ path, body, timeoutMs }) {
   try { parsed = rawBody ? JSON.parse(rawBody) : null; } catch { /* not JSON */ }
 
   if (!res.ok) {
+    const responseMetadataError = parsed?.ResponseMetadata?.Error;
     const errMsg = parsed?.detail
       || parsed?.message
       || parsed?.error?.message
+      || (responseMetadataError?.Code && responseMetadataError?.Message
+        ? `${responseMetadataError.Code}: ${responseMetadataError.Message}`
+        : null)
       || rawBody.slice(0, 300)
       || `HTTP ${res.status}`;
     const ra = parseInt(res.headers.get("retry-after") || "", 10);

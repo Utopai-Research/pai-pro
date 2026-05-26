@@ -59,17 +59,6 @@ export function killPty(projectId) {
   for (const sid of entry.subscribers) socketAttach.delete(sid);
 }
 
-// Inject text into a project's PTY as if the user had typed it. No trailing
-// \r — bytes land in claude's input box, user decides whether to submit.
-// Auto-submit would need the two-connection orchestration documented in
-// PR #23 (brittle to TUI changes); text-only uses the same single path the
-// browser uses for every keystroke. Returns false if no PTY is attached.
-export function writeToProjectPty(projectId, text) {
-  const entry = ptys.get(projectId);
-  if (!entry) return false;
-  try { entry.pty.write(text); return true; } catch { return false; }
-}
-
 // Shut every pty down cleanly on viewer exit so dev's Ctrl+C doesn't
 // orphan claude processes (they'd otherwise live until the user kills
 // them by hand).

@@ -14,6 +14,7 @@ import {
   workflowPath,
   canvasPositionsPath,
   pendingDir,
+  resultsDir,
   PENDING_STALE_RUNNING_MS,
   PENDING_STALE_DRAFT_MS,
 } from "./paths.js";
@@ -141,4 +142,21 @@ export async function readPendingDir(id) {
     if (entry) out.set(jobId, entry);
   }
   return out;
+}
+
+// Terminal generation results. Unlike pending entries, results are durable
+// enough for a still-waiting agent to read after the pending pad is gone.
+export async function readResultEntry(id, jobId) {
+  try {
+    const raw = await fsp.readFile(path.join(resultsDir(id), `${jobId}.json`), "utf8");
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return null;
+    if (typeof parsed.ok !== "boolean") return null;
+    return parsed;
+  } catch (e) {
+    if (e.code !== "ENOENT" && e.code !== "ENOTDIR") {
+      console.warn(`[viewer] result read error (${id}/${jobId}): ${e.message}`);
+    }
+    return null;
+  }
 }

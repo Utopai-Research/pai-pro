@@ -16,11 +16,9 @@
 //
 // No upload notice goes to the terminal. Uploads fire at arbitrary times
 // while the user is typing — pty.write() landed mid-sentence in their
-// input box, and socket.emit("pty:output") collided with claude's TUI
-// status-bar redraw. Deliberate event-driven injection on a known user
-// action (see writeToProjectPty in services/socket.js) works fine; the
-// arbitrary-timing path doesn't. User feedback for uploads already lives
-// in the inflight pill + the canvas node landing.
+// input box, and socket.emit("pty:output") collided with the agent TUI
+// status-bar redraw. User feedback for uploads already lives in the
+// inflight pill + the canvas node landing.
 
 import crypto from "node:crypto";
 import fsp from "node:fs/promises";

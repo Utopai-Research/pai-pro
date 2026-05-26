@@ -18,6 +18,7 @@ import {
   canvasPositionsPath,
   isValidId,
   metaPath,
+  resultsDir,
 } from "./paths.js";
 
 export async function writeMeta(id, meta) {
@@ -29,6 +30,31 @@ export async function writeCanvasPositions(id, state) {
     canvasPositionsPath(id),
     JSON.stringify(state, null, 2) + "\n",
   );
+}
+
+export async function writeResult(id, jobId, result) {
+  if (!jobId || !result || typeof result !== "object") {
+    throw new Error("writeResult requires a job id and result object");
+  }
+  const dir = resultsDir(id);
+  await fsp.mkdir(dir, { recursive: true });
+  const target = path.join(dir, `${jobId}.json`);
+  const payload = {
+    ...result,
+    job_id: jobId,
+    completed_at: result.completed_at || new Date().toISOString(),
+  };
+  const tmp = `${target}.${process.pid}.${Date.now()}.tmp`;
+  try {
+    await fsp.writeFile(tmp, JSON.stringify(payload) + "\n");
+    await fsp.link(tmp, target);
+    return true;
+  } catch (e) {
+    if (e.code === "EEXIST") return false;
+    throw e;
+  } finally {
+    try { await fsp.unlink(tmp); } catch {}
+  }
 }
 
 // --- Per-project async mutex -------------------------------------------

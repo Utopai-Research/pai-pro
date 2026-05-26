@@ -32,7 +32,8 @@
 //   CreateAsset → 200 { Result: { Id } }                        (no Status)
 //   GetAsset    → 200 { Result: { Id, Status: "Active"|"Pending"|"Failed", URL, ... } }
 //   InvalidParameter / DurationTooLong / WidthTooSmall →
-//                  502 { detail: "video-generation-assets [CreateAsset]: InvalidParameter.* — ..." }
+//                  400 { ResponseMetadata: { Error: { Code: "InvalidParameter.*", Message } } }
+//                  or legacy 502 { detail: "video-generation-assets [CreateAsset]: InvalidParameter.* — ..." }
 //   Group expired (~1h server-side TTL) →
 //                  502 { detail: "video-generation-assets [CreateAsset]: NotFound.group_id ..." }
 //   Circuit breaker (regression) →
@@ -142,11 +143,11 @@ export function reseedFromCanvas(projectId, nodes) {
 // signature (see file header for shapes).
 function reclassifyAssetError(e) {
   const m = String(e?.message || "");
-  if (/\[\w+\]: InvalidParameter\./.test(m)) {
+  if (/InvalidParameter\./.test(m)) {
     // Deterministic provider rejection (e.g. WidthTooSmall, DurationTooLong).
     return err("bad_args", m, { assetRejected: true });
   }
-  if (/\[\w+\]: NotFound\.group_id/.test(m)) {
+  if (/NotFound\.group_id/.test(m)) {
     // Asset group expired (provider TTLs groups after ~1h).
     return err("bad_args", m, { groupExpired: true });
   }

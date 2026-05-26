@@ -26,7 +26,15 @@ import {
   readNodeType,
 } from "../local_mirror.js";
 import { postNodeAddBatch } from "./_mutate_helper.js";
-import { isBypassEnabled, newJobId, writePending, removePending, removePendingSync } from "./_pending.js";
+import {
+  fireAndWait,
+  isBypassEnabled,
+  isServerOwnedGenerationEnabled,
+  newJobId,
+  writePending,
+  removePending,
+  removePendingSync,
+} from "./_pending.js";
 import { VIDEO_LIMITS } from "./_limits.js";
 
 const rawArgv = process.argv.slice(2);
@@ -87,6 +95,7 @@ if (audSrcIds.length > VIDEO_LIMITS.max_audio_refs) {
 }
 
 const jobId = args["existing-job-id"] || newJobId();
+const routeOwnedPending = !!args["existing-job-id"];
 const durationPlanned = Number(args.duration) || 15;
 const plannedModel = getDefault("video").id;
 
@@ -97,39 +106,56 @@ function countUniqueRefs() {
   return sids.size;
 }
 
-if (args.stage && !(await isBypassEnabled())) {
-  const videoCost = getCost(plannedModel, {
-    resolution: args.resolution,
-    duration: durationPlanned,
-  });
-  const refCount = countUniqueRefs();
-  const assetCost = refCount * (getCost("video-generation-assets") ?? 0.01);
-  const costUsd = +(Number(videoCost ?? 0) + assetCost).toFixed(3);
-  await writePending({
-    jobId,
-    kind: "video",
-    stage: "draft",
-    prompt: args.prompt,
-    aspectRatio: args["aspect-ratio"],
-    // --ref-source-id (image + video) and --ref-audio-source-id (audio)
-    // both feed the same source-id channel for the projection's dashed
-    // edges — match the edges postNodeAddBatch will emit on the final.
-    sourceNodeId: args["source-node-id"] || null,
-    referenceSourceIds: [...refSourcesArg, ...audSrcIds],
-    model: plannedModel,
-    resolution: args.resolution,
-    duration: durationPlanned,
-    costUsd,
-    script: "generate_video.js",
-    argv: rawArgv.filter((a) => a !== "--stage"),
-  });
-  emitSuccess({ stage: "draft", job_id: jobId, model: plannedModel, cost_usd: costUsd });
-  process.exit(0);
+if (args.stage) {
+  const bypassEnabled = await isBypassEnabled();
+  const serverOwned = bypassEnabled && await isServerOwnedGenerationEnabled();
+  if (!bypassEnabled || serverOwned) {
+    const videoCost = getCost(plannedModel, {
+      resolution: args.resolution,
+      duration: durationPlanned,
+    });
+    const refCount = countUniqueRefs();
+    const assetCost = refCount * (getCost("video-generation-assets") ?? 0.01);
+    const costUsd = +(Number(videoCost ?? 0) + assetCost).toFixed(3);
+    await writePending({
+      jobId,
+      kind: "video",
+      stage: "draft",
+      prompt: args.prompt,
+      aspectRatio: args["aspect-ratio"],
+      // --ref-source-id (image + video) and --ref-audio-source-id (audio)
+      // both feed the same source-id channel for the projection's dashed
+      // edges — match the edges postNodeAddBatch will emit on the final.
+      sourceNodeId: args["source-node-id"] || null,
+      referenceSourceIds: [...refSourcesArg, ...audSrcIds],
+      model: plannedModel,
+      resolution: args.resolution,
+      duration: durationPlanned,
+      costUsd,
+      script: "generate_video.js",
+      argv: rawArgv.filter((a) => a !== "--stage"),
+    });
+    if (!bypassEnabled) {
+      emitSuccess({ stage: "draft", job_id: jobId, model: plannedModel, cost_usd: costUsd });
+      process.exit(0);
+    }
+    try {
+      const projectId = args["project-id"] || (await readActiveProject());
+      const result = await fireAndWait({ projectId, jobId, kind: "video" });
+      process.stdout.write(JSON.stringify(result) + "\n");
+      process.exit(result.ok ? 0 : 1);
+    } catch (e) {
+      fail(classify(e), e.message);
+      process.exit(1);
+    }
+  }
 }
 
-const cleanup = () => removePendingSync(jobId);
-process.on("SIGINT",  () => { cleanup(); process.exit(130); });
-process.on("SIGTERM", () => { cleanup(); process.exit(143); });
+if (!routeOwnedPending) {
+  const cleanup = () => removePendingSync(jobId);
+  process.on("SIGINT",  () => { cleanup(); process.exit(130); });
+  process.on("SIGTERM", () => { cleanup(); process.exit(143); });
+}
 
 await writePending({
   jobId,
@@ -298,6 +324,6 @@ try {
     exitCode = 1;
   }
 } finally {
-  await removePending(jobId);
+  if (!routeOwnedPending) await removePending(jobId);
 }
 process.exit(exitCode);
