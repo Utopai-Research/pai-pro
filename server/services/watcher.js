@@ -4,6 +4,7 @@
 //   canvas_positions.json → canvas-positions
 //   meta.json             → title (+ in-memory meta refresh)
 //   .pending/<job>.json   → pending-generations
+//   .results/<job>.json   → generation-results
 //
 // External edits (the agent rewriting workflow.json from inside the
 // per-project Claude session) are the primary use case. Viewer-side
@@ -27,6 +28,8 @@ import {
   readCanvasPositions,
   readMeta,
   readPendingEntry,
+  readResultEntry,
+  normalizeResultEntry,
 } from "../lib/readers.js";
 import { loadProject } from "./projects.js";
 
@@ -37,7 +40,12 @@ function projectIdFromPath(p) {
 }
 
 export async function watchProjects({ projects, io, broadcasters }) {
-  const { broadcastCanvas, broadcastPositions, broadcastPending } = broadcasters;
+  const {
+    broadcastCanvas,
+    broadcastPositions,
+    broadcastPending,
+    broadcastGenerationResults,
+  } = broadcasters;
 
   const watcher = chokidar.watch(PROJECTS_DIR, {
     awaitWriteFinish: { stabilityThreshold: 100, pollInterval: 50 },
@@ -99,6 +107,20 @@ export async function watchProjects({ projects, io, broadcasters }) {
       if (entry) p.pendingGenerations.set(jobId, entry);
       else       p.pendingGenerations.delete(jobId);
       broadcastPending(id);
+      return;
+    }
+
+    if (rel.startsWith(".results/") && rel.endsWith(".json")) {
+      const jobId = path.basename(rel, ".json");
+      const raw = await readResultEntry(id, jobId);
+      const entry = normalizeResultEntry(jobId, raw);
+      let p = projects.get(id);
+      if (!p) p = await loadProject(projects, id);
+      if (!p) return;
+      if (!p.generationResults) p.generationResults = new Map();
+      if (entry) p.generationResults.set(jobId, entry);
+      else       p.generationResults.delete(jobId);
+      broadcastGenerationResults(id);
     }
   };
 
@@ -129,6 +151,13 @@ export async function watchProjects({ projects, io, broadcasters }) {
       if (p?.pendingGenerations?.has(jobId)) {
         p.pendingGenerations.delete(jobId);
         broadcastPending(id);
+      }
+    } else if (rel.startsWith(".results/") && rel.endsWith(".json")) {
+      const jobId = path.basename(rel, ".json");
+      const p = projects.get(id);
+      if (p?.generationResults?.has(jobId)) {
+        p.generationResults.delete(jobId);
+        broadcastGenerationResults(id);
       }
     }
   });

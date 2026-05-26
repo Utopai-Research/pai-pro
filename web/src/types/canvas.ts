@@ -269,6 +269,22 @@ export interface PendingGeneration {
   source_node_id?: string
 }
 
+export interface GenerationResult {
+  job_id: string
+  kind: 'image' | 'video' | 'audio'
+  status: 'succeeded' | 'failed' | 'aborted' | 'timeout'
+  ok: boolean
+  completed_at?: string
+  klass?: string
+  message?: string
+  node_id?: string | null
+  local_path?: string | null
+  output_url?: string | null
+  model?: string
+  sent?: unknown
+  limits?: unknown
+}
+
 /** Bundle the viewer returns for `GET /projects/:id`. */
 export interface ProjectBundle {
   id: string
@@ -288,6 +304,8 @@ export interface ProjectBundle {
   }
   /** Pending-generation placeholder pads — empty array when no generator is running. */
   pending_generations?: PendingGeneration[]
+  /** Durable summaries from `.results/<jobId>.json`, newest first. */
+  generation_results?: GenerationResult[]
   /** True iff the user has opted out of the draft gate for this project. */
   dangerously_skip_draft_gate?: boolean
 }

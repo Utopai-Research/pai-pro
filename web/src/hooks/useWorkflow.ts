@@ -3,14 +3,20 @@
  *
  * On mount we GET /projects/:id once for the initial state, then
  * subscribe to the project's Socket.IO room. Server pushes
- * `canvas-state`, `canvas-positions`, and `pending-generations` on
+ * `canvas-state`, `canvas-positions`, `pending-generations`, and
+ * `generation-results` on
  * every disk change (chokidar watcher + our HTTP write endpoints both
  * cause these to fire). The hook returns the latest event payload.
  */
 import { useEffect, useState } from 'react'
 import { getSocket, VIEWER_URL } from '@/lib/socket'
 import { mergeWorkflow, synthesizeAssetUrls } from '@/lib/workflowMerge'
-import type { PendingGeneration, ProjectBundle, Workflow } from '@/types/canvas'
+import type {
+  GenerationResult,
+  PendingGeneration,
+  ProjectBundle,
+  Workflow,
+} from '@/types/canvas'
 import type { CanvasPositionsState } from '@/lib/canvas-stub'
 import type { AssetStatusEntry } from '@/pages/CanvasPage/NodeActionsContext'
 
@@ -18,6 +24,7 @@ interface UseWorkflowResult {
   workflow: Workflow | null
   canvasPositions: CanvasPositionsState
   pendingGenerations: PendingGeneration[]
+  generationResults: GenerationResult[]
   assetStatuses: ReadonlyMap<string, AssetStatusEntry>
   bundle: ProjectBundle | null
   loading: boolean
@@ -26,6 +33,7 @@ interface UseWorkflowResult {
 
 const EMPTY_POSITIONS: CanvasPositionsState = { positions: {}, groupFrames: {} }
 const EMPTY_PENDING: PendingGeneration[] = []
+const EMPTY_RESULTS: GenerationResult[] = []
 const EMPTY_ASSET_STATUSES: ReadonlyMap<string, AssetStatusEntry> = new Map()
 
 export function useWorkflow(projectId: string | null): UseWorkflowResult {
@@ -34,6 +42,8 @@ export function useWorkflow(projectId: string | null): UseWorkflowResult {
     useState<CanvasPositionsState>(EMPTY_POSITIONS)
   const [pendingGenerations, setPendingGenerations] =
     useState<PendingGeneration[]>(EMPTY_PENDING)
+  const [generationResults, setGenerationResults] =
+    useState<GenerationResult[]>(EMPTY_RESULTS)
   const [assetStatuses, setAssetStatuses] =
     useState<ReadonlyMap<string, AssetStatusEntry>>(EMPTY_ASSET_STATUSES)
   const [bundle, setBundle] = useState<ProjectBundle | null>(null)
@@ -45,6 +55,7 @@ export function useWorkflow(projectId: string | null): UseWorkflowResult {
       setWorkflow(null)
       setCanvasPositions(EMPTY_POSITIONS)
       setPendingGenerations(EMPTY_PENDING)
+      setGenerationResults(EMPTY_RESULTS)
       setAssetStatuses(EMPTY_ASSET_STATUSES)
       setBundle(null)
       setLoading(false)
@@ -68,6 +79,7 @@ export function useWorkflow(projectId: string | null): UseWorkflowResult {
         )
         setCanvasPositions(b.canvas_positions ?? EMPTY_POSITIONS)
         setPendingGenerations(b.pending_generations ?? EMPTY_PENDING)
+        setGenerationResults(b.generation_results ?? EMPTY_RESULTS)
         setLoading(false)
       })
       .catch((err: unknown) => {
@@ -103,6 +115,14 @@ export function useWorkflow(projectId: string | null): UseWorkflowResult {
       const incoming = Array.isArray(msg.state) ? msg.state : []
       setPendingGenerations(incoming.length > 0 ? incoming : EMPTY_PENDING)
     }
+    const onGenerationResults = (msg: {
+      projectId: string
+      state: GenerationResult[]
+    }) => {
+      if (msg.projectId !== projectId) return
+      const incoming = Array.isArray(msg.state) ? msg.state : []
+      setGenerationResults(incoming.length > 0 ? incoming : EMPTY_RESULTS)
+    }
     const onAssetStatusSnapshot = (msg: {
       projectId: string
       state: Record<string, AssetStatusEntry>
@@ -128,6 +148,7 @@ export function useWorkflow(projectId: string | null): UseWorkflowResult {
     socket.on('canvas-state', onCanvasState)
     socket.on('canvas-positions', onCanvasPositions)
     socket.on('pending-generations', onPendingGenerations)
+    socket.on('generation-results', onGenerationResults)
     socket.on('pai-assets-snapshot', onAssetStatusSnapshot)
     socket.on('pai-assets', onAssetStatusUpdate)
     socket.emit('subscribe', { projectId })
@@ -137,10 +158,20 @@ export function useWorkflow(projectId: string | null): UseWorkflowResult {
       socket.off('canvas-state', onCanvasState)
       socket.off('canvas-positions', onCanvasPositions)
       socket.off('pending-generations', onPendingGenerations)
+      socket.off('generation-results', onGenerationResults)
       socket.off('pai-assets-snapshot', onAssetStatusSnapshot)
       socket.off('pai-assets', onAssetStatusUpdate)
     }
   }, [projectId])
 
-  return { workflow, canvasPositions, pendingGenerations, assetStatuses, bundle, loading, error }
+  return {
+    workflow,
+    canvasPositions,
+    pendingGenerations,
+    generationResults,
+    assetStatuses,
+    bundle,
+    loading,
+    error,
+  }
 }

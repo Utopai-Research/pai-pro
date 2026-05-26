@@ -2,7 +2,11 @@
 // klass→HTTP-status mapper. Factory shape so the io instance + projects
 // Map are closed-over once and re-used across routes and the watcher.
 
-import { EMPTY_POSITIONS } from "./readers.js";
+import {
+  compareResultSummaries,
+  EMPTY_POSITIONS,
+  GENERATION_RESULTS_BUNDLE_LIMIT,
+} from "./readers.js";
 import { kickReelPrebuild } from "./reel_cache.js";
 import { withProjectMutationLock, writeCanvasPositions } from "./writers.js";
 
@@ -10,7 +14,6 @@ import { withProjectMutationLock, writeCanvasPositions } from "./writers.js";
 // add events) into one broadcast so the client's placement effect sees
 // all pads in a single pass and routes them through gridPackBatch.
 export const PENDING_BROADCAST_DEBOUNCE_MS = 100;
-
 export function statusForKlass(klass) {
   if (klass === "validation" || klass === "bad_args") return 400;
   if (klass === "not_found") return 404;
@@ -54,6 +57,16 @@ export function createBroadcasters({ io, projects }) {
     pendingBroadcastTimers.set(id, timer);
   }
 
+  function broadcastGenerationResults(id) {
+    const p = projects.get(id);
+    io.to(id).emit("generation-results", {
+      projectId: id,
+      state: Array.from(p?.generationResults?.values() ?? [])
+        .sort(compareResultSummaries)
+        .slice(0, GENERATION_RESULTS_BUNDLE_LIMIT),
+    });
+  }
+
   // Copy the dragged pending position onto the freshly-minted node.
   // Emits canvas-positions BEFORE canvas-state so the browser merges
   // both in one React batch — no spiral-placement flash. Disk write is
@@ -94,5 +107,11 @@ export function createBroadcasters({ io, projects }) {
     },
   };
 
-  return { broadcastCanvas, broadcastPositions, broadcastPending, mutatorHooks };
+  return {
+    broadcastCanvas,
+    broadcastPositions,
+    broadcastPending,
+    broadcastGenerationResults,
+    mutatorHooks,
+  };
 }

@@ -16,7 +16,11 @@ import path from "node:path";
 
 import { getCost } from "../model_registry.js";
 import { PAI_REPO_ROOT, pendingDir, projectDir } from "../lib/paths.js";
-import { readPendingEntry } from "../lib/readers.js";
+import {
+  normalizeResultEntry,
+  readPendingEntry,
+  readResultEntry,
+} from "../lib/readers.js";
 import { withProjectMutationLock, writeResult } from "../lib/writers.js";
 
 const ALLOWED_SCRIPTS = new Set([
@@ -96,7 +100,7 @@ function fallbackResult({ jobId, code, signal, spawnError }) {
   };
 }
 
-export function registerPendingRoutes({ app, projects }) {
+export function registerPendingRoutes({ app, projects, broadcasters }) {
   app.patch("/projects/:id/pending/:jobId", async (req, res) => {
     const { id, jobId } = req.params;
     if (!projects.has(id)) return res.status(404).json({ error: "not found" });
@@ -208,7 +212,17 @@ export function registerPendingRoutes({ app, projects }) {
           kind: entry.kind,
         };
         try {
-          await writeResult(id, jobId, result);
+          const wrote = await writeResult(id, jobId, result);
+          if (wrote) {
+            const raw = await readResultEntry(id, jobId);
+            const summary = normalizeResultEntry(jobId, raw);
+            const p = projects.get(id);
+            if (p && summary) {
+              if (!p.generationResults) p.generationResults = new Map();
+              p.generationResults.set(jobId, summary);
+              broadcasters?.broadcastGenerationResults?.(id);
+            }
+          }
           await removePendingSidecar(id, jobId);
         } catch (e) {
           console.warn(`[viewer] result finalize failed for ${id}/${jobId}:`, e);

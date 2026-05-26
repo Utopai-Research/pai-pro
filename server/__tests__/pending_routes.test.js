@@ -225,6 +225,11 @@ test("POST /generate writes durable result sidecar and removes pending", async (
   assert.equal(result.kind, "image");
   assert.equal(result.klass, "bad_args");
   assert.ok(result.completed_at);
+  const bundle = await fetch(`${baseUrl}/projects/${TEST_PROJECT_ID}`).then((res) => res.json());
+  const summary = bundle.generation_results.find((r) => r.job_id === jobId);
+  assert.ok(summary, "bundle exposes durable generation result summary");
+  assert.equal(summary.status, "failed");
+  assert.equal(summary.klass, "bad_args");
   await assert.rejects(stat(sidecarPath(jobId)), /ENOENT/);
 });
 

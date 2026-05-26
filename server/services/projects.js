@@ -22,7 +22,9 @@ import {
   readCanvas,
   readCanvasPositions,
   readPendingDir,
+  readResultDir,
   readResultEntry,
+  GENERATION_RESULTS_BUNDLE_LIMIT,
 } from "../lib/readers.js";
 import { writeMeta, writeActive, writeResult } from "../lib/writers.js";
 
@@ -202,7 +204,15 @@ export async function loadProject(projects, id) {
   const canvasState = await readCanvas(id);
   const canvasPositions = await readCanvasPositions(id);
   const pendingGenerations = await readPendingDir(id);
-  const entry = { id, meta, canvasState, canvasPositions, pendingGenerations };
+  const generationResults = await readResultDir(id, { limit: GENERATION_RESULTS_BUNDLE_LIMIT });
+  const entry = {
+    id,
+    meta,
+    canvasState,
+    canvasPositions,
+    pendingGenerations,
+    generationResults: new Map(generationResults.map((r) => [r.job_id, r])),
+  };
   initProjectMutatorState(entry, {
     workflowPath: workflowPath(id),
     mutationLogPath: mutationLogPath(id),

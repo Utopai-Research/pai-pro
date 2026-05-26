@@ -20,6 +20,7 @@ import {
 } from "./paths.js";
 
 export const EMPTY_POSITIONS = () => ({ positions: {}, groupFrames: {} });
+export const GENERATION_RESULTS_BUNDLE_LIMIT = 50;
 
 export async function readMeta(id) {
   try {
@@ -159,4 +160,98 @@ export async function readResultEntry(id, jobId) {
     }
     return null;
   }
+}
+
+function resultStatus(raw) {
+  if (raw?.ok === true) return "succeeded";
+  if (raw?.klass === "aborted") return "aborted";
+  if (raw?.klass === "timeout") return "timeout";
+  return "failed";
+}
+
+function resultSortTime(summary, fallbackMtimeMs = 0) {
+  const parsed = Date.parse(summary?.completed_at || "");
+  return Number.isFinite(parsed) ? parsed : fallbackMtimeMs;
+}
+
+export function compareResultSummaries(a, b) {
+  return resultSortTime(b) - resultSortTime(a);
+}
+
+function canvasMutationNodeId(raw) {
+  const id = raw?.canvas_mutation?.node_id ?? raw?.node_id ?? null;
+  return typeof id === "string" && id !== "" ? id : null;
+}
+
+export function normalizeResultEntry(jobId, raw, { mtimeMs = 0 } = {}) {
+  if (!raw || typeof raw !== "object" || typeof raw.ok !== "boolean") return null;
+  const out = {
+    job_id: typeof raw.job_id === "string" && raw.job_id !== "" ? raw.job_id : jobId,
+    kind:
+      raw.kind === "video" ? "video"
+      : raw.kind === "audio" ? "audio"
+      : "image",
+    status: resultStatus(raw),
+    ok: raw.ok,
+  };
+  if (typeof raw.completed_at === "string" && raw.completed_at !== "") {
+    out.completed_at = raw.completed_at;
+  } else if (mtimeMs > 0) {
+    out.completed_at = new Date(mtimeMs).toISOString();
+  }
+  if (raw.ok === false) {
+    if (typeof raw.klass === "string" && raw.klass !== "") out.klass = raw.klass;
+    if (typeof raw.message === "string" && raw.message !== "") out.message = raw.message;
+  }
+  const nodeId = canvasMutationNodeId(raw);
+  if (nodeId) out.node_id = nodeId;
+  if (typeof raw.local_path === "string" && raw.local_path !== "") out.local_path = raw.local_path;
+  if (typeof raw.output_url === "string" && raw.output_url !== "") out.output_url = raw.output_url;
+  if (typeof raw.model === "string" && raw.model !== "") out.model = raw.model;
+  if (raw.sent && typeof raw.sent === "object") out.sent = raw.sent;
+  if (raw.limits && typeof raw.limits === "object") out.limits = raw.limits;
+  return out;
+}
+
+export async function readResultDir(id, { limit, since, failedOnly = false, jobIds } = {}) {
+  const dir = resultsDir(id);
+  let entries;
+  try {
+    entries = await fsp.readdir(dir, { withFileTypes: true });
+  } catch (e) {
+    if (e.code === "ENOENT") return [];
+    console.warn(`[viewer] result dir scan error (${id}): ${e.message}`);
+    return [];
+  }
+
+  const jobIdSet = Array.isArray(jobIds) && jobIds.length > 0
+    ? new Set(jobIds.filter((v) => typeof v === "string" && v !== ""))
+    : null;
+  const sinceMs = since ? Date.parse(since) : null;
+  const boundedLimit = Number.isFinite(limit) && limit >= 0 ? limit : null;
+  const out = [];
+
+  for (const e of entries) {
+    if (!e.isFile() || !e.name.endsWith(".json")) continue;
+    const jobId = e.name.slice(0, -".json".length);
+    if (jobIdSet && !jobIdSet.has(jobId)) continue;
+    const abs = path.join(dir, e.name);
+    try {
+      const [raw, st] = await Promise.all([
+        fsp.readFile(abs, "utf8"),
+        fsp.stat(abs),
+      ]);
+      const summary = normalizeResultEntry(jobId, JSON.parse(raw), { mtimeMs: st.mtimeMs });
+      if (!summary) continue;
+      if (sinceMs !== null && resultSortTime(summary, st.mtimeMs) < sinceMs) continue;
+      if (failedOnly && summary.ok !== false) continue;
+      out.push({ summary, sortTime: resultSortTime(summary, st.mtimeMs) });
+    } catch (err) {
+      console.warn(`[viewer] result dir entry skipped (${id}/${jobId}): ${err.message}`);
+    }
+  }
+
+  out.sort((a, b) => b.sortTime - a.sortTime);
+  const limited = boundedLimit === null ? out : out.slice(0, boundedLimit);
+  return limited.map((entry) => entry.summary);
 }

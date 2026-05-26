@@ -23,6 +23,10 @@ import {
 } from "../lib/paths.js";
 import { readActive, writeActive, writeMeta } from "../lib/writers.js";
 import {
+  compareResultSummaries,
+  GENERATION_RESULTS_BUNDLE_LIMIT,
+} from "../lib/readers.js";
+import {
   ensureProjectStructure,
   loadProject,
 } from "../services/projects.js";
@@ -84,6 +88,9 @@ export function registerProjectsRoutes({ app, io, projects, mutatorHooks }) {
       canvas_state: p.canvasState,
       canvas_positions: p.canvasPositions,
       pending_generations: Array.from(p.pendingGenerations?.values() ?? []),
+      generation_results: Array.from(p.generationResults?.values() ?? [])
+        .sort(compareResultSummaries)
+        .slice(0, GENERATION_RESULTS_BUNDLE_LIMIT),
     });
   });
 

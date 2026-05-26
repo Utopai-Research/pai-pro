@@ -4,9 +4,9 @@
 //
 // Connection lifecycle:
 //   client connects → `subscribe { projectId }` joins the room, seeds
-//   all five state events (title, canvas-state, canvas-positions,
-//   pending-generations, pai-assets-snapshot), and re-pre-uploads any
-//   image_result whose asset-cache entry has expired. Same socket can
+//   state events (title, canvas-state, canvas-positions,
+//   pending-generations, generation-results, pai-assets-snapshot), and
+//   re-pre-uploads any image_result whose asset-cache entry has expired. Same socket can
 //   then issue pty:* messages to drive the embedded terminal.
 //
 // Socket event names `pai-assets` and `pai-assets-snapshot` are the
@@ -38,6 +38,10 @@ import {
   projectDir,
   projectIdFromCanvasUrl,
 } from "../lib/paths.js";
+import {
+  compareResultSummaries,
+  GENERATION_RESULTS_BUNDLE_LIMIT,
+} from "../lib/readers.js";
 
 const ptys = new Map();
 const socketAttach = new Map();           // socket.id -> projectId
@@ -246,6 +250,12 @@ export function registerSocketHandlers({ io, projects, nodePty }) {
       socket.emit("pending-generations", {
         projectId,
         state: Array.from(p.pendingGenerations?.values() ?? []),
+      });
+      socket.emit("generation-results", {
+        projectId,
+        state: Array.from(p.generationResults?.values() ?? [])
+          .sort(compareResultSummaries)
+          .slice(0, GENERATION_RESULTS_BUNDLE_LIMIT),
       });
       // Replay cached asset statuses so chips render on load, not on the next flip.
       const projectEntries = {};

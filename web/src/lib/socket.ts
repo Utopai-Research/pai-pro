@@ -2,8 +2,8 @@
  * Socket.IO client singleton.
  *
  * One connection per browser tab to the local viewer (port 7488). The
- * server pushes `canvas-state`, `canvas-positions`, `title`, and `pty:*`
- * events; we emit `subscribe` (per project room) and `pty:spawn` /
+ * server pushes `canvas-state`, `canvas-positions`, `generation-results`,
+ * `title`, and `pty:*` events; we emit `subscribe` (per project room) and `pty:spawn` /
  * `pty:input` / `pty:resize` / `pty:kill`.
  */
 import { io, type Socket } from 'socket.io-client'
