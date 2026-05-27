@@ -1,4 +1,4 @@
-/** Modal that gates the bypass opt-in behind typing "I understand"
+/** Modal that gates run-immediately mode behind typing "I understand"
  *  (case-insensitive, trimmed). Parent owns the PATCH and close. */
 import { useEffect, useState } from 'react'
 import './draft-gate-modal.css'
@@ -64,11 +64,14 @@ export function DraftGateModal({
       >
         <div className="draft-gate-head">
           <span className="draft-gate-warn">⚠</span>
-          <span className="draft-gate-title">Skip drafts for this project?</span>
+          <span className="draft-gate-title">Run generations immediately?</span>
         </div>
 
         <div className="draft-gate-body">
-          <p>Generations fire immediately — real money, no cancel.</p>
+          <p>
+            Draft review will be turned off. Generations will run immediately,
+            with no draft card to approve first.
+          </p>
           <p className="draft-gate-pricing">
             A 10s 1080p clip is ~$3.41; an image generation is ~$0.10.
           </p>
@@ -109,7 +112,7 @@ export function DraftGateModal({
             className="draft-gate-confirm"
             disabled={!canSubmit}
           >
-            {submitting ? 'Saving…' : 'Skip drafts'}
+            {submitting ? 'Saving…' : 'Run immediately'}
           </button>
         </div>
       </form>

@@ -107,11 +107,10 @@ export default function CanvasView(): JSX.Element {
     if (bundle?.title) setTitle(bundle.title)
   }, [bundle?.title])
 
-  // Bypass-mode flag — `title` socket event fires on every meta.json
-  // change (not just titles); see watcher.js.
-  const [bypassDrafts, setBypassDrafts] = useState(false)
+  // `title` socket events include meta changes too; see watcher.js.
+  const [runImmediately, setRunImmediately] = useState(false)
   useEffect(() => {
-    setBypassDrafts(bundle?.dangerously_skip_draft_gate === true)
+    setRunImmediately(bundle?.dangerously_skip_draft_gate === true)
   }, [bundle?.dangerously_skip_draft_gate])
   const [modalOpen, setModalOpen] = useState(false)
 
@@ -126,7 +125,7 @@ export default function CanvasView(): JSX.Element {
       if (msg.projectId !== projectId) return
       setTitle(msg.title)
       if (typeof msg.dangerously_skip_draft_gate === 'boolean') {
-        setBypassDrafts(msg.dangerously_skip_draft_gate)
+        setRunImmediately(msg.dangerously_skip_draft_gate)
       }
     }
     socket.on('title', onTitle)
@@ -135,7 +134,7 @@ export default function CanvasView(): JSX.Element {
     }
   }, [projectId])
 
-  const patchBypass = async (next: boolean): Promise<void> => {
+  const patchRunImmediately = async (next: boolean): Promise<void> => {
     if (projectId === null) return
     const r = await fetch(
       `${VIEWER_URL}/projects/${encodeURIComponent(projectId)}`,
@@ -146,7 +145,7 @@ export default function CanvasView(): JSX.Element {
       },
     )
     if (!r.ok) throw new Error(`viewer ${r.status}`)
-    setBypassDrafts(next)
+    setRunImmediately(next)
   }
 
   useEffect(() => {
@@ -196,24 +195,25 @@ export default function CanvasView(): JSX.Element {
         currentTab={canvasTab}
         onTabChange={setCanvasTab}
         onSaveTitle={saveTitle}
-        bypassDrafts={bypassDrafts}
-        onOpenBypassModal={() => setModalOpen(true)}
+        runImmediately={runImmediately}
+        onReviewDrafts={() => { patchRunImmediately(false) }}
+        onRunImmediately={() => setModalOpen(true)}
       />
-      {bypassDrafts ? (
+      {runImmediately ? (
         <div className="draft-gate-banner" role="alert">
           <div className="draft-gate-banner-text">
             <span className="draft-gate-banner-warn">⚠</span>
             <span>
-              Drafts off — every agent generation fires immediately, real
-              money on your card.
+              Draft review is off — agent generations run immediately and may
+              charge your card.
             </span>
           </div>
           <button
             type="button"
-            className="draft-gate-banner-reenable"
-            onClick={() => { patchBypass(false) }}
+            className="draft-gate-banner-action"
+            onClick={() => { patchRunImmediately(false) }}
           >
-            Re-enable →
+            Review drafts
           </button>
         </div>
       ) : null}
@@ -291,7 +291,7 @@ export default function CanvasView(): JSX.Element {
     </div>
     <DraftGateModal
       isOpen={modalOpen}
-      onConfirm={async () => { await patchBypass(true); setModalOpen(false) }}
+      onConfirm={async () => { await patchRunImmediately(true); setModalOpen(false) }}
       onCancel={() => setModalOpen(false)}
     />
     </MediaExpandProvider>
@@ -306,16 +306,25 @@ function CanvasHeader({
   currentTab,
   onTabChange,
   onSaveTitle,
-  bypassDrafts,
-  onOpenBypassModal,
+  runImmediately,
+  onReviewDrafts,
+  onRunImmediately,
 }: {
   title: string
   currentTab: CanvasTab
   onTabChange: (t: CanvasTab) => void
   onSaveTitle: (next: string) => void
-  bypassDrafts: boolean
-  onOpenBypassModal: () => void
+  runImmediately: boolean
+  onReviewDrafts: () => void
+  onRunImmediately: () => void
 }): JSX.Element {
+  const reviewClassName = !runImmediately
+    ? 'generation-mode-option is-active'
+    : 'generation-mode-option'
+  const runClassName = runImmediately
+    ? 'generation-mode-option is-run-immediately is-active'
+    : 'generation-mode-option'
+
   return (
     <div className="grid h-12 shrink-0 grid-cols-[1fr_auto_1fr] items-center gap-4 border-b border-border bg-background px-3">
       <div className="flex min-w-0 items-center gap-2">
@@ -330,20 +339,30 @@ function CanvasHeader({
       </div>
       <CanvasTabs current={currentTab} onChange={onTabChange} />
       <div className="flex items-center justify-end">
-        {/* `drafts: on` chip surfaces only when the bypass is OFF. When
-            ON, the full-width banner below this header replaces it, so
-            we hide the chip to avoid redundant state. */}
-        {bypassDrafts ? null : (
+        <div
+          className="generation-mode-control"
+          role="group"
+          aria-label="Generation mode"
+        >
           <button
             type="button"
-            className="drafts-on-chip"
-            onClick={onOpenBypassModal}
-            title="Drafts gate every paid generation. Click to skip the gate for this project."
+            className={reviewClassName}
+            aria-pressed={!runImmediately}
+            onClick={runImmediately ? onReviewDrafts : undefined}
+            title="Paid generations pause for draft review before they run."
           >
-            <span className="drafts-on-chip-dot" aria-hidden />
-            drafts: on
+            Review drafts
           </button>
-        )}
+          <button
+            type="button"
+            className={runClassName}
+            aria-pressed={runImmediately}
+            onClick={runImmediately ? undefined : onRunImmediately}
+            title="Turn off draft review so paid generations run immediately."
+          >
+            Run immediately
+          </button>
+        </div>
       </div>
     </div>
   )
