@@ -25,9 +25,17 @@ If a canvas note authored this image (a shot note rendered as a still, a script 
 
 Do not attempt to invent images via ASCII art or markdown embedding — call the CLI.
 
+Reference resolution: if the user means outputs from the immediately previous staged/fired jobs ("them", "those three", "the one that just finished"), read the result feed first:
+
+```
+node "$PAI_REPO_ROOT/server/cli/list_generation_results.js" --recent N
+```
+
+Use successful `node_id`s as `--ref-source-id`. Read `./workflow.json` only for current-canvas state, older/ambiguous refs, archived/live checks, or if the feed is incomplete/stale.
+
 ## Patterns
 
-Pick the one that fits. When unsure, read `./workflow.json` first to see what's already on the canvas (reads are unrestricted; only writes go through the mutator).
+Pick the one that fits. Resolve refs with the rule above; when unsure, read `./workflow.json` to see what's currently on the canvas (reads are unrestricted; only writes go through the mutator).
 
 **Character-design pre-flight — ALWAYS run this check first when the user mentions characters.** The pivotal question is *will this character appear in downstream video work?* — anything the user calls a video, clip, promo, 宣传片, 短片, 连续剧, film, scene, 拍片, shot, or short film.
 
