@@ -39,7 +39,7 @@ Two rules:
 
 Use the cheapest reliable source:
 
-- **Just-fired staged jobs:** If the user refers to outputs from the immediately previous staged/fired jobs ("them", "those three", "the one that just finished"), read the result feed first: `node "$PAI_REPO_ROOT/server/cli/list_generation_results.js" --job-id <id>` if you kept ids, otherwise use `--recent N`. Use successful `node_id`s as `--ref-source-id`.
+- **Previous staged jobs:** If you staged jobs and the user later refers to them ("them", "those three", "the one that just finished"), check the result feed before any skill/CLI call or chat-memory guess: `node "$PAI_REPO_ROOT/server/cli/list_generation_results.js" --job-id <id>` if you kept ids, otherwise use `--recent N`. The browser may have fired drafts between turns; never say "not fired yet" until you check. Use successful `node_id`s as `--ref-source-id`.
 - **Current canvas state:** Read `workflow.json` when the user refers to the canvas, live/archived state, selected/visible/left/right placement, older nodes, edits/deletes, or anything ambiguous. `workflow.json` is canonical; the result feed is recent history.
 - **Fallback:** If the feed has fewer successes than needed, includes failures/aborts, feels stale, or does not answer the user's reference cleanly, read `workflow.json`.
 
