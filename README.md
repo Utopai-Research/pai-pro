@@ -8,7 +8,7 @@
 [![Discord][discord-shield]][discord-url]
 [![Follow @UtopaiStudios](https://img.shields.io/badge/Follow-%40UtopaiStudios-000000?style=flat&logo=x&logoColor=white)](https://x.com/UtopaiStudios)
 
-[discord-shield]: https://img.shields.io/badge/Discord-Join-5865F2?style=flat&logo=discord&logoColor=white
+[discord-shield]: https://img.shields.io/badge/Discord-Join-green?style=flat&logo=discord&logoColor=white
 [discord-url]: https://discord.gg/CfjRGGwK
 
 <img src="docs/assets/canvas_view.webp" alt="PAI-Pro canvas view" width="100%" />
