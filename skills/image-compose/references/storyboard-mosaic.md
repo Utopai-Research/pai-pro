@@ -12,7 +12,7 @@ Bracketed-section format for `node "$PAI_REPO_ROOT/server/cli/generate_image.js"
 
 ## Pre-flight: current canvas state
 
-This flow needs the current canvas, so per AGENTS.md § "Choosing context", read `./workflow.json` and identify:
+This flow needs the current canvas, so per the project `AGENTS.md` § "Choosing context", read `./workflow.json` and identify:
 
 - script note (id starts `note_`, label starts `"Script:"`)
 - shot notes (label matches `"Shot <N> (<a>–<b>s)"`)

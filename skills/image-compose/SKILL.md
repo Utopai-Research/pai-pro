@@ -11,9 +11,9 @@ All patterns below shell out to:
 node "$PAI_REPO_ROOT/server/cli/generate_image.js" --prompt "..." [--aspect-ratio 16:9] [--image-size 2K] [--label "..."] [--subtype <character|location|edit|reference|split>] [--name "..."] [--role "..."] [--description "..."] [--source-node-id <id>] [--ref-source-id <id> ...]
 ```
 
-`$PAI_REPO_ROOT` is exported by the viewer — see AGENTS.md § "Media CLIs / Invocation path".
+`$PAI_REPO_ROOT` is exported by the viewer — see the project `AGENTS.md` § "Media CLIs / Invocation path".
 
-Calls go via `--stage` — see AGENTS.md § "Draft gate". **Pass `run_in_background: true` on the Bash call and poll with BashOutput** — the PreToolUse hook blocks foreground attempts (each parallel-staged variant needs the flag too).
+Calls go via `--stage` — see the project `AGENTS.md` § "Draft gate". **Pass `run_in_background: true` on the Bash call and poll with BashOutput** — the PreToolUse hook blocks foreground attempts (each parallel-staged variant needs the flag too).
 
 `--label` defaults to the truncated prompt (≤30 chars) if omitted; pass an explicit one when you have a better caption.
 
@@ -21,13 +21,13 @@ When references are passed, refer to them in the prompt positionally as `@Image1
 
 External URLs (a pasted CDN link, a moodboard image) must be mirrored onto the canvas first via `mirror_url.js --url <URL>` — the returned `node_id` then plugs into `--ref-source-id` like any other canvas source. There is no separate URL-passthrough flag.
 
-If a canvas note authored this image (a shot note rendered as a still, a script note designing a character / location), pass `--source-node-id <note_id>` — see AGENTS.md § "Authorship edges".
+If a canvas note authored this image (a shot note rendered as a still, a script note designing a character / location), pass `--source-node-id <note_id>` — see the project `AGENTS.md` § "Authorship edges".
 
 Do not attempt to invent images via ASCII art or markdown embedding — call the CLI.
 
 ## Patterns
 
-Pick the one that fits. For source lookup, follow AGENTS.md § "Choosing context"; this skill only owns image-specific prompt and CLI shape.
+Pick the one that fits. For source lookup, follow the project `AGENTS.md` § "Choosing context"; this skill only owns image-specific prompt and CLI shape.
 
 **Character-design pre-flight — ALWAYS run this check first when the user mentions characters.** The pivotal question is *will this character appear in downstream video work?* — anything the user calls a video, clip, promo, 宣传片, 短片, 连续剧, film, scene, 拍片, shot, or short film.
 
@@ -127,7 +127,7 @@ The output is a single 4-panel sheet (Front-full / Profile-full / Back-full / Cl
 
 Distinct from Pattern 1: Pattern 1 produces a single static portrait (poster, print art, illustration) that will NOT be passed to video gen. Pattern 7 produces a multi-view sheet engineered for video-gen consumption. **For any character that will be referenced by a video gen call later, choose Pattern 7 — even without refs.** The 4-panel layout's value is the multi-angle data, not just the multi-ref triangulation; both modes deliver it.
 
-- Pre-flight: for current uploaded refs, follow AGENTS.md § "Choosing context" and identify reference image nodes (`subtype: "reference"`, ideally ≥3 photos of the same actor from different angles or lighting). Confirm the ref count to the user in one short line before firing.
+- Pre-flight: for current uploaded refs, follow the project `AGENTS.md` § "Choosing context" and identify reference image nodes (`subtype: "reference"`, ideally ≥3 photos of the same actor from different angles or lighting). Confirm the ref count to the user in one short line before firing.
 - `node "$PAI_REPO_ROOT/server/cli/generate_image.js" --prompt "..." --aspect-ratio 16:9 --image-size 2K --subtype character --name "<character_name>" --role "..." --ref-source-id <ref1> --ref-source-id <ref2> --ref-source-id <ref3> --source-node-id <ref1>` — multi-ref is load-bearing; never fire this pattern with fewer than 3 refs (model overfits to the one angle it has).
 - ONE call. ONE sheet per character.
 - The sheet plugs into `generate_video.js` as `--ref-source-id <sheet_id>` for any downstream shot (front / back / profile) — no cropping needed for typical use.
@@ -142,8 +142,8 @@ Distinct from Pattern 1: Pattern 1 produces a single static portrait (poster, pr
 
 ## After the CLI returns
 
-One sentence with the price — see AGENTS.md § "Draft gate".
+One sentence with the price — see the project `AGENTS.md` § "Draft gate".
 
 ## On failure
 
-See AGENTS.md § "Failure handling". `limits.max_image_refs` is 16. For `content_filtered`, propose softer wording.
+See the project `AGENTS.md` § "Failure handling". `limits.max_image_refs` is 16. For `content_filtered`, propose softer wording.
