@@ -11,7 +11,8 @@ cp .env.example .env
 # Get your PAI_KEY at https://pai-pro.utopaistudios.com/keys (format: PAI_<random>)
 printf "Paste your PAI_KEY: " && read -r key && sed -i.bak "s|^PAI_KEY=.*|PAI_KEY=$key|" .env && rm -f .env.bak
 docker compose up --build             # ~5-10 min first build, cached after
-open http://localhost:7588            # browser entry
+# Wait for "PAI Pro is ready", then open the browser entry:
+open http://localhost:7588
 ```
 
 In the embedded terminal, pick a Claude Code theme and run `/login` once. After that the canvas is fully wired — generate images, chain into videos, drop notes, scrub the timeline.
@@ -41,7 +42,7 @@ Container port `:7488` maps to host `:7588`. This is intentional so a parallel `
 
 ## Verbose logs
 
-Default Docker output is a single "ready, click here" banner. Set `DEBUG=1` in `.env` and rebuild to bring back the full URL table + cloudflared chatter. The tunnel URL is always written to `.tunnel_url.log` in the container regardless of `DEBUG`.
+Default Docker output waits for the tunnel check before printing the ready banner. Set `DEBUG=1` in `.env` and rebuild to bring back the full URL table + cloudflared chatter. The tunnel URL is always written to `.tunnel_url.log` in the container regardless of `DEBUG`.
 
 ## Volume management
 
