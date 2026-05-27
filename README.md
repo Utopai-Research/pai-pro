@@ -35,7 +35,7 @@ printf "Paste your PAI_KEY: " && read -r key && sed -i.bak "s|^PAI_KEY=.*|PAI_KE
 docker compose up --build
 ```
 
-Open <http://localhost:7588>.
+When the logs say `PAI Pro is ready`, open <http://localhost:7588>.
 
 **Or paste this block into your coding agent** — Claude Code / Codex / Cursor / Gemini CLI all consume it the same way (host mode, Vite HMR for live reload):
 

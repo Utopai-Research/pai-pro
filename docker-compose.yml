@@ -49,7 +49,9 @@ services:
       interval: 15s
       timeout: 5s
       retries: 3
-      start_period: 10s
+      # Entrypoint verifies the Cloudflare tunnel before booting the viewer,
+      # so give that setup window time before healthcheck failures count.
+      start_period: 150s
     restart: unless-stopped
     deploy:
       resources:

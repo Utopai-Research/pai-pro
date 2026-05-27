@@ -444,10 +444,10 @@ main() {
     ensure_tunnel
     smoke_check_clis
     start_viewer
-    start_web
     wait_for_local_port "viewer" "$VIEWER_PORT" "$VIEWER_SESSION"
-    wait_for_local_port "web"    "$WEB_PORT"    "$WEB_SESSION"
     verify_tunnel_reachable
+    start_web
+    wait_for_local_port "web"    "$WEB_PORT"    "$WEB_SESSION"
     print_ready_banner
 }
 

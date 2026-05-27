@@ -4,8 +4,9 @@
 # Boot tasks before exec'ing the viewer:
 #   1. Link in-image skills into ~/.claude/skills (idempotent).
 #   2. Ensure the projects dir exists on the named volume.
-#   3. Honor PUBLIC_VIEWER_URL by writing it into .tunnel_url for skills.
-#   4. Hand off to node with exec so tini sees node directly.
+#   3. Verify PUBLIC_VIEWER_URL or a quick tunnel before showing the web UI.
+#   4. Warn if PAI_KEY is absent.
+#   5. Hand off to node with exec so tini sees node directly.
 set -e
 
 CLAUDE_DIR="${HOME}/.claude"
@@ -30,49 +31,125 @@ done
 # 2. Projects dir on the named volume (no-op after first boot).
 mkdir -p /repo/projects
 
-# 3. Wire the tunnel URL into PAI_REPO_ROOT.
-#    Priority:
-#      a. PUBLIC_VIEWER_URL set → write directly (user's stable named tunnel)
-#      b. Else → launch a cloudflared quick tunnel as a background process,
-#         poll its log for the trycloudflare.com URL, write that into
-#         /repo/.tunnel_url. Skills read the file lazily (only video gen
-#         currently needs it).
+wait_until() {
+  max_seconds="$1"
+  shift
+  i=0
+  while [ "$i" -lt "$max_seconds" ]; do
+    if "$@"; then
+      return 0
+    fi
+    printf "."
+    i=$((i + 1))
+    sleep 1
+  done
+  return 1
+}
+
+start_probe_server() {
+  node -e 'require("http").createServer((_req,res)=>{res.writeHead(200,{"content-type":"text/plain"});res.end("pai-pro tunnel probe\n")}).listen(7488,"127.0.0.1")' &
+  PROBE_PID="$!"
+  if ! wait_until 10 curl -sf -o /dev/null http://127.0.0.1:7488/; then
+    echo "" >&2
+    echo "[entrypoint] tunnel: local probe server did not start on 127.0.0.1:7488" >&2
+    exit 1
+  fi
+  echo ""
+}
+
+stop_probe_server() {
+  if [ -n "${PROBE_PID:-}" ]; then
+    kill "${PROBE_PID}" 2>/dev/null || true
+    wait "${PROBE_PID}" 2>/dev/null || true
+    unset PROBE_PID
+  fi
+}
+
+normalize_tunnel_url() {
+  node -e 'const u = new URL(process.argv[1]); process.stdout.write(u.origin)' "$1"
+}
+
+resolve_tunnel_ip() {
+  TUNNEL_IP=$(node -e 'const { Resolver } = require("dns").promises; const r = new Resolver(); r.setServers(["1.1.1.1"]); r.resolve4(process.argv[1]).then((ips) => { if (!ips[0]) process.exit(1); process.stdout.write(ips[0]); }).catch(() => process.exit(1));' "$TUNNEL_HOST" 2>/dev/null)
+  [ -n "${TUNNEL_IP}" ]
+}
+
+probe_tunnel() {
+  TUNNEL_PORT=$(node -e 'const u = new URL(process.argv[1]); process.stdout.write(u.port || (u.protocol === "https:" ? "443" : "80"))' "$TUNNEL_URL")
+  curl -sf -m 3 --resolve "${TUNNEL_HOST}:${TUNNEL_PORT}:${TUNNEL_IP}" -o /dev/null "${TUNNEL_URL}/"
+}
+
+verify_tunnel_reachable() {
+  TUNNEL_URL="$(cat /repo/.tunnel_url)"
+  TUNNEL_HOST=$(node -e 'const u = new URL(process.argv[1]); process.stdout.write(u.hostname)' "$TUNNEL_URL")
+
+  echo -n "[entrypoint] tunnel: resolving ${TUNNEL_HOST} via 1.1.1.1"
+  if ! wait_until 30 resolve_tunnel_ip; then
+    echo "" >&2
+    echo "[entrypoint] tunnel: ${TUNNEL_HOST} did not resolve via 1.1.1.1; refusing to start the web UI" >&2
+    exit 1
+  fi
+  echo " -> ${TUNNEL_IP}"
+
+  echo -n "[entrypoint] tunnel: probing end-to-end"
+  if ! wait_until 30 probe_tunnel; then
+    echo "" >&2
+    echo "[entrypoint] tunnel: ${TUNNEL_URL} resolved but did not route to the local viewer; refusing to start the web UI" >&2
+    exit 1
+  fi
+  echo ""
+}
+trap stop_probe_server EXIT
+
+# 3. Wire and verify the tunnel URL before the production viewer boots.
+#    The viewer serves the web UI in Docker, so this entrypoint owns the
+#    "don't show the browser URL until refs are publicly reachable" gate.
 rm -f /repo/.tunnel_url
+start_probe_server
 if [ -n "${PUBLIC_VIEWER_URL:-}" ]; then
-  printf '%s\n' "${PUBLIC_VIEWER_URL}" > /repo/.tunnel_url
-  echo "[entrypoint] tunnel: using PUBLIC_VIEWER_URL=${PUBLIC_VIEWER_URL}"
+  TUNNEL_URL="$(normalize_tunnel_url "${PUBLIC_VIEWER_URL}")"
+  printf '%s\n' "${TUNNEL_URL}" > /repo/.tunnel_url
+  echo "[entrypoint] tunnel: using PUBLIC_VIEWER_URL=${TUNNEL_URL}"
 elif command -v cloudflared >/dev/null 2>&1; then
   CF_LOG=/tmp/cloudflared.log
   : > "${CF_LOG}"
-  # The container is going to be killed cleanly by tini; the background
-  # cloudflared inherits SIGTERM forwarding via its parent shell.
-  cloudflared tunnel --url http://localhost:7488 \
+  # The real viewer will bind 0.0.0.0:7488 after this probe exits. During
+  # setup, a tiny local server occupies the same port so cloudflared can be
+  # tested end-to-end before users see the web UI.
+  cloudflared tunnel --url http://127.0.0.1:7488 \
     --logfile "${CF_LOG}" \
     --no-autoupdate \
     >/dev/null 2>&1 &
-  [ "${DEBUG:-}" = "1" ] && echo "[entrypoint] tunnel: cloudflared spawned (pid $!), polling for URL…"
-  # Poll asynchronously so the viewer can boot in parallel; video gen
-  # will fail with a clear bad_args until the tunnel lands.
-  (
-    for i in $(seq 1 60); do
-      URL=$(grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' "${CF_LOG}" 2>/dev/null | head -1)
-      if [ -n "${URL}" ]; then
-        printf '%s\n' "${URL}" > /repo/.tunnel_url
-        # Tunnel URL is always written to .tunnel_url.log for debugging
-        # tunnel issues, regardless of DEBUG. Only show in stdout if
-        # DEBUG=1 — the URL is internal infrastructure and looks like an
-        # instruction to click if it appears in user-facing output.
-        echo "[$(date -Iseconds)] tunnel URL: ${URL}" >> /repo/.tunnel_url.log
-        [ "${DEBUG:-}" = "1" ] && echo "[entrypoint] tunnel: URL ready after ${i}s — ${URL}"
-        exit 0
-      fi
-      sleep 1
-    done
+  [ "${DEBUG:-}" = "1" ] && echo "[entrypoint] tunnel: cloudflared spawned (pid $!), polling for URL..."
+
+  echo -n "[entrypoint] tunnel: waiting for URL"
+  for i in $(seq 1 60); do
+    URL=$(grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' "${CF_LOG}" 2>/dev/null | head -1)
+    if [ -n "${URL}" ]; then
+      TUNNEL_URL="$(normalize_tunnel_url "${URL}")"
+      printf '%s\n' "${TUNNEL_URL}" > /repo/.tunnel_url
+      # Tunnel URL is always written to .tunnel_url.log for debugging
+      # tunnel issues, regardless of DEBUG. Only show in stdout if
+      # DEBUG=1 — the URL is internal infrastructure and looks like an
+      # instruction to click if it appears in user-facing output.
+      echo "[$(date -Iseconds)] tunnel URL: ${TUNNEL_URL}" >> /repo/.tunnel_url.log
+      [ "${DEBUG:-}" = "1" ] && echo " ${TUNNEL_URL}"
+      break
+    fi
+    printf "."
+    sleep 1
+  done
+  if [ ! -s /repo/.tunnel_url ]; then
+    echo "" >&2
     echo "[entrypoint] tunnel: cloudflared did not produce a URL within 60s; check /tmp/cloudflared.log" >&2
-  ) &
+    exit 1
+  fi
 else
-  echo "[entrypoint] tunnel: cloudflared not installed; video gen will fail until PUBLIC_VIEWER_URL is set"
+  echo "[entrypoint] tunnel: cloudflared not installed and PUBLIC_VIEWER_URL is unset; refusing to start the web UI" >&2
+  exit 1
 fi
+verify_tunnel_reachable
+stop_probe_server
 
 # 4. PAI_KEY warn-but-don't-block. `docker compose up` has no TTY for an
 #    interactive prompt; the next-best onboarding hint is a loud message
