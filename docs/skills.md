@@ -12,7 +12,7 @@ Each skill is a standard `SKILL.md` with YAML frontmatter — Claude Code auto-d
 | `voice-compose` | "Give the detective a voice" | Wraps `generate_voice.js`. Attaches to the character node in place. |
 | `groups-compose` | "Group these as Scene 2", "Frame the character refs" | Maintains semantic groupings (scenes, ref sets, act beats) on the canvas. |
 
-Two more primitives — taking a note ("take a note", "jot down", "remember that") and summarizing the canvas ("what do we have?", "show the graph") — are tiny enough that they live inline in `agent-templates/AGENTS.md` instead of as separate skill folders. See the `skills/CLAUDE.md` threshold rule for the rationale.
+Two more primitives — taking a note ("take a note", "jot down", "remember that") and summarizing the canvas ("what do we have?", "show the graph") — are tiny enough that they live inline in `agent-templates/PROJECT_AGENT.md` instead of as separate skill folders. See the `skills/CLAUDE.md` threshold rule for the rationale.
 
 ## Authoritative recipes
 
@@ -46,4 +46,4 @@ See [skills/CLAUDE.md](../skills/CLAUDE.md) for the authoring contract: SKILL.md
 
 ## Parallel calls
 
-When you ask the agent for multiple independent things at once ("design three character variations" or "generate three images of the diner from different angles"), pai-pro fires them concurrently. Three independent images render in ~20s, not ~60s. The *Parallel calls* rule in [agent-templates/AGENTS.md](../agent-templates/AGENTS.md) is the agent-side contract.
+When you ask the agent for multiple independent things at once ("design three character variations" or "generate three images of the diner from different angles"), pai-pro fires them concurrently. Three independent images render in ~20s, not ~60s. The *Parallel calls* rule in [agent-templates/PROJECT_AGENT.md](../agent-templates/PROJECT_AGENT.md) is the agent-side contract.

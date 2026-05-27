@@ -45,7 +45,7 @@ Claude-specific notes:
 - To wait on a backgrounded Bash call, use the \`BashOutput\` tool against the bash id you got back. Never \`cat\`/\`grep\` \`/tmp/claude-*/.../tasks/<id>.output\`.
 `;
 
-const AGENT_TEMPLATE_PATH = path.join(PAI_REPO_ROOT, "agent-templates", "AGENTS.md");
+const AGENT_TEMPLATE_PATH = path.join(PAI_REPO_ROOT, "agent-templates", "PROJECT_AGENT.md");
 
 // Per-project settings.local.json — excludes the root dev CLAUDE.md from
 // the agent's memory so the per-project session sees ONLY its own
@@ -112,7 +112,7 @@ export async function ensureProjectStructure(id) {
   );
 
   // AGENTS.md — canonical per-project agent operating manual, copied
-  // from agent-templates/AGENTS.md. Write-if-missing so a user who has
+  // from agent-templates/PROJECT_AGENT.md. Write-if-missing so a user who has
   // customized their copy isn't clobbered on viewer reboot.
   const agentsPath = path.join(dir, "AGENTS.md");
   if (!(await fileExists(agentsPath))) {

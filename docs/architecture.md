@@ -60,14 +60,14 @@ pai-pro/
 ├── web/                           # Vite + React 18 + TS + Tailwind + xyflow + xterm
 ├── projects/                      # gitignored — your work lives here
 ├── CLAUDE.md                      # repo maintainer guide (dev sessions auto-load this)
-├── agent-templates/AGENTS.md      # canvas schema + agent persona + skill routing (copied into each project)
+├── agent-templates/PROJECT_AGENT.md # canvas schema + agent persona + skill routing (copied into each project)
 ├── .claude-plugin/marketplace.json
 └── scripts/                       # tmux launcher (start.sh) + teardown (stop.sh) + skills symlinker (setup)
 ```
 
 ## Where each layer is documented
 
-- **Canvas schema + agent persona + skill routing:** [agent-templates/AGENTS.md](../agent-templates/AGENTS.md) — the canonical per-project agent operating manual. The viewer copies it into each project at create time as `projects/<id>/AGENTS.md`. The most important reference for the agent's behavior contract.
+- **Canvas schema + agent persona + skill routing:** [agent-templates/PROJECT_AGENT.md](../agent-templates/PROJECT_AGENT.md) — the canonical per-project agent operating manual. The viewer copies it into each project at create time as `projects/<id>/AGENTS.md`. The most important reference for the agent's behavior contract.
 - **Repo maintainer guide:** [CLAUDE.md](../CLAUDE.md) at the repo root — what you (the maintainer) auto-load when running `claude` at the repo root. Architecture overview, contributor recipes, debugging notes. Per-project agent sessions exclude it via `claudeMdExcludes`.
 - **Skill authoring:** [skills/CLAUDE.md](../skills/CLAUDE.md) — when to write a new skill, when to extend an existing one.
 - **Individual skill recipes:** [skills/<name>/SKILL.md](../skills/) — one file per skill; together they describe the entire skill surface.

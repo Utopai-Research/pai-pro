@@ -1,6 +1,6 @@
 # pai-pro — repo maintainer guide
 
-This file is dev-only. The per-project filmmaking agent's operating manual is at `agent-templates/AGENTS.md` (copied into each project as `projects/<id>/AGENTS.md`).
+This file is dev-only. The per-project filmmaking agent's operating manual is at `agent-templates/PROJECT_AGENT.md` (copied into each project as `projects/<id>/AGENTS.md`).
 
 When you `cd pai-pro && claude` to work on this repo, this is the file Claude Code auto-loads. Per-project Claude sessions exclude it via `claudeMdExcludes` in their own `.claude/settings.local.json`.
 
@@ -32,7 +32,7 @@ Spirit borrowed from [Karpathy's observations](https://x.com/karpathy/status/201
   - `local_mirror.js` handles the project-side I/O (write bytes, build viewer URLs, resolve refs to data URIs).
 - `web/src/` — React + Vite + React Flow + Socket.IO client.
 - `skills/*` — local Claude Code skills. `./scripts/setup` symlinks them into `~/.claude/skills/`. Skill-authoring rules live at `skills/CLAUDE.md` (auto-loaded when working in that subtree).
-- `agent-templates/AGENTS.md` — canonical per-project agent operating manual. `server/services/projects.js` copies it into `projects/<id>/AGENTS.md` at project create time, alongside a thin `projects/<id>/CLAUDE.md` wrapper that `@import`s it.
+- `agent-templates/PROJECT_AGENT.md` — canonical per-project agent operating manual. `server/services/projects.js` copies it into `projects/<id>/AGENTS.md` at project create time, alongside a thin `projects/<id>/CLAUDE.md` wrapper that `@import`s it.
 - `projects/<id>/` — runtime project data. Gitignored. Created via `POST /projects` or by `local_viewer.js`'s bootstrap on first run. Each contains `workflow.json`, `meta.json`, `assets/{images,videos,audios,notes,.tmp}/`, `canvas_positions.json`, `AGENTS.md`, `CLAUDE.md`, `.claude/`.
 
 ### When adding a new media CLI
@@ -40,20 +40,20 @@ Spirit borrowed from [Karpathy's observations](https://x.com/karpathy/status/201
 1. Add a new `pai_<x>_client.js` wrapping `callGenerate({ model: "<pai-raw-model>", payload, ... })` (sync) or `callSubmit + pollStatus` (async). Decode the upstream model's response shape and return `{ bytes, mime, model, durationSeconds, costUsd }` so the CLI is decode-agnostic. See `pai_image_client.js` for the sync template, `pai_video_client.js` for async.
 2. Add `server/cli/generate_<x>.js`. Mirror `generate_image.js`'s shape: import the new `pai_<x>_client.js`, plus `local_mirror.js` (`writeBytesToTmp` or `mirrorToTmp` for byte-vs-URL outputs, plus `viewerUrlForLocalPath` and `buildProviderRefs`), `_cli.js`, `_mutate_helper.js`; parse args; call the client; stage the output in `assets/.tmp/`; hand the absolute path to `postNodeAddBatch({ ..., tmpPath })` (or `postMutation({ op: "addBatch", payload: { nodes: [{ ..., tmp_path }] } })` for multi-node flows); compute the final URL/local_path from the assigned node id + extension; clean up the temp file if the mutation failed or was skipped; print one JSON line including `canvas_mutation`. On failure print `{ ok: false, klass, message }` and exit non-zero.
 3. Add the model entry to `server/model_registry.js` and look up `getDefault(kind).id` in the CLI rather than hardcoding the string. Set `hidden: true` if the model is internal (not user-facing as a canvas card, e.g. the asset-upload row).
-4. Add a row to the "Media CLIs" table in `agent-templates/AGENTS.md` (and update the Failure-handling table if the CLI surfaces a new class). Existing projects need to re-copy the template to pick up the change — see `### Updating the agent template across existing projects` below.
+4. Add a row to the "Media CLIs" table in `agent-templates/PROJECT_AGENT.md` (and update the Failure-handling table if the CLI surfaces a new class). Existing projects need to re-copy the template to pick up the change — see `### Updating the agent template across existing projects` below.
 5. Add a skill `skills/<x>-compose/SKILL.md` per `skills/CLAUDE.md` rules. The recipe should pass `--ref-source-id` (byte refs) and `--source-node-id` (authorship edge) flags rather than asking the agent to write the node itself.
-6. Add a row to the Skills-routing table at the top of `agent-templates/AGENTS.md`.
+6. Add a row to the Skills-routing table at the top of `agent-templates/PROJECT_AGENT.md`.
 
 ### When adding a new node type
 
 1. Update `web/src/types/canvas.ts` (renderer source of truth). Add a React component to `web/src/pages/CanvasPage/nodes.tsx` and a `NODE_SIZES` entry in `web/src/pages/CanvasPage/nodeData.ts`.
 2. Mirror the type into `server/canvas_schema.js`: add the data-validator (`#<type>Data`), the node-validator (`#<type>Node`), add it to `#canvasNode.oneOf`, and add a `NODE_ID_PREFIX` entry + `dataValidatorIdByType` entry in `server/canvas_mutator.js`.
 3. Run `npm test` in `server/` — the `real <project>/workflow.json validates against doc schema` test catches drift.
-4. Update the "Node grammar (what to put in payloads)" section in `agent-templates/AGENTS.md`. If a media CLI emits this type, update the relevant `<x>-compose` skill recipe.
+4. Update the "Node grammar (what to put in payloads)" section in `agent-templates/PROJECT_AGENT.md`. If a media CLI emits this type, update the relevant `<x>-compose` skill recipe.
 
 ### When changing the agent template
 
-`agent-templates/AGENTS.md` is the canonical source. Keep it lean — push per-tool recipes and reference detail into the relevant skill; this file is the index. Update the Skills-routing table at the top whenever you add or remove a skill. Existing projects keep their copy until manually re-synced.
+`agent-templates/PROJECT_AGENT.md` is the canonical source. Keep it lean — push per-tool recipes and reference detail into the relevant skill; this file is the index. Update the Skills-routing table at the top whenever you add or remove a skill. Existing projects keep their copy until manually re-synced.
 
 ### When changing this file
 
