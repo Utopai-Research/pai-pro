@@ -7,7 +7,7 @@ description: Designs and attaches voices to characters on the filmmaking canvas 
 
 ## Patterns
 
-Pick the one that fits. When unsure, read `./workflow.json` first to see which character the voice attaches to.
+Pick the one that fits. For target lookup, follow AGENTS.md § "Choosing context"; this skill only owns voice-specific prompt and CLI shape.
 
 ### 1. Character voice
 
@@ -15,7 +15,7 @@ Triggers: "give / design a voice for [character]", "what does [character] sound 
 
 - Identify the target — any `image_result` of the person you want to voice. Don't gate on `data.subtype`.
 - Read the image first. Open `data.local_path` before composing the prompt — voice description is grounded in what you see. Any `data.name` / `role` / `description` on the node layers on top, doesn't replace.
-- Run via Bash (`$PAI_REPO_ROOT` is exported by the viewer — see CLAUDE.md § "Media CLIs / Invocation path"):
+- Run via Bash (`$PAI_REPO_ROOT` is exported by the viewer — see AGENTS.md § "Media CLIs / Invocation path"):
   ```
   node "$PAI_REPO_ROOT/server/cli/generate_voice.js" \
     --text "<line>" \
@@ -32,7 +32,7 @@ Triggers: "give / design a voice for [character]", "what does [character] sound 
   - a characteristic line from an imagined scene,
   - a brief self-introduction in their voice ("I've been working this beat for twenty years…"),
   - or a catchphrase.
-- Calls go via `--stage` — see CLAUDE.md § "Draft gate". Bulk asks: one Bash call per target in a single turn, each becoming its own draft card.
+- Calls go via `--stage` — see AGENTS.md § "Draft gate". Bulk asks: one Bash call per target in a single turn, each becoming its own draft card.
 - The real `audio_result` (subtype `voice`, with `source_id` + derived edge to the source image) is minted only after the user fires the draft.
 
 ### 2. Standalone voice / narration / V.O.
@@ -54,4 +54,4 @@ This skill will grow to cover dialogue line readings and singing samples. For no
 
 ## On failure
 
-See CLAUDE.md § "Failure handling". For `content_filtered`, drop charged adjectives in the prompt.
+See AGENTS.md § "Failure handling". For `content_filtered`, drop charged adjectives in the prompt.

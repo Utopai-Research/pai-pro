@@ -1,6 +1,6 @@
 # Video — extension prompt construction
 
-For extending an existing canvas clip (Pattern 4). This file owns the continuity prefix, the sub-intent decision tree, and all sequencing logic for chained extension calls.
+For extending an existing canvas clip (Pattern 4). This file owns the continuity prefix and dependency check. Execution still follows AGENTS.md § "Draft gate" and § "Choosing context".
 
 ## Contents
 
@@ -9,7 +9,7 @@ For extending an existing canvas clip (Pattern 4). This file owns the continuity
 - Adjacent roles
 - What to lock vs. what to change
 - Why serialize
-- How serialization runs
+- How staged serialization runs
 - Long sequences — surface cost upfront
 - Exception — explicit parallel drafts
 - Worked example
@@ -71,15 +71,15 @@ If every answer is "no" for a given pair (two unrelated scenes), parallel is fin
 - **<15s reference cap.** Two consecutive 10s clips can't be parallelized via shared refs — combined ref length is 20s, over the cap. Serialize: render A first, then pass A's id to B (10s <15s ✓).
 - **"Same way" = chain shape.** When the user says "do the next N scenes the same way" after a chain, the structure being repeated is the chain itself, not the per-call shape. Don't collapse "same way" into firing parallel calls.
 
-## How serialization runs
+## How staged serialization runs
 
-Each `generate_video.js` call takes 2–4 min wall-clock — but it runs in the background, so the chat stays interactive. Sequence:
+Each fired `generate_video.js` job takes 2–4 min wall-clock. With the draft gate, sequence through user-fired results:
 
-1. Tell the user one short sentence: *"Rendering scene 1 in the background — about 3 min."* Fire `node "$PAI_REPO_ROOT/server/cli/generate_video.js" …` for clip A. Keep the bash id for the poll in step 2.
-2. `BashOutput`-poll the task until the `{ ok: true, output_url, ... }` JSON line lands. Read the JSON, add the `video_result` node for clip A to `./workflow.json`.
-3. Tell the user *"Scene 1 ready, kicking off scene 2."* Fire the CLI for clip B with `--ref-source-id <video_A.id>`. Poll, add node, repeat.
+1. Stage clip A and stop. Do not stage clip B in the same turn when B depends on A's actual output.
+2. After the user fires A and comes back, resolve A via AGENTS.md § "Choosing context".
+3. Stage clip B with `--ref-source-id <video_A.id>`. Repeat for each dependent link.
 
-The user can interrupt with new instructions between any of these steps — the previous turn's background jobs continue running, and you can poll them later. For long chains, surface the total wall-clock cost upfront (see "Long sequences" below).
+The user can interrupt with new instructions between links. For long chains, surface the total wall-clock cost upfront (see "Long sequences" below).
 
 ## Long sequences — surface cost upfront
 
@@ -98,8 +98,8 @@ Scene A ends with a traveler stepping off a train onto a platform. Scene B opens
 - Scene B's prompt names the platform but has no frame anchor from scene A. Mismatched cut.
 
 **Good (serial):**
-- Step 1: `node "$PAI_REPO_ROOT/server/cli/generate_video.js" --prompt "<scene A prompt>" --ref-source-id <traveler.id>` → wait → read JSON → add `video_A` node.
-- Step 2: `node "$PAI_REPO_ROOT/server/cli/generate_video.js" --prompt "<scene B prompt>" --ref-source-id <traveler.id> --ref-source-id <attendant.id> --ref-source-id <video_A.id>`. Prefix: *"Continue from @Video1 — maintain visual continuity with the final frame (platform at dusk, traveler mid-stride stepping off the train). The character in @Image1 is the traveler; the character in @Image2 is the attendant watching from the booth. …"*.
+- Step 1: stage `node "$PAI_REPO_ROOT/server/cli/generate_video.js" --prompt "<scene A prompt>" --ref-source-id <traveler.id>` and wait for the user to fire it.
+- Step 2: after A lands, resolve `video_A.id`, then stage `node "$PAI_REPO_ROOT/server/cli/generate_video.js" --prompt "<scene B prompt>" --ref-source-id <traveler.id> --ref-source-id <attendant.id> --ref-source-id <video_A.id>`. Prefix: *"Continue from @Video1 — maintain visual continuity with the final frame (platform at dusk, traveler mid-stride stepping off the train). The character in @Image1 is the traveler; the character in @Image2 is the attendant watching from the booth. …"*.
 
 ## Troubleshooting
 

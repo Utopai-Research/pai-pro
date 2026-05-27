@@ -4,15 +4,15 @@ Bracketed-section format for `node "$PAI_REPO_ROOT/server/cli/generate_image.js"
 
 ## Contents
 
-- Pre-flight: read the canvas first
+- Pre-flight: current canvas state
 - Per-location iteration
 - Prompt template (use verbatim, fill the bracketed parts)
 - Style presets (pick one — paste into [STYLE])
 - Default per-panel coverage when the user didn't specify
 
-## Pre-flight: read the canvas first
+## Pre-flight: current canvas state
 
-Before generating, read `./workflow.json` and identify:
+This flow needs the current canvas, so per AGENTS.md § "Choosing context", read `./workflow.json` and identify:
 
 - script note (id starts `note_`, label starts `"Script:"`)
 - shot notes (label matches `"Shot <N> (<a>–<b>s)"`)

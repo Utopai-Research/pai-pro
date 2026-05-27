@@ -25,7 +25,7 @@ A group is a **visual frame** that wraps its member nodes on the canvas. The fra
 
 ## Patterns
 
-Pick the one that fits. When unsure, read `./workflow.json` first to see which ids actually exist.
+Pick the one that fits. Grouping is current canvas state; read `workflow.json` per AGENTS.md § "Choosing context" to verify ids.
 
 ### 1. Scene grouping
 

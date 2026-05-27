@@ -6,6 +6,8 @@ Auto-loaded by Claude Code when working under `.claude/skills/`. Canonical sourc
 
 Keep it tight. Add only rules that change author behavior. Don't restate Anthropic's docs at length — link them. State each rule once.
 
+Shared agent behavior belongs in `agent-templates/AGENTS.md`, not in individual skills. Skills may point to AGENTS.md sections such as "Choosing context", "Draft gate", and "Failure handling", but should not duplicate or override those rules.
+
 ## What a skill is
 
 A `.claude/skills/<name>/SKILL.md` is markdown with YAML frontmatter. Claude Code reads the frontmatter (L1) into the system prompt. The body (L2) is read on demand when the description matches the user's turn. Bundled files in the same dir (L3) are read on further demand. See [Skills overview](https://platform.claude.com/docs/en/agents-and-tools/agent-skills/overview).

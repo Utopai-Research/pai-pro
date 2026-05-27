@@ -25,9 +25,9 @@ Torn between screenplay and story? Prefer screenplay — safer than rewriting.
 
 ## 2. Capture — canvas note + title
 
-ONE note. No split, no further action. All writes go through the
-canvas mutator — a PreToolUse hook blocks direct `Write` / `Edit` on
-`workflow.json`.
+ONE note. No split, no further action. Shared canvas rules live in
+AGENTS.md; all writes go through the mutator, and a PreToolUse hook
+blocks direct `Write` / `Edit` on `workflow.json`.
 
 1. `read` `./workflow.json` (read-only inspection — see if `title` is already set).
 2. **Append the script note** via the mutator. Stamp `subtype: "script"` so the renderer applies the script-card chrome and `video-compose` can recognise it without label parsing:

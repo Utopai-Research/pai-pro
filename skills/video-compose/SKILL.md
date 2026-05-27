@@ -21,9 +21,9 @@ node "$PAI_REPO_ROOT/server/cli/generate_video.js" --prompt "..." [--duration 15
   [--source-node-id <id>] [--shot-id <N>]
 ```
 
-`$PAI_REPO_ROOT` is exported by the viewer — see CLAUDE.md § "Media CLIs / Invocation path".
+`$PAI_REPO_ROOT` is exported by the viewer — see AGENTS.md § "Media CLIs / Invocation path".
 
-Calls go via `--stage` — see CLAUDE.md § "Draft gate".
+Calls go via `--stage` — see AGENTS.md § "Draft gate".
 
 `--label` defaults to the truncated prompt (≤30 chars) if omitted. Pass
 `--ref-source-id <id>` once per `image_result` / `video_result` source
@@ -37,7 +37,7 @@ pasted CDN link, a still you want as a ref) must be mirrored onto the
 canvas first via `mirror_url.js --url <URL>` — the returned
 `node_id` plugs into `--ref-source-id` like any other canvas source.
 When a canvas note authored the clip (most commonly a shot note being
-rendered), pass `--source-node-id <note_id>` — see CLAUDE.md §
+rendered), pass `--source-node-id <note_id>` — see AGENTS.md §
 "Authorship edges". Don't set `--shot-id` unless the user asked for a
 specific reel position; the Timeline UI owns shot_id assignment.
 
@@ -74,7 +74,7 @@ The same CLI flag can serve different semantic roles depending on how the prompt
 
 ## Patterns
 
-Pick the one that fits. When unsure, read `./workflow.json` first to see what's on the canvas.
+Pick the one that fits. For source lookup, follow AGENTS.md § "Choosing context"; this skill only owns video-specific prompt and CLI shape.
 
 ### 1. Standalone T2V
 
@@ -153,11 +153,11 @@ Cross-pattern asks. Each combo routes to one primary reference — references do
 
 ## After the CLI returns
 
-One sentence with the price — see CLAUDE.md § "Draft gate". `--ref-source-id` flags drive provenance edges; they're captured in the draft argv and materialize on the real `video_result` after the user fires.
+One sentence with the price — see AGENTS.md § "Draft gate". `--ref-source-id` flags drive provenance edges; they're captured in the draft argv and materialize on the real `video_result` after the user fires.
 
 ## On failure
 
-Shape and class taxonomy: see CLAUDE.md § "Failure handling". Video-specific:
+Shape and class taxonomy: see AGENTS.md § "Failure handling". Video-specific:
 
 - `asset_rejected` with *"DownloadFailed"* — `failed_url` was unreachable; swap.
 - `asset_rejected` with *"DurationTooLong"* / *"DurationTooShort"* — `failed_url`'s duration is outside 1.8s–15.2s. Swap it or trim with ffmpeg.
