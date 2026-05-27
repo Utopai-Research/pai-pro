@@ -1,7 +1,7 @@
-/* DraftGateModal — confirms the bypass-mode opt-in. Visually borrows
+/* DraftGateModal — confirms run-immediately mode. Visually borrows
    from .group-modal but warmer (amber accent + red emphasis on the
    confirm button) to telegraph the irreversibility of what's about to
-   happen. Backdrop click + Escape both cancel; the Skip button stays
+   happen. Backdrop click + Escape both cancel; the confirm button stays
    disabled until the text input matches "I understand". */
 
 .draft-gate-backdrop {
@@ -169,39 +169,58 @@
   cursor: not-allowed;
 }
 
-/* Header chip — `drafts: on`. Subtle gray pill in the canvas header's
-   far-right slot. Click opens DraftGateModal. */
-.drafts-on-chip {
-  display: inline-flex;
+.generation-mode-control {
+  display: inline-grid;
+  width: clamp(220px, 26vw, 260px);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   align-items: center;
-  gap: 7px;
-  padding: 4px 11px;
+  gap: 2px;
+  padding: 2px;
   border: 1px solid oklch(1 0 0 / 0.1);
-  border-radius: 999px;
+  border-radius: 8px;
+  background: oklch(1 0 0 / 0.025);
+}
+.generation-mode-option {
+  min-width: 0;
+  height: 24px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 6px;
   background: transparent;
-  color: oklch(0.7 0.005 240);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 13px;
-  letter-spacing: 0.02em;
+  color: oklch(0.68 0.005 240);
+  font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
   cursor: pointer;
-  transition: color 0.12s ease, border-color 0.12s ease, background 0.12s ease;
+  transition: color 0.12s ease, background 0.12s ease, box-shadow 0.12s ease;
 }
-.drafts-on-chip:hover {
-  color: oklch(0.85 0.005 240);
-  border-color: oklch(1 0 0 / 0.18);
-  background: oklch(1 0 0 / 0.04);
+.generation-mode-option:hover {
+  color: oklch(0.86 0.005 240);
+  background: oklch(1 0 0 / 0.045);
 }
-.drafts-on-chip-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 999px;
-  background: oklch(0.65 0.16 145);
+.generation-mode-option.is-active {
+  color: white;
+  background: oklch(0.6 0.15 145);
+  box-shadow: 0 1px 4px oklch(0 0 0 / 0.25);
+  cursor: default;
+}
+.generation-mode-option.is-run-immediately.is-active {
+  background: oklch(0.55 0.14 55);
+  color: oklch(0.98 0 0);
 }
 
-/* Bypass banner — full-width red strip below the canvas header when
-   the bypass flag is on. "Re-enable" link on the right is the only
-   clickable affordance; clicking the body does nothing (avoids
-   accidental flip-back). */
+@media (max-width: 760px) {
+  .generation-mode-control {
+    width: 196px;
+  }
+  .generation-mode-option {
+    padding: 0 6px;
+    font-size: 11px;
+  }
+}
+
 .draft-gate-banner {
   display: flex;
   align-items: center;
@@ -222,7 +241,7 @@
 .draft-gate-banner-warn {
   font-size: 14px;
 }
-.draft-gate-banner-reenable {
+.draft-gate-banner-action {
   background: transparent;
   border: 1px solid oklch(1 0 0 / 0.35);
   color: oklch(0.98 0 0);
@@ -234,7 +253,7 @@
   cursor: pointer;
   transition: background 0.12s ease, border-color 0.12s ease;
 }
-.draft-gate-banner-reenable:hover {
+.draft-gate-banner-action:hover {
   background: oklch(1 0 0 / 0.12);
   border-color: oklch(1 0 0 / 0.55);
 }
