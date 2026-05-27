@@ -66,51 +66,6 @@ async function findLatestSession(projectId) {
   return candidates[0] ?? null;
 }
 
-async function parseHistory(session) {
-  const raw = await fsp.readFile(session.path, "utf8");
-  const out = [];
-  for (const line of raw.split("\n")) {
-    if (!line.trim()) continue;
-    let obj;
-    try { obj = JSON.parse(line); } catch { continue; }
-    if (obj.type !== "user" && obj.type !== "assistant") continue;
-    if (obj.isSidechain) continue;
-    const msg = obj.message;
-    if (!msg) continue;
-
-    let text = "";
-    const toolUses = [];
-    if (typeof msg.content === "string") {
-      text = msg.content;
-    } else if (Array.isArray(msg.content)) {
-      const parts = [];
-      for (const c of msg.content) {
-        if (c.type === "text" && typeof c.text === "string") parts.push(c.text);
-        else if (c.type === "tool_use") toolUses.push({ name: c.name, input: c.input });
-      }
-      text = parts.join("\n").trim();
-    }
-
-    text = text
-      .replace(/<system-reminder>[\s\S]*?<\/system-reminder>/g, "")
-      .replace(/<command-name>[\s\S]*?<\/command-name>/g, "")
-      .replace(/<command-message>[\s\S]*?<\/command-message>/g, "")
-      .replace(/<command-args>[\s\S]*?<\/command-args>/g, "")
-      .replace(/<local-command-stdout>[\s\S]*?<\/local-command-stdout>/g, "")
-      .trim();
-
-    if (!text && toolUses.length === 0) continue;
-    out.push({
-      role: obj.type,
-      text,
-      toolUses,
-      timestamp: obj.timestamp ?? null,
-      uuid: obj.uuid ?? null,
-    });
-  }
-  return out;
-}
-
 export const claudeProvider = {
   id: "claude",
 
@@ -133,7 +88,6 @@ export const claudeProvider = {
   },
 
   findLatestSession,
-  parseHistory,
 
   healthCheck() {
     return binaryOk("claude");

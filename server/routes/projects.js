@@ -1,16 +1,12 @@
-// Project CRUD + per-project read-only routes (asset serving and
-// chat-history). All of these are `/projects/:id/...` paths that need
-// the projects Map, so they share one module.
+// Project CRUD + per-project read-only asset serving. These are
+// `/projects/:id/...` paths that need the projects Map, so they share
+// one module.
 
 import fs from "node:fs";
 import fsp from "node:fs/promises";
 import path from "node:path";
 
-import {
-  getProvider,
-  resolveAgentIdForMeta,
-  resolveAgentIdForNewProject,
-} from "../agents/index.js";
+import { resolveAgentIdForNewProject } from "../agents/index.js";
 import { mutate } from "../canvas_mutator.js";
 import {
   ACTIVE_FILE,
@@ -259,26 +255,5 @@ export function registerProjectsRoutes({ app, io, projects, mutatorHooks }) {
         return res.status(500).end();
       }
     });
-  });
-
-  // GET /projects/:id/chat-history — returns the parsed messages of the
-  // owning agent's most-recent session.
-  // Used by the chat-history sidebar to seed a project's transcript view
-  // when the user reopens it.
-  app.get("/projects/:id/chat-history", async (req, res) => {
-    const id = req.params.id;
-    const p = projects.get(id);
-    if (!p) return res.status(404).json({ error: "not found" });
-    try {
-      const provider = getProvider(resolveAgentIdForMeta(p.meta));
-      if (!provider) return res.json({ session_id: null, mtime: null, messages: [] });
-      const latest = await provider.findLatestSession(id);
-      if (!latest) return res.json({ session_id: null, mtime: null, messages: [] });
-      const messages = await provider.parseHistory(latest);
-      res.json({ session_id: latest.sessionId, mtime: latest.mtime, messages });
-    } catch (e) {
-      console.warn(`[viewer] chat-history failed for ${id}:`, e);
-      res.status(500).json({ error: e.message });
-    }
   });
 }

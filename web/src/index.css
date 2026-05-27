@@ -72,8 +72,7 @@
 
 /* Shared scrollbar styling for dark-theme scrollable surfaces.
    Matches the note-card body and Asset Rail scrollbars so panels
-   like Chat History and the Timeline don't fall back to the bright
-   OS-default scrollbar. */
+   like the Timeline don't fall back to the bright OS-default scrollbar. */
 .scrollbar-subtle {
   scrollbar-width: thin;
   scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
