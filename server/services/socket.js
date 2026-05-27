@@ -135,7 +135,7 @@ function registerSocketPtyHandlers({ socket, io, projects, nodePty }) {
       TERM: "xterm-256color",
       // Absolute path to the repo root, so the agent can invoke media CLIs
       // as `"$PAI_REPO_ROOT/server/cli/<x>.js"` regardless of the
-      // per-project cwd. See the per-project AGENTS.md media CLI table.
+      // per-project cwd. See the per-project PROJECT_AGENT.md media CLI table.
       PAI_REPO_ROOT,
       // Pad PATH so agent binaries resolve under whatever shell launched us.
       PATH: [

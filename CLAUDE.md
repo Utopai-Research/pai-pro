@@ -1,6 +1,6 @@
 # pai-pro — repo maintainer guide
 
-This file is dev-only. The per-project filmmaking agent's operating manual is at `agent-templates/PROJECT_AGENT.md` (copied into each project as `projects/<id>/AGENTS.md`).
+This file is dev-only. The per-project filmmaking agent's operating manual is at `agent-templates/PROJECT_AGENT.md` (copied into each project as `projects/<id>/PROJECT_AGENT.md`).
 
 When you `cd pai-pro && claude` to work on this repo, this is the file Claude Code auto-loads. Per-project Claude sessions exclude it via `claudeMdExcludes` in their own `.claude/settings.local.json`.
 
@@ -32,8 +32,8 @@ Spirit borrowed from [Karpathy's observations](https://x.com/karpathy/status/201
   - `local_mirror.js` handles the project-side I/O (write bytes, build viewer URLs, resolve refs to data URIs).
 - `web/src/` — React + Vite + React Flow + Socket.IO client.
 - `skills/*` — local Claude Code skills. `./scripts/setup` symlinks them into `~/.claude/skills/`. Skill-authoring rules live at `skills/CLAUDE.md` (auto-loaded when working in that subtree).
-- `agent-templates/PROJECT_AGENT.md` — canonical per-project agent operating manual. `server/services/projects.js` copies it into `projects/<id>/AGENTS.md` at project create time, alongside a thin `projects/<id>/CLAUDE.md` wrapper that `@import`s it.
-- `projects/<id>/` — runtime project data. Gitignored. Created via `POST /projects` or by `local_viewer.js`'s bootstrap on first run. Each contains `workflow.json`, `meta.json`, `assets/{images,videos,audios,notes,.tmp}/`, `canvas_positions.json`, `AGENTS.md`, `CLAUDE.md`, `.claude/`.
+- `agent-templates/PROJECT_AGENT.md` — canonical per-project agent operating manual. `server/services/projects.js` copies it into `projects/<id>/PROJECT_AGENT.md` at project create time, alongside a thin `projects/<id>/CLAUDE.md` wrapper that `@import`s it.
+- `projects/<id>/` — runtime project data. Gitignored. Created via `POST /projects` or by `local_viewer.js`'s bootstrap on first run. Each contains `workflow.json`, `meta.json`, `assets/{images,videos,audios,notes,.tmp}/`, `canvas_positions.json`, `PROJECT_AGENT.md`, `CLAUDE.md`, `.claude/`.
 
 ### When adding a new media CLI
 

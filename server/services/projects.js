@@ -28,19 +28,19 @@ import {
 } from "../lib/readers.js";
 import { writeMeta, writeActive, writeResult } from "../lib/writers.js";
 
-// Per-project Claude wrapper. The `@./AGENTS.md` import pulls in the
+// Per-project Claude wrapper. The `@./PROJECT_AGENT.md` import pulls in the
 // canonical agent operating manual; everything below it is Claude-Code-
 // specific (slash-command syntax, hook flag, output tool). Future Codex/
-// Gemini wrappers would import the same AGENTS.md with different invocation
+// Gemini wrappers would import the same PROJECT_AGENT.md with different invocation
 // notes.
 const PER_PROJECT_CLAUDE_MD = `# Per-project filmmaking agent — Claude
 
-@./AGENTS.md
+@./PROJECT_AGENT.md
 
-You are invoked as \`claude\` in this project's PTY. The \`@./AGENTS.md\` import above is the full operating manual — skills routing, media CLIs, canvas grammar, hard rules. Read it as authoritative.
+You are invoked as \`claude\` in this project's PTY. The \`@./PROJECT_AGENT.md\` import above is the full operating manual — skills routing, media CLIs, canvas grammar, hard rules. Read it as authoritative.
 
 Claude-specific notes:
-- Skill invocation syntax is \`/<skill-name>\` (slash-prefixed). The skills referenced in AGENTS.md (\`image-compose\`, \`video-compose\`, etc.) live at \`~/.claude/skills/\` and auto-discover by description.
+- Skill invocation syntax is \`/<skill-name>\` (slash-prefixed). The skills referenced in PROJECT_AGENT.md (\`image-compose\`, \`video-compose\`, etc.) live at \`~/.claude/skills/\` and auto-discover by description.
 - Bash background flag is \`run_in_background: true\`. The \`.claude/hooks/require_background_for_generate.js\` hook will reject foreground \`generate_*\` calls.
 - To wait on a backgrounded Bash call, use the \`BashOutput\` tool against the bash id you got back. Never \`cat\`/\`grep\` \`/tmp/claude-*/.../tasks/<id>.output\`.
 `;
@@ -49,7 +49,7 @@ const AGENT_TEMPLATE_PATH = path.join(PAI_REPO_ROOT, "agent-templates", "PROJECT
 
 // Per-project settings.local.json — excludes the root dev CLAUDE.md from
 // the agent's memory so the per-project session sees ONLY its own
-// AGENTS.md + CLAUDE.md wrapper. Path is absolute, derived from
+// PROJECT_AGENT.md + CLAUDE.md wrapper. Path is absolute, derived from
 // PAI_REPO_ROOT at write time, so it tracks repo moves. Always re-written
 // (not idempotent) so a repo move auto-heals on next viewer boot.
 function perProjectSettingsLocal() {
@@ -111,20 +111,35 @@ export async function ensureProjectStructure(id) {
     perProjectSettingsLocal(),
   );
 
-  // AGENTS.md — canonical per-project agent operating manual, copied
+  // PROJECT_AGENT.md — canonical per-project agent operating manual, copied
   // from agent-templates/PROJECT_AGENT.md. Write-if-missing so a user who has
   // customized their copy isn't clobbered on viewer reboot.
-  const agentsPath = path.join(dir, "AGENTS.md");
-  if (!(await fileExists(agentsPath))) {
-    const template = await fsp.readFile(AGENT_TEMPLATE_PATH, "utf8");
-    await fsp.writeFile(agentsPath, template);
+  const projectAgentPath = path.join(dir, "PROJECT_AGENT.md");
+  if (!(await fileExists(projectAgentPath))) {
+    const legacyAgentsPath = path.join(dir, "AGENTS.md");
+    if (await fileExists(legacyAgentsPath)) {
+      await fsp.rename(legacyAgentsPath, projectAgentPath);
+    } else {
+      const template = await fsp.readFile(AGENT_TEMPLATE_PATH, "utf8");
+      await fsp.writeFile(projectAgentPath, template);
+    }
   }
 
-  // CLAUDE.md wrapper — thin Claude-flavored shim that @imports AGENTS.md.
+  // CLAUDE.md wrapper — thin Claude-flavored shim that @imports PROJECT_AGENT.md.
   // Write-if-missing so user edits stick.
   const claudeMdPath = path.join(dir, "CLAUDE.md");
   if (!(await fileExists(claudeMdPath))) {
     await fsp.writeFile(claudeMdPath, PER_PROJECT_CLAUDE_MD);
+  } else {
+    await migrateClaudeProjectAgentImport(claudeMdPath);
+  }
+}
+
+async function migrateClaudeProjectAgentImport(claudeMdPath) {
+  const content = await fsp.readFile(claudeMdPath, "utf8");
+  const updated = content.replaceAll("@./AGENTS.md", "@./PROJECT_AGENT.md");
+  if (updated !== content) {
+    await fsp.writeFile(claudeMdPath, updated);
   }
 }
 

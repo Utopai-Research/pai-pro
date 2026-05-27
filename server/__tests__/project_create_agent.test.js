@@ -85,3 +85,31 @@ test("POST /projects stores codex agent_id when PAI_AGENT=codex", async () => {
     await stopViewer(handle);
   }
 });
+
+test("POST /projects writes project agent prompt as PROJECT_AGENT.md", async () => {
+  const handle = await startViewer();
+  try {
+    const r = await fetch(`${handle.baseUrl}/projects`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ title: "Agent Prompt File" }),
+    });
+    assert.equal(r.status, 201);
+    const row = await r.json();
+    const projectDir = join(handle.projectsDir, row.id);
+
+    const projectAgent = await readFile(join(projectDir, "PROJECT_AGENT.md"), "utf8");
+    assert.match(projectAgent, /Media CLIs/);
+
+    const claudeMd = await readFile(join(projectDir, "CLAUDE.md"), "utf8");
+    assert.match(claudeMd, /@\.\/PROJECT_AGENT\.md/);
+    assert.doesNotMatch(claudeMd, /@\.\/AGENTS\.md/);
+
+    await assert.rejects(
+      readFile(join(projectDir, "AGENTS.md"), "utf8"),
+      (err) => err.code === "ENOENT",
+    );
+  } finally {
+    await stopViewer(handle);
+  }
+});

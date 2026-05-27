@@ -26,7 +26,7 @@ Torn between screenplay and story? Prefer screenplay — safer than rewriting.
 ## 2. Capture — canvas note + title
 
 ONE note. No split, no further action. Shared canvas rules live in the
-project `AGENTS.md`; all writes go through the mutator, and a PreToolUse hook
+project `PROJECT_AGENT.md`; all writes go through the mutator, and a PreToolUse hook
 blocks direct `Write` / `Edit` on `workflow.json`.
 
 1. `read` `./workflow.json` (read-only inspection — see if `title` is already set).
