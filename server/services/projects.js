@@ -7,7 +7,7 @@ import path from "node:path";
 
 import { initProjectMutatorState } from "../canvas_mutator.js";
 import { reseedFromCanvas } from "../pai_assets_client.js";
-import { resolveAgentIdForNewProject } from "../agents/index.js";
+import { resolveAgentIdForMeta, resolveAgentIdForNewProject } from "../agents/index.js";
 import {
   PAI_REPO_ROOT,
   PROJECTS_DIR,
@@ -30,9 +30,7 @@ import { writeMeta, writeActive, writeResult } from "../lib/writers.js";
 
 // Per-project Claude wrapper. The `@./PROJECT_AGENT.md` import pulls in the
 // canonical agent operating manual; everything below it is Claude-Code-
-// specific (slash-command syntax, hook flag, output tool). Future Codex/
-// Gemini wrappers would import the same PROJECT_AGENT.md with different invocation
-// notes.
+// specific (slash-command syntax, hook flag, output tool).
 const PER_PROJECT_CLAUDE_MD = `# Per-project filmmaking agent — Claude
 
 @./PROJECT_AGENT.md
@@ -41,11 +39,24 @@ You are invoked as \`claude\` in this project's PTY. The \`@./PROJECT_AGENT.md\`
 
 Claude-specific notes:
 - Skill invocation syntax is \`/<skill-name>\` (slash-prefixed). The skills referenced in PROJECT_AGENT.md (\`image-compose\`, \`video-compose\`, etc.) live at \`~/.claude/skills/\` and auto-discover by description.
-- Bash background flag is \`run_in_background: true\`. The \`.claude/hooks/require_background_for_generate.js\` hook will reject foreground \`generate_*\` calls.
+- Every \`generate_image.js\`, \`generate_video.js\`, and \`generate_voice.js\` Bash call needs both the CLI flag \`--stage\` and the Bash tool option \`run_in_background: true\`. This applies to every call in a parallel batch.
 - To wait on a backgrounded Bash call, use the \`BashOutput\` tool against the bash id you got back. Never \`cat\`/\`grep\` \`/tmp/claude-*/.../tasks/<id>.output\`.
 `;
 
+const PER_PROJECT_CODEX_AGENTS_MD = `# Per-project filmmaking agent -- Codex
+
+Before doing any pai-pro work, read \`./PROJECT_AGENT.md\` and treat it as the authoritative operating manual for this project.
+
+You are invoked as \`codex\` in this project's PTY.
+
+Codex-specific notes:
+- Repo-local skills live in \`.agents/skills/\` and are discoverable by Codex.
+- Use staged media generation and \`wait_for_generation.js\` for final results.
+- Use Codex's normal command execution; do not rely on Claude-specific background tool behavior.
+`;
+
 const AGENT_TEMPLATE_PATH = path.join(PAI_REPO_ROOT, "agent-templates", "PROJECT_AGENT.md");
+const SKILLS_ROOT = path.join(PAI_REPO_ROOT, "skills");
 
 // Per-project settings.local.json — excludes the root dev CLAUDE.md from
 // the agent's memory so the per-project session sees ONLY its own
@@ -60,8 +71,9 @@ function perProjectSettingsLocal() {
   ) + "\n";
 }
 
-export async function ensureProjectStructure(id) {
+export async function ensureProjectStructure(id, { agentId = "claude" } = {}) {
   const dir = projectDir(id);
+  const resolvedAgentId = resolveAgentIdForMeta({ agent_id: agentId });
   // The four real asset buckets the mutator + CLIs write to. `audios/`
   // and `notes/` are also created lazily on first write, but pre-
   // creating makes a fresh project's `ls assets/` self-documenting.
@@ -74,6 +86,24 @@ export async function ensureProjectStructure(id) {
   await fsp.mkdir(path.join(dir, "assets/audios"), { recursive: true });
   await fsp.mkdir(path.join(dir, "assets/notes"),  { recursive: true });
 
+  // PROJECT_AGENT.md — canonical per-project agent operating manual, copied
+  // from agent-templates/PROJECT_AGENT.md. Write-if-missing so a user who has
+  // customized their copy isn't clobbered on viewer reboot.
+  const projectAgentPath = path.join(dir, "PROJECT_AGENT.md");
+  if (!(await fileExists(projectAgentPath))) {
+    const template = await fsp.readFile(AGENT_TEMPLATE_PATH, "utf8");
+    await fsp.writeFile(projectAgentPath, template);
+  }
+
+  if (resolvedAgentId === "codex") {
+    await ensureCodexProjectFiles(dir);
+    return;
+  }
+
+  await ensureClaudeProjectFiles(dir);
+}
+
+async function ensureClaudeProjectFiles(dir) {
   // Per-project .claude/ — was a single symlink to ../../.claude; now a
   // real dir with mixed contents so that settings.local.json can carry a
   // per-project `claudeMdExcludes` while hooks and settings.json stay
@@ -111,20 +141,34 @@ export async function ensureProjectStructure(id) {
     perProjectSettingsLocal(),
   );
 
-  // PROJECT_AGENT.md — canonical per-project agent operating manual, copied
-  // from agent-templates/PROJECT_AGENT.md. Write-if-missing so a user who has
-  // customized their copy isn't clobbered on viewer reboot.
-  const projectAgentPath = path.join(dir, "PROJECT_AGENT.md");
-  if (!(await fileExists(projectAgentPath))) {
-    const template = await fsp.readFile(AGENT_TEMPLATE_PATH, "utf8");
-    await fsp.writeFile(projectAgentPath, template);
-  }
-
   // CLAUDE.md wrapper — thin Claude-flavored shim that @imports PROJECT_AGENT.md.
   // Write-if-missing so user edits stick.
   const claudeMdPath = path.join(dir, "CLAUDE.md");
   if (!(await fileExists(claudeMdPath))) {
     await fsp.writeFile(claudeMdPath, PER_PROJECT_CLAUDE_MD);
+  }
+}
+
+async function ensureCodexProjectFiles(dir) {
+  const agentsPath = path.join(dir, "AGENTS.md");
+  if (!(await fileExists(agentsPath))) {
+    await fsp.writeFile(agentsPath, PER_PROJECT_CODEX_AGENTS_MD);
+  }
+
+  const skillDestRoot = path.join(dir, ".agents", "skills");
+  await fsp.mkdir(skillDestRoot, { recursive: true });
+  let entries;
+  try {
+    entries = await fsp.readdir(SKILLS_ROOT, { withFileTypes: true });
+  } catch (e) {
+    if (e.code === "ENOENT") return;
+    throw e;
+  }
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    const src = path.join(SKILLS_ROOT, entry.name);
+    if (!(await fileExists(path.join(src, "SKILL.md")))) continue;
+    await ensureSymlink(src, path.join(skillDestRoot, entry.name));
   }
 }
 
@@ -230,13 +274,15 @@ export async function primeProjects(projects) {
   for (const e of entries) {
     if (!e.isDirectory()) continue;
     if (!isValidId(e.name)) continue;
-    await ensureProjectStructure(e.name);
+    const meta = await readMeta(e.name);
+    await ensureProjectStructure(e.name, { agentId: resolveAgentIdForMeta(meta) });
     await recoverPendingResults(e.name);
     await loadProject(projects, e.name);
   }
   if (projects.size === 0) {
     const id = "scratch";
-    await ensureProjectStructure(id);
+    const agentId = resolveAgentIdForNewProject();
+    await ensureProjectStructure(id, { agentId });
     await fsp.writeFile(
       workflowPath(id),
       JSON.stringify({ version: 2, workflow_id: id, title: "", nodes: [], edges: [] }, null, 2) + "\n",
@@ -247,7 +293,7 @@ export async function primeProjects(projects) {
       title: "Untitled project",
       created_at: now,
       last_active_at: now,
-      agent_id: resolveAgentIdForNewProject(),
+      agent_id: agentId,
       use_server_owned_generation: true,
     });
     await loadProject(projects, id);

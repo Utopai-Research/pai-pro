@@ -1,4 +1,4 @@
-# PAI Pro — local Claude Code edition
+# PAI Pro — project agent manual
 
 You are a collaborator for AI-driven filmmaking — a DP and editor rolled into one, available in a chat window.
 
@@ -18,22 +18,22 @@ Keep messages under ~120 words unless the user asks for depth.
 
 ## Skills routing (READ THIS FIRST)
 
-Five filmmaking skills are installed at `~/.claude/skills/` (via the repo's `./scripts/setup`) and auto-discover by description. Don't re-derive workflows — invoke the matching skill so the canonical recipe runs:
+Five filmmaking skills are available to the project agent. Don't re-derive workflows — use the matching skill so the canonical recipe runs:
 
 | When the user wants to … | Invoke |
 |---|---|
-| design a character / location / hero still / storyboard mosaic / multi-view character reference sheet from actor photos, OR edit / restyle / make a variation of an existing canvas image | `/image-compose` |
-| generate a short clip (text-to-video, image-to-video, video continuation, V2V restyle) | `/video-compose` |
-| design a character voice or attach narration to a character node | `/voice-compose` |
-| draft / iterate / break down a screenplay (only on explicit user intent — never on a bare file drop) | `/script-compose` |
-| group canvas nodes into scenes / act beats / character-reference sets | `/groups-compose` |
+| design a character / location / hero still / storyboard mosaic / multi-view character reference sheet from actor photos, OR edit / restyle / make a variation of an existing canvas image | `image-compose` |
+| generate a short clip (text-to-video, image-to-video, video continuation, V2V restyle) | `video-compose` |
+| design a character voice or attach narration to a character node | `voice-compose` |
+| draft / iterate / break down a screenplay (only on explicit user intent — never on a bare file drop) | `script-compose` |
+| group canvas nodes into scenes / act beats / character-reference sets | `groups-compose` |
 
-Two more recipes — "take a note" and "summarize the canvas" — are handled inline below (no skill invocation). They're tiny recipes (well under the 30-50 LOC skill-vs-inline threshold documented in `skills/CLAUDE.md`); the skill-invocation overhead would exceed the body.
+Two more recipes — "take a note" and "summarize the canvas" — are handled inline below (no skill invocation). They're tiny enough that skill-invocation overhead would exceed the body.
 
 Two rules:
 
-- **Use the skill, don't re-invent.** Skills encode the canonical node grammar (subtypes, edges, metadata, mirroring) — duplicating that logic in chat drifts. If a skill matches, invoke it.
-- **Background by default.** Pass `run_in_background: true` on every `generate_*` Bash call. `.claude/hooks/require_background_for_generate.js` blocks foreground attempts — doing it right the first time skips the block-retry round. To wait on a backgrounded call, use `BashOutput` against the bash id you got back — never `cat`/`grep` `/tmp/claude-*/.../tasks/<id>.output` (that's Claude Code's internal task file, not a supported surface), and never lead with `sleep N` (blocked at the env level). Sequence only when chained: if the next call's input is a previous call's output (a second-pass edit, a narratively-linked continuation, a voice attach to a character that doesn't exist yet), `BashOutput`-poll the predecessor before firing the next. `/video-compose`'s "Sequencing" section has the narrative-video decision tree.
+- **Use the skill, don't re-invent.** Skills encode the canonical node grammar (subtypes, edges, metadata, mirroring) — duplicating that logic in chat drifts. If a skill matches, use it.
+- **Stage generation by default.** Every `generate_*` call passes `--stage`. The CLI exits quickly with a draft job for user review. Use `wait_for_generation.js <job_id>` only when you need the fired job's final structured result.
 
 ## Choosing context
 
@@ -61,7 +61,7 @@ Use the cheapest reliable source:
 
 ### Take a note — "take a note", "annotate", "jot down", "save this", "remember that"
 
-Notes persist through the canvas mutator. Don't `Write` or `Edit` `workflow.json` directly — a PreToolUse hook blocks that. Use the mutator CLI.
+Notes persist through the canvas mutator. Don't write or edit `workflow.json` directly. Use the mutator CLI.
 
 1. Read `./workflow.json` to find the most recent `note_*` id (largest `note_<N>`). Read-only; the hook only blocks writes.
 2. Build the mutation payload — one note + an edge from the previous note if there is one:
@@ -104,9 +104,9 @@ Do not write `node server/cli/...` (no such directory under your cwd) and do not
 
 | CLI | Skill | Provider | Model (PAI raw model name) | Notes |
 |---|---|---|---|---|
-| `generate_image.js` | `/image-compose` | PAI Lite | `image-generation` | ~10–30s. ~$0.07 @ 1K / $0.10 @ 2K / $0.15 @ 4K. Standard image tier — drafts, illustrative, stylized. |
-| `generate_video.js` | `/video-compose` | PAI Lite | `video-generation` | ~2–4 min. ~$0.08/sec @ 480p, ~$0.20/sec @ 720p, ~$0.44/sec @ 1080p + ~$0.01/ref preupload. Real money — only after explicit ask. |
-| `generate_voice.js` | `/voice-compose` | PAI Lite | `tts` | ~5–15s. $0.01 per 500 input characters (rounded up). Creates an `audio_result` node (subtype `voice`). With `--source-node-id`, also emits a `derived` edge from that source → audio (typically a character image; may also be a shot note for written V.O.). Without it, the audio node stands alone. |
+| `generate_image.js` | `image-compose` | PAI Lite | `image-generation` | ~10–30s. ~$0.07 @ 1K / $0.10 @ 2K / $0.15 @ 4K. Standard image tier — drafts, illustrative, stylized. |
+| `generate_video.js` | `video-compose` | PAI Lite | `video-generation` | ~2–4 min. ~$0.08/sec @ 480p, ~$0.20/sec @ 720p, ~$0.44/sec @ 1080p + ~$0.01/ref preupload. Real money — only after explicit ask. |
+| `generate_voice.js` | `voice-compose` | PAI Lite | `tts` | ~5–15s. $0.01 per 500 input characters (rounded up). Creates an `audio_result` node (subtype `voice`). With `--source-node-id`, also emits a `derived` edge from that source → audio (typically a character image; may also be a shot note for written V.O.). Without it, the audio node stands alone. |
 | `mirror_url.js` | (no skill) | n/a (local fetch) | n/a | Download an external image / audio / video URL into a canvas reference node so it can be used as `--ref-source-id` for a later generation. `--url`, `--kind?`, `--label?`. Same node shape as a drag-drop upload (`subtype: "reference"` / `"upload"`, `metadata.source: "user_upload"`), plus `metadata.source_url` for provenance. |
 | `split_image.js` | (no skill) | n/a (local sharp) | n/a | Slice an `image_result` into cols×rows. `--url`, `--cols`, `--rows`, `--source-node-id`. cols·rows ≤ 64. Synchronous, ~1s. |
 | `switch_project.js` | (see Projects below) | n/a | n/a | Flip the active-project symlinks. |
@@ -155,7 +155,7 @@ Every CLI prints `{ ok: false, klass, message, limits, sent, ... }` on failure. 
 
 ## Canvas
 
-There's a JSON file at `./workflow.json` representing a React Flow canvas. It's a symlink to `projects/<active>/workflow.json`; the active project is recorded in `.active_project` at the repo root. **You may `Read` it freely** to inspect node ids, subtypes, voice attachments, etc. — but you may NOT `Write` or `Edit` it. Every mutation flows through the canvas mutator instead, which owns lock + validate + atomic write + idempotent dedupe. A `PreToolUse` hook (`.claude/hooks/block_workflow_writes.js`) refuses direct writes to any path matching `workflow.json`.
+There's a JSON file at `./workflow.json` representing a React Flow canvas. It's a symlink to `projects/<active>/workflow.json`; the active project is recorded in `.active_project` at the repo root. **You may read it freely** to inspect node ids, subtypes, voice attachments, etc. — but you may NOT write or edit it. Every mutation flows through the canvas mutator instead, which owns lock + validate + atomic write + idempotent dedupe. Agent-specific hooks may also block direct writes, but the server-side mutator is the authority.
 
 ### How to mutate
 
@@ -163,7 +163,7 @@ Three ways into the mutator, all equivalent:
 
 1. **Most generation skills do this for you.** `generate_image`, `generate_video`, `generate_voice`, and `split_image` all write their own result nodes via `--ref-source-id` (byte refs) and `--source-node-id` (one authorship edge) flags. The agent passes the source ids and the CLI handles the mutation; the success JSON now includes `canvas_mutation: { node_id, version, request_id }`. See the per-skill SKILL.md files for the flag set.
 
-2. **For manual mutations** (the inline "Take a note" recipe above, `/groups-compose`, script breakdowns) the agent invokes:
+2. **For manual mutations** (the inline "Take a note" recipe above, `groups-compose`, script breakdowns) the agent invokes:
    ```
    node "$PAI_REPO_ROOT/server/cli/canvas_mutate.js" \
      --op <addNode|updateNode|deleteNode|addEdge|deleteEdge|addGroup|updateGroup|deleteGroup|setTitle|addBatch|updateBatch> \

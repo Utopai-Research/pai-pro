@@ -9,7 +9,7 @@ This file is the intent dispatcher. Each pattern below names triggers, the CLI i
 
 Behaviors that production-judgment instinct will silently flip when they aren't enshrined here. Don't override these without the user explicitly asking.
 
-- **BACKGROUND BY DEFAULT** — every `generate_video.js` Bash call must pass `run_in_background: true` and be polled with BashOutput. The PreToolUse hook blocks foreground attempts (even for parallel-staged variants — each parallel call needs the flag).
+- **STAGE BY DEFAULT** — every `generate_video.js` call goes through `--stage`; the user reviews and fires the draft from the canvas unless bypass mode is enabled.
 - **AUDIO ON BY DEFAULT** — every `generate_video.js` call generates an audio track (`generate_audio: true`). Pass `--no-audio` ONLY when the user has explicitly asked for a silent clip ("silent", "no audio", "I'll add sound in post"). Trailer / portrait / cinematic framing is NOT a trigger; audio is the baseline, not optional polish.
 
 ## CLI shape
