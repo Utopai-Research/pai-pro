@@ -21,7 +21,7 @@ Spirit borrowed from [Karpathy's observations](https://x.com/karpathy/status/201
 
 ### Architecture
 
-- `server/local_viewer.js` — single Node server. Project CRUD, pty spawn for per-project `claude` sessions (cwd = `projects/<id>/`), canvas file watcher, Socket.IO push to the browser. Routes: `/projects` (list / create), `/projects/:id` (bundle), `/projects/:id/activate`, `/projects/:id/positions`, `/projects/:id/group-frames/...`, `/projects/:id/nodes/...`. Socket events: `canvas-state`, `canvas-positions`, `title`, `pending-generations`, `pty:spawned` / `pty:output` / `pty:exit` / `pty:error`.
+- `server/local_viewer.js` — single Node server. Project CRUD, pty spawn for each project's owning agent (cwd = `projects/<id>/`), canvas file watcher, Socket.IO push to the browser. Routes: `/projects` (list / create), `/projects/:id` (bundle), `/projects/:id/activate`, `/projects/:id/positions`, `/projects/:id/group-frames/...`, `/projects/:id/nodes/...`. Socket events: `canvas-state`, `canvas-positions`, `title`, `pending-generations`, `pty:spawned` / `pty:output` / `pty:exit` / `pty:error`.
 - `server/cli/*.js` — synchronous CLI wrappers (image, video, voice, split, switch_project, reel_stitch). Each prints one `{ ok, ... }` JSON line on stdout; non-zero exit with `{ ok: false, klass, message }` on failure. Shared arg parser + emit helpers in `server/cli/_cli.js`.
 - `server/pai_*.js` — PAI Lite clients imported by the CLIs:
   - **Shared HTTP**: `pai_client.js` (auth, retry policy, classified errors, `callGenerate` / `callSubmit` / `pollStatus`).
@@ -31,9 +31,9 @@ Spirit borrowed from [Karpathy's observations](https://x.com/karpathy/status/201
   - **Asset uploads**: `pai_assets_client.js` (`video-generation-assets` raw; chip-UX cache + event-emitter surface — exports `paiAssetEvents`, `snapshotAssetStates`, `seedAssetCache`, `uploadReferenceUrl`, `preuploadReferenceUrl`, `preuploadCanvasUrl`, `uploadReferences`).
   - `local_mirror.js` handles the project-side I/O (write bytes, build viewer URLs, resolve refs to data URIs).
 - `web/src/` — React + Vite + React Flow + Socket.IO client.
-- `skills/*` — local Claude Code skills. `./scripts/setup` symlinks them into `~/.claude/skills/`. Skill-authoring rules live at `skills/CLAUDE.md` (auto-loaded when working in that subtree).
-- `agent-templates/PROJECT_AGENT.md` — canonical per-project agent operating manual. `server/services/projects.js` copies it into `projects/<id>/PROJECT_AGENT.md` at project create time, alongside a thin `projects/<id>/CLAUDE.md` wrapper that `@import`s it.
-- `projects/<id>/` — runtime project data. Gitignored. Created via `POST /projects` or by `local_viewer.js`'s bootstrap on first run. Each contains `workflow.json`, `meta.json`, `assets/{images,videos,audios,notes,.tmp}/`, `canvas_positions.json`, `PROJECT_AGENT.md`, `CLAUDE.md`, `.claude/`.
+- `skills/*` — local skills. `./scripts/setup` symlinks them into `~/.claude/skills/` for Claude Code; Codex-owned projects get project-local symlinks under `.agents/skills/`. Skill-authoring rules live at `skills/CLAUDE.md` (auto-loaded when working in that subtree).
+- `agent-templates/PROJECT_AGENT.md` — canonical per-project agent operating manual. `server/services/projects.js` copies it into `projects/<id>/PROJECT_AGENT.md` at project create time, alongside the provider-specific wrapper files.
+- `projects/<id>/` — runtime project data. Gitignored. Created via `POST /projects` or by `local_viewer.js`'s bootstrap on first run. Each contains `workflow.json`, `meta.json`, `assets/{images,videos,audios,notes,.tmp}/`, `canvas_positions.json`, `PROJECT_AGENT.md`, and provider-specific files (`CLAUDE.md` / `.claude/` for Claude, `AGENTS.md` / `.agents/` for Codex).
 
 ### When adding a new media CLI
 
@@ -62,8 +62,8 @@ This file is the maintainer guide. Architecture overview, contributor recipes, d
 ### Debugging
 
 - Viewer / spawn / pty: `scripts/start.sh` runs the viewer; `scripts/stop.sh` tears it down. The viewer logs to its tmux pane.
-- Per-project Claude sessions: JSONLs at `~/.claude/projects/<encoded-cwd>/` (encoding maps `/`, `_`, `.` to `-`). The viewer pulls the latest session id into `meta.claude_session_id` so resume-on-refresh works.
+- Per-project sessions: Claude JSONLs live at `~/.claude/projects/<encoded-cwd>/` (encoding maps `/`, `_`, `.` to `-`); Codex JSONLs live under `~/.codex/sessions/YYYY/MM/DD/`. The viewer persists discovered session ids into `meta.agent_session_id` and asks the provider to resume on refresh.
 - CLI failures: every CLI prints `{ ok: false, klass, message }`. Replay with the same flags to reproduce.
 - Browser ↔ viewer: DevTools → Network → WS frames. Canvas updates fan out as `canvas-state` (after every mutation); sidecar drag positions as `canvas-positions`; in-flight generation placeholders as `pending-generations`; title changes as `title`. The Home grid does NOT subscribe — it re-fetches on mount.
 - Mutator audit: `projects/<id>/mutations.jsonl` is an append-only log of every applied mutation (ts, request_id, op, payload, reply). Useful for "who added this node and when".
-- Drive a per-project Claude PTY from outside (skill smoke tests, agent-to-agent prompts): `node server/cli/_dev_send_to_pty.mjs --project <id> --text "…" --press-enter --wait-for <regex>`. Attaches to the existing pty via Socket.IO, emits keystrokes, captures `pty:output`, exits on regex match or timeout. The file header explains the two-connection submit pattern (a single connection drops the trailing `\r` — keep the bug in mind if writing similar tooling).
+- Drive a per-project PTY from outside (skill smoke tests, agent-to-agent prompts): `node server/cli/_dev_send_to_pty.mjs --project <id> --text "…" --press-enter --wait-for <regex>`. Attaches to the existing pty via Socket.IO, emits keystrokes, captures `pty:output`, exits on regex match or timeout. The file header explains the two-connection submit pattern (a single connection can drop the trailing `\r` — keep the bug in mind if writing similar tooling).

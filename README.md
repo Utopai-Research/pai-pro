@@ -11,16 +11,16 @@
 
 </div>
 
-Filmmaking skills + a React Flow canvas + an embedded `claude` terminal. Write a screenplay, design characters, generate clips, lay them out on a timeline — all from inside Claude Code (or Codex / Cursor / Gemini CLI; the skills are agent-agnostic). Local-first: project files live on disk, generated media mirrors alongside, nothing leaves your machine except the actual generation calls. Built by [Utopai Studios](https://www.utopaistudios.com/).
+Filmmaking skills + a React Flow canvas + an embedded coding-agent terminal. Write a screenplay, design characters, generate clips, lay them out on a timeline — all from inside Claude Code or Codex CLI. Local-first: project files live on disk, generated media mirrors alongside, nothing leaves your machine except the actual generation calls. Built by [Utopai Studios](https://www.utopaistudios.com/).
 
 ## Key capabilities
 
 - **Filmmaking skills** in standard SKILL.md format — image, video, voice, script, groups, notes, summary. ([Reference →](docs/skills.md))
 - **A React Flow canvas** with character / location / image / video / note nodes, grouped scenes, mention-pill references.
 - **A Timeline tab** that plays your shots in sequence — drag clips onto the reel, reorder, scrub.
-- **Embedded `claude` terminal** in the right rail. Real PTY, tmux-style, auto-resumes the project session.
+- **Embedded agent terminal** in the right rail. Real PTY, tmux-style, auto-resumes the project session.
 - **Per-project memory** — every project owns its `workflow.json` and asset folder; agent context follows when you switch.
-- **Bring-your-own coding agent** — Claude Code today; Codex / Cursor / Gemini CLI compatible via the same SKILL.md format. ([Compatibility →](docs/agents.md))
+- **Bring-your-own coding agent** — Claude Code and Codex CLI are wired into the embedded terminal; Cursor / Gemini CLI can still use the same SKILL.md format in host mode. ([Compatibility →](docs/agents.md))
 
 ## Quick start
 
@@ -48,7 +48,7 @@ printf "Paste your PAI_KEY: " && read -r key && sed -i.bak "s|^PAI_KEY=.*|PAI_KE
 ./scripts/start.sh
 ```
 
-Open <http://localhost:7443>. In the embedded terminal, `/login` once and you're driving.
+Open <http://localhost:7443>. Sign in to the selected CLI in the embedded terminal if prompted.
 
 > See [docs/docker.md](docs/docker.md) for the multi-stage build internals, Windows / WSL2 notes, and what the image contains. [docs/development.md](docs/development.md) covers the host-mode Vite HMR loop and contributor setup.
 

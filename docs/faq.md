@@ -40,4 +40,4 @@ Per call: image ~$0.07–0.15 / voice $0.01 per 500 chars / asset upload $0.01 p
 
 ## Can I use a different AI coding agent?
 
-Today: Claude Code is fully wired with the embedded terminal. Skills work with Codex CLI / Cursor / Gemini CLI but those agents can't drive the canvas yet — see [docs/agents.md](agents.md).
+Claude Code and Codex CLI are wired with the embedded terminal. New projects default to Claude; start host mode with `PAI_DEFAULT_AGENT_ID=codex ./scripts/start.sh` to create Codex-owned projects. Cursor and Gemini can use the skills from their own shells, but they do not have embedded terminal providers yet — see [docs/agents.md](agents.md).

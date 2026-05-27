@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// _dev_send_to_pty.mjs — outer-Claude → embedded-Claude PTY bridge.
+// _dev_send_to_pty.mjs — external agent → embedded project PTY bridge.
 //
 // Attaches to a project's already-running PTY via Socket.IO and emits
 // keystrokes. Optionally captures pty:output for a return value.
@@ -19,7 +19,7 @@
 // Submission model — TWO Socket.IO CONNECTIONS:
 // Empirically on 2026-05-11, sending text and a trailing \r in the same
 // Socket.IO connection (even with up to 1.5 s delay between events) leaves
-// the message in claude's input box unsubmitted. The pattern that DOES
+// the message in the agent's input box unsubmitted. The pattern that DOES
 // submit is: connection A sends text and disconnects; a fresh connection
 // B sends bare \r. We model that explicitly. See docs/proposals/01a §3.4.
 
@@ -61,7 +61,7 @@ try {
       // Optional gap (ms) between disconnect of the text-send connection
       // and the connect of the submit connection. Default 500ms — empirically
       // sufficient. Lower at your own risk; this is the gap that lets
-      // claude's input handler settle so the bare \r triggers a submit.
+      // the agent input handler settle so the bare \r triggers a submit.
       "phase-gap-ms": { type: "string" },
     },
     strict: true,
@@ -97,7 +97,7 @@ const viewerUrl =
 
 // --press-enter ALWAYS sends a discrete \r in phase 2, even if the text
 // already ends in \n. Trailing newlines in the briefing are just line
-// breaks inside claude's multi-line input box; they do NOT submit. Submit
+// breaks inside the agent's multi-line input box; they do NOT submit. Submit
 // requires Enter as its own keystroke arriving in a separate PTY read.
 const wantsSubmit = !!args["press-enter"];
 
@@ -267,7 +267,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     process.exit(0);
   }
 
-  // Phase gap — let claude's input handler settle.
+  // Phase gap — let the agent input handler settle.
   await sleep(phaseGapMs);
 
   // Phase 2 — fresh connection, send bare \r, capture output.

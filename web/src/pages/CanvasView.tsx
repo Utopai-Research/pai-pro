@@ -14,7 +14,7 @@
  * workflow.json symlink line up with whatever URL the user is viewing —
  * otherwise the agent's generation scripts would mirror assets into a
  * stale "active" project. The terminal spawns AFTER this resolves so
- * its first `claude` invocation sees the right symlink.
+ * its first agent invocation sees the right symlink.
  */
 import {
   useCallback,
@@ -251,7 +251,7 @@ export default function CanvasView(): JSX.Element {
         <Separator className="w-1 bg-border hover:bg-primary/40 transition-colors" />
         <Panel defaultSize={35} minSize={20} className="overflow-hidden">
           <div className="flex h-full w-full flex-col bg-[#0a0a0a]">
-            <AgentHeader />
+            <AgentHeader agentLabel={bundle?.agent_label ?? null} />
             <div className="relative flex-1 overflow-hidden">
               <div className="absolute inset-0">
                 {activated ? (
@@ -447,14 +447,19 @@ function CanvasTabs({
   )
 }
 
-function AgentHeader(): JSX.Element {
+function AgentHeader({ agentLabel }: { agentLabel: string | null }): JSX.Element {
   return (
-    <div className="flex h-12 shrink-0 items-center justify-center border-b border-neutral-800 bg-[#0a0a0a] px-2">
+    <div className="flex h-12 shrink-0 items-center justify-center gap-2 border-b border-neutral-800 bg-[#0a0a0a] px-2">
       <div className="flex items-center rounded-full border border-border bg-card p-0.5">
         <div className="relative rounded-full bg-foreground px-4 py-1 text-xs font-medium uppercase tracking-wider text-background">
           Agent
         </div>
       </div>
+      {agentLabel ? (
+        <span className="text-[11px] font-medium uppercase tracking-wider text-neutral-500">
+          {agentLabel}
+        </span>
+      ) : null}
     </div>
   )
 }

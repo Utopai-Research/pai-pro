@@ -15,7 +15,7 @@ async function freePort() {
   return 17800 + Math.floor(Math.random() * 1000);
 }
 
-async function startViewer({ paiAgent } = {}) {
+async function startViewer({ paiDefaultAgentId } = {}) {
   const projectsDir = await mkdtemp(join(tmpdir(), "project-create-agent-"));
   const port = await freePort();
   const baseUrl = `http://127.0.0.1:${port}`;
@@ -27,8 +27,9 @@ async function startViewer({ paiAgent } = {}) {
     PAI_ROOT_LINK: join(projectsDir, "workflow.json"),
     WEB_ORIGIN: "http://localhost:0",
   };
-  if (paiAgent === undefined) delete env.PAI_AGENT;
-  else env.PAI_AGENT = paiAgent;
+  delete env.PAI_AGENT;
+  if (paiDefaultAgentId === undefined) delete env.PAI_DEFAULT_AGENT_ID;
+  else env.PAI_DEFAULT_AGENT_ID = paiDefaultAgentId;
 
   const proc = spawn(process.execPath, [VIEWER_PATH], { env, stdio: ["ignore", "pipe", "pipe"] });
   const start = Date.now();
@@ -62,10 +63,11 @@ async function createProject(handle, title) {
     body: JSON.stringify({ title }),
   });
   assert.equal(r.status, 201);
-  const { id } = await r.json();
+  const row = await r.json();
+  const { id } = row;
   const dir = join(handle.projectsDir, id);
   const raw = await readFile(join(dir, "meta.json"), "utf8");
-  return { meta: JSON.parse(raw), dir };
+  return { meta: JSON.parse(raw), dir, row };
 }
 
 async function pathExists(p) {
@@ -89,11 +91,16 @@ async function skillNames() {
   return names.sort();
 }
 
-test("POST /projects stores claude agent_id when PAI_AGENT is unset", async () => {
+test("POST /projects stores claude agent_id when PAI_DEFAULT_AGENT_ID is unset", async () => {
   const handle = await startViewer();
   try {
-    const { meta, dir } = await createProject(handle, "Agent Default");
+    const { meta, dir, row } = await createProject(handle, "Agent Default");
     assert.equal(meta.agent_id, "claude");
+    assert.equal(row.agent_id, "claude");
+    assert.equal(row.agent_label, "Claude");
+    const bundle = await (await fetch(`${handle.baseUrl}/projects/${row.id}`)).json();
+    assert.equal(bundle.agent_id, "claude");
+    assert.equal(bundle.agent_label, "Claude");
     assert.equal(meta.use_server_owned_generation, true);
     assert.equal(await pathExists(join(dir, "PROJECT_AGENT.md")), true);
     assert.equal(await pathExists(join(dir, "CLAUDE.md")), true);
@@ -107,11 +114,16 @@ test("POST /projects stores claude agent_id when PAI_AGENT is unset", async () =
   }
 });
 
-test("POST /projects stores codex agent_id when PAI_AGENT=codex", async () => {
-  const handle = await startViewer({ paiAgent: "codex" });
+test("POST /projects stores codex agent_id when PAI_DEFAULT_AGENT_ID=codex", async () => {
+  const handle = await startViewer({ paiDefaultAgentId: "codex" });
   try {
-    const { meta, dir } = await createProject(handle, "Agent Codex");
+    const { meta, dir, row } = await createProject(handle, "Agent Codex");
     assert.equal(meta.agent_id, "codex");
+    assert.equal(row.agent_id, "codex");
+    assert.equal(row.agent_label, "Codex");
+    const bundle = await (await fetch(`${handle.baseUrl}/projects/${row.id}`)).json();
+    assert.equal(bundle.agent_id, "codex");
+    assert.equal(bundle.agent_label, "Codex");
     assert.equal(await pathExists(join(dir, "PROJECT_AGENT.md")), true);
     const agentsMd = await readFile(join(dir, "AGENTS.md"), "utf8");
     assert.match(agentsMd, /read `\.\/PROJECT_AGENT\.md`/);

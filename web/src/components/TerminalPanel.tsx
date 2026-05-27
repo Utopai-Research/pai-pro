@@ -1,6 +1,6 @@
 /**
  * TerminalPanel — embedded xterm.js connected to the server's node-pty
- * bridge. Auto-spawns `claude` 500ms post-connect (server side; see
+ * bridge. Auto-spawns the owning agent 500ms post-connect (server side; see
  * server/services/socket.js pty:spawn handler).
  *
  * Wires:

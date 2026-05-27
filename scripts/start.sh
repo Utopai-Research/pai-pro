@@ -3,8 +3,8 @@
 #
 # Launches the canvas viewer (server/local_viewer.js) and the web frontend
 # (Vite) in tmux. Ports come from .env (VIEWER_PORT / WEB_PORT); defaults
-# 7488 / 7443. The embedded terminal in the right rail runs `claude`
-# inside the per-project cwd; no separate shell is needed.
+# 7488 / 7443. The embedded terminal in the right rail runs each project's
+# owning agent inside the per-project cwd; no separate shell is needed.
 
 set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -190,7 +190,16 @@ derive_config() {
     # cross-process URLs so both children (viewer + Vite) see them.
     VIEWER_PORT="${VIEWER_PORT:-7488}"
     WEB_PORT="${WEB_PORT:-7443}"
-    export VIEWER_PORT WEB_PORT
+    PAI_DEFAULT_AGENT_ID="${PAI_DEFAULT_AGENT_ID:-}"
+    case "$PAI_DEFAULT_AGENT_ID" in
+        ""|claude|Claude|CLAUDE) PAI_DEFAULT_AGENT_DISPLAY="claude" ;;
+        codex|Codex|CODEX) PAI_DEFAULT_AGENT_DISPLAY="codex" ;;
+        *)
+            echo "WARNING: unsupported PAI_DEFAULT_AGENT_ID='${PAI_DEFAULT_AGENT_ID}' — new projects will use claude."
+            PAI_DEFAULT_AGENT_DISPLAY="claude"
+            ;;
+    esac
+    export VIEWER_PORT WEB_PORT PAI_DEFAULT_AGENT_ID
     export WEB_ORIGIN="http://localhost:${WEB_PORT}"
     export VITE_VIEWER_URL="http://localhost:${VIEWER_PORT}"
 
@@ -309,13 +318,18 @@ smoke_check_clis() {
 start_viewer() {
     if tmux has-session -t "$VIEWER_SESSION" 2>/dev/null; then
         echo "Viewer session '$VIEWER_SESSION' already running — leaving as-is."
+        if [ -n "$PAI_DEFAULT_AGENT_ID" ]; then
+            echo "  PAI_DEFAULT_AGENT_ID only applies when a new viewer starts; run ./scripts/stop.sh first to change it."
+        fi
         return
     fi
     echo "Starting viewer (port $VIEWER_PORT) in tmux…"
     # tmux strips most parent env vars; inline what the viewer needs that
     # isn't already in .env (WEB_ORIGIN is derived from WEB_PORT here).
+    # PAI_DEFAULT_AGENT_ID may come from a one-shot prefix such as
+    # `PAI_DEFAULT_AGENT_ID=codex ./scripts/start.sh`, so pass it explicitly too.
     tmux_ensure_session "$VIEWER_SESSION" \
-        "cd ${PAI_REPO_ROOT} && WEB_ORIGIN='${WEB_ORIGIN}' VIEWER_PORT='${VIEWER_PORT}' node --watch server/local_viewer.js"
+        "cd ${PAI_REPO_ROOT} && WEB_ORIGIN='${WEB_ORIGIN}' VIEWER_PORT='${VIEWER_PORT}' PAI_DEFAULT_AGENT_ID='${PAI_DEFAULT_AGENT_ID}' node --watch server/local_viewer.js"
 }
 
 start_web() {
@@ -417,8 +431,7 @@ print_ready_banner() {
         echo "  Tunnel:   $(cat "$TUNNEL_URL_FILE")   (rotates on restart)"
     fi
     echo ""
-    echo "  Drive from Claude Code:"
-    echo "    cd ${PAI_REPO_ROOT} && claude"
+    echo "  New project agent default: ${PAI_DEFAULT_AGENT_DISPLAY}"
     echo ""
     echo "  Attach:   tmux attach -t $VIEWER_SESSION"
     echo "            tmux attach -t $WEB_SESSION"

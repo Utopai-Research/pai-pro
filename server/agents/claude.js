@@ -68,6 +68,7 @@ async function findLatestSession(projectId) {
 
 export const claudeProvider = {
   id: "claude",
+  label: "Claude",
 
   buildLaunchCommand({ meta } = {}) {
     return `claude ${flagsSuffix(meta)}\r`;

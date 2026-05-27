@@ -157,7 +157,7 @@ export function registerProjectsRoutes({ app, io, projects, mutatorHooks }) {
   // grid but its files stay on disk: we move `projects/<id>/` into
   // `projects/.archive/<id>_<timestamp>/`. The archive dir starts with
   // `.` so isValidId rejects it, which keeps the loader / chokidar from
-  // surfacing it again. Pty is killed, active-pointer flipped, claude
+  // surfacing it again. Pty is killed, active-pointer flipped, agent
   // session dir is left alone. Restore is a manual `mv` from
   // `projects/.archive/` back to `projects/`.
   app.delete("/projects/:id", async (req, res) => {

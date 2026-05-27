@@ -7,7 +7,7 @@ import { constants as fsc } from "node:fs";
 import { promises as fsp } from "node:fs";
 import { promisify } from "node:util";
 
-import { getProvider } from "../agents/index.js";
+import { getProvider, resolveAgentIdForMeta } from "../agents/index.js";
 import { MODELS, getCost } from "../model_registry.js";
 import { PROJECTS_DIR } from "../lib/paths.js";
 import { viewerUrlForLocalPath } from "../local_mirror.js";
@@ -24,6 +24,8 @@ async function canWrite(dir) {
 }
 
 export function rowFor(meta, project) {
+  const agentId = resolveAgentIdForMeta(meta);
+  const provider = getProvider(agentId);
   const cover = project?.canvasState?.nodes?.find(
     (n) => n.type === "video_result" && !n.data?.archived && n.data?.local_path,
   );
@@ -33,6 +35,8 @@ export function rowFor(meta, project) {
   return {
     id: meta.id,
     title: meta.title,
+    agent_id: agentId,
+    agent_label: provider?.label ?? agentId,
     saved: !!(meta.agent_session_id ?? meta.claude_session_id),
     created_at: meta.created_at,
     last_active_at: meta.last_active_at,
@@ -41,7 +45,15 @@ export function rowFor(meta, project) {
   };
 }
 
-export function registerSystemRoutes({ app, projects, nodePty }) {
+async function safeCheck(fn) {
+  try {
+    return (await fn()) === true;
+  } catch {
+    return false;
+  }
+}
+
+export function registerSystemRoutes({ app, projects, nodePty, healthChecks = {} }) {
   app.get("/", (_req, res) => {
     res.json({
       service: "pai-pro viewer",
@@ -56,15 +68,22 @@ export function registerSystemRoutes({ app, projects, nodePty }) {
   // writable mutability of the projects volume. Returns 503 on any
   // failure so `restart: unless-stopped` can loop a degraded container.
   app.get("/healthz", async (_req, res) => {
-    const [ffmpeg, poppler, claude_cli, volume_writable] = await Promise.all([
-      binaryOk("ffmpeg"),
-      binaryOk("pdftotext"),
-      getProvider("claude").healthCheck(),
-      canWrite(PROJECTS_DIR),
+    const checkBinary = healthChecks.binaryOk ?? binaryOk;
+    const checkWritable = healthChecks.canWrite ?? canWrite;
+    const [ffmpeg, poppler, claude_cli, volume_writable, codex_cli] = await Promise.all([
+      safeCheck(() => checkBinary("ffmpeg")),
+      safeCheck(() => checkBinary("pdftotext")),
+      safeCheck(() => healthChecks.claudeCli ? healthChecks.claudeCli() : getProvider("claude").healthCheck()),
+      safeCheck(() => checkWritable(PROJECTS_DIR)),
+      safeCheck(() => healthChecks.codexCli ? healthChecks.codexCli() : getProvider("codex")?.healthCheck?.()),
     ]);
     const checks = { ffmpeg, poppler, claude_cli, volume_writable };
     const ok = Object.values(checks).every(Boolean);
-    res.status(ok ? 200 : 503).json({ ok, checks, pty_available: !!nodePty });
+    const agents = {
+      claude: { binary: claude_cli },
+      codex: { binary: codex_cli },
+    };
+    res.status(ok ? 200 : 503).json({ ok, checks, agents, pty_available: !!nodePty });
   });
 
   // Renderer reads this once at mount to resolve metadata.model → label.

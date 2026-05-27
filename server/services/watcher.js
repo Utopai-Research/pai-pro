@@ -6,8 +6,8 @@
 //   .pending/<job>.json   → pending-generations
 //   .results/<job>.json   → generation-results
 //
-// External edits (the agent rewriting workflow.json from inside the
-// per-project Claude session) are the primary use case. Viewer-side
+// External edits (the agent rewriting workflow.json from inside its
+// per-project terminal session) are the primary use case. Viewer-side
 // writes ALSO trip the watcher; the mutator's `onApply` hook has
 // already broadcast canvas-state by the time chokidar fires
 // (~100ms after awaitWriteFinish), so the second emit is a no-op-y

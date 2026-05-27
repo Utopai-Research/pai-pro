@@ -306,6 +306,8 @@ export interface GenerationResult {
 export interface ProjectBundle {
   id: string
   title: string
+  agent_id: string
+  agent_label: string
   saved: boolean
   created_at?: string
   last_active_at?: string
@@ -331,6 +333,8 @@ export interface ProjectBundle {
 export interface ProjectRow {
   id: string
   title: string
+  agent_id: string
+  agent_label: string
   saved: boolean
   created_at?: string
   last_active_at?: string

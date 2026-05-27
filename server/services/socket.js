@@ -42,6 +42,7 @@ import {
   compareResultSummaries,
   GENERATION_RESULTS_BUNDLE_LIMIT,
 } from "../lib/readers.js";
+import { writeMeta } from "../lib/writers.js";
 
 const ptys = new Map();
 const socketAttach = new Map();           // socket.id -> projectId
@@ -64,10 +65,30 @@ export function killPty(projectId) {
 }
 
 // Shut every pty down cleanly on viewer exit so dev's Ctrl+C doesn't
-// orphan claude processes (they'd otherwise live until the user kills
+// orphan agent processes (they'd otherwise live until the user kills
 // them by hand).
 export function killAllPtys() {
   for (const projectId of Array.from(ptys.keys())) killPty(projectId);
+}
+
+export async function persistDiscoveredAgentSession(projectId, project, session) {
+  const sessionId =
+    typeof session?.sessionId === "string" && session.sessionId.trim() !== ""
+      ? session.sessionId
+      : null;
+  if (!sessionId || !project?.meta) return false;
+  if (project.meta.agent_session_id === sessionId) return false;
+
+  const priorSessionId = project.meta.agent_session_id;
+  project.meta.agent_session_id = sessionId;
+  try {
+    await writeMeta(projectId, project.meta);
+    return true;
+  } catch (e) {
+    if (priorSessionId === undefined) delete project.meta.agent_session_id;
+    else project.meta.agent_session_id = priorSessionId;
+    throw e;
+  }
 }
 
 // Walk a project's image_result nodes and pre-upload any whose canvas
@@ -187,6 +208,11 @@ function registerSocketPtyHandlers({ socket, io, projects, nodePty }) {
       let latest = null;
       try { latest = await provider.findLatestSession(projectId); }
       catch { /* fall back to fresh launch */ }
+      if (latest) {
+        persistDiscoveredAgentSession(projectId, project, latest).catch((e) => {
+          console.warn(`[viewer] failed to persist agent session for ${projectId}: ${e.message}`);
+        });
+      }
       const input = { projectId, meta: project.meta, session: latest };
       const cmd = latest
         ? provider.buildResumeCommand(input)
