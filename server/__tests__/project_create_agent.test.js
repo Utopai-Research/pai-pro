@@ -97,6 +97,10 @@ test("POST /projects stores claude agent_id when PAI_AGENT is unset", async () =
     assert.equal(meta.use_server_owned_generation, true);
     assert.equal(await pathExists(join(dir, "PROJECT_AGENT.md")), true);
     assert.equal(await pathExists(join(dir, "CLAUDE.md")), true);
+    const claudeMd = await readFile(join(dir, "CLAUDE.md"), "utf8");
+    assert.match(claudeMd, /--stage/);
+    assert.match(claudeMd, /run_in_background: true/);
+    assert.match(claudeMd, /BashOutput/);
     assert.equal(await pathExists(join(dir, ".claude", "settings.local.json")), true);
   } finally {
     await stopViewer(handle);
