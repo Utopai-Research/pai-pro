@@ -6,19 +6,19 @@ Auto-loaded by Claude Code when working under `.claude/skills/`. Canonical sourc
 
 Keep it tight. Add only rules that change author behavior. Don't restate Anthropic's docs at length — link them. State each rule once.
 
-Shared agent behavior belongs in `agent-templates/AGENTS.md`, not in individual skills. Skills may point to AGENTS.md sections such as "Choosing context", "Draft gate", and "Failure handling", but should not duplicate or override those rules.
+Shared agent behavior belongs in `agent-templates/PROJECT_AGENT.md`, not in individual skills. Skills may point to generated project `PROJECT_AGENT.md` sections such as "Choosing context", "Draft gate", and "Failure handling", but should not duplicate or override those rules.
 
 ## What a skill is
 
 A `.claude/skills/<name>/SKILL.md` is markdown with YAML frontmatter. Claude Code reads the frontmatter (L1) into the system prompt. The body (L2) is read on demand when the description matches the user's turn. Bundled files in the same dir (L3) are read on further demand. See [Skills overview](https://platform.claude.com/docs/en/agents-and-tools/agent-skills/overview).
 
-## When to write a skill vs inline into AGENTS.md
+## When to write a skill vs inline into PROJECT_AGENT.md
 
 Not every recipe needs a separate skill folder. The skill invocation mechanism has overhead (~100-400 tokens per invocation: tool-call envelope + agent reasoning + result wrapper). For tiny bodies, that overhead exceeds the body itself and progressive disclosure stops paying off.
 
 **Rule of thumb: ~30-50 lines of body content is the threshold.**
 
-- **Body < 30-50 lines** → inline the recipe directly into `agent-templates/AGENTS.md`, next to the routing-table entry that describes WHEN to use it. Agent executes inline without an invocation hop.
+- **Body < 30-50 lines** → inline the recipe directly into `agent-templates/PROJECT_AGENT.md`, next to the routing-table entry that describes WHEN to use it. Agent executes inline without an invocation hop.
 - **Body ≥ 30-50 lines** → create a skill folder. The on-demand body load is worth the invocation overhead.
 
 The threshold isn't a hard cutoff. Consider also:

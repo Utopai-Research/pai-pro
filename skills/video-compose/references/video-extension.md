@@ -1,6 +1,6 @@
 # Video — extension prompt construction
 
-For extending an existing canvas clip (Pattern 4). This file owns the continuity prefix and dependency check. Execution still follows AGENTS.md § "Draft gate" and § "Choosing context".
+For extending an existing canvas clip (Pattern 4). This file owns the continuity prefix and dependency check. Execution still follows the project `PROJECT_AGENT.md` § "Draft gate" and § "Choosing context".
 
 ## Contents
 
@@ -76,7 +76,7 @@ If every answer is "no" for a given pair (two unrelated scenes), parallel is fin
 Each fired `generate_video.js` job takes 2–4 min wall-clock. With the draft gate, sequence through user-fired results:
 
 1. Stage clip A and stop. Do not stage clip B in the same turn when B depends on A's actual output.
-2. After the user fires A and comes back, resolve A via AGENTS.md § "Choosing context".
+2. After the user fires A and comes back, resolve A via the project `PROJECT_AGENT.md` § "Choosing context".
 3. Stage clip B with `--ref-source-id <video_A.id>`. Repeat for each dependent link.
 
 The user can interrupt with new instructions between links. For long chains, surface the total wall-clock cost upfront (see "Long sequences" below).

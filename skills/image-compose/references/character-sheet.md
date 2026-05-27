@@ -14,7 +14,7 @@ For `node "$PAI_REPO_ROOT/server/cli/generate_image.js"` with multiple `--ref-so
 
 ## Pre-flight: identify the actor's reference photos
 
-This flow needs current uploaded refs, so per AGENTS.md § "Choosing context", read `./workflow.json` and identify the reference image nodes for this character:
+This flow needs current uploaded refs, so per the project `PROJECT_AGENT.md` § "Choosing context", read `./workflow.json` and identify the reference image nodes for this character:
 
 - `image_result` nodes with `data.subtype = "reference"` and `data.metadata.source = "user_upload"` (the user uploaded these — not AI-generated)
 - Ideally **≥3 photos** of the same actor from different angles or lighting; this is the multi-ref triangulation the prompt depends on
