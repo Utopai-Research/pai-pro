@@ -116,13 +116,8 @@ export async function ensureProjectStructure(id) {
   // customized their copy isn't clobbered on viewer reboot.
   const projectAgentPath = path.join(dir, "PROJECT_AGENT.md");
   if (!(await fileExists(projectAgentPath))) {
-    const legacyAgentsPath = path.join(dir, "AGENTS.md");
-    if (await fileExists(legacyAgentsPath)) {
-      await fsp.rename(legacyAgentsPath, projectAgentPath);
-    } else {
-      const template = await fsp.readFile(AGENT_TEMPLATE_PATH, "utf8");
-      await fsp.writeFile(projectAgentPath, template);
-    }
+    const template = await fsp.readFile(AGENT_TEMPLATE_PATH, "utf8");
+    await fsp.writeFile(projectAgentPath, template);
   }
 
   // CLAUDE.md wrapper — thin Claude-flavored shim that @imports PROJECT_AGENT.md.
@@ -130,16 +125,6 @@ export async function ensureProjectStructure(id) {
   const claudeMdPath = path.join(dir, "CLAUDE.md");
   if (!(await fileExists(claudeMdPath))) {
     await fsp.writeFile(claudeMdPath, PER_PROJECT_CLAUDE_MD);
-  } else {
-    await migrateClaudeProjectAgentImport(claudeMdPath);
-  }
-}
-
-async function migrateClaudeProjectAgentImport(claudeMdPath) {
-  const content = await fsp.readFile(claudeMdPath, "utf8");
-  const updated = content.replaceAll("@./AGENTS.md", "@./PROJECT_AGENT.md");
-  if (updated !== content) {
-    await fsp.writeFile(claudeMdPath, updated);
   }
 }
 
