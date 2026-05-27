@@ -71,11 +71,36 @@ export function TerminalPanel({ projectId }: TerminalPanelProps): JSX.Element {
     term.loadAddon(fit)
     term.loadAddon(new WebLinksAddon())
     term.open(container)
-    // Don't fit here — if mounted inside display:none container, width is 0 and cols collapses to ~1.
     termRef.current = term
 
     const socket = getSocket()
-    socket.emit('pty:spawn', { projectId })
+    let lastSentSize: { cols: number; rows: number } | null = null
+    let resizeFrame: number | null = null
+
+    const fitTerminal = (emitResize: boolean): { cols: number; rows: number } | null => {
+      const dims = fit.proposeDimensions()
+      if (!dims || dims.cols < 10 || dims.rows < 3) return null
+      fit.fit()
+      term.refresh(0, term.rows - 1)
+      const size = { cols: term.cols, rows: term.rows }
+      if (
+        emitResize &&
+        (lastSentSize === null ||
+          lastSentSize.cols !== size.cols ||
+          lastSentSize.rows !== size.rows)
+      ) {
+        socket.emit('pty:resize', size)
+        lastSentSize = size
+      }
+      return size
+    }
+
+    const initialSize = fitTerminal(false)
+    if (initialSize !== null) lastSentSize = initialSize
+    socket.emit(
+      'pty:spawn',
+      initialSize === null ? { projectId } : { projectId, ...initialSize },
+    )
 
     const dataDisp = term.onData((data) => {
       socket.emit('pty:input', data)
@@ -95,16 +120,18 @@ export function TerminalPanel({ projectId }: TerminalPanelProps): JSX.Element {
     socket.on('pty:exit', onExit)
 
     const ro = new ResizeObserver((entries) => {
-      // Skip 0-width measurements — container is display:none on inactive tab.
       const rect = entries[0]?.contentRect
       if (!rect || rect.width < 1 || rect.height < 1) return
-      fit.fit()
-      if (term.cols < 10 || term.rows < 3) return
-      socket.emit('pty:resize', { cols: term.cols, rows: term.rows })
+      if (resizeFrame !== null) window.cancelAnimationFrame(resizeFrame)
+      resizeFrame = window.requestAnimationFrame(() => {
+        resizeFrame = null
+        fitTerminal(true)
+      })
     })
     ro.observe(container)
 
     return () => {
+      if (resizeFrame !== null) window.cancelAnimationFrame(resizeFrame)
       ro.disconnect()
       dataDisp.dispose()
       socket.off('pty:output', onOutput)
@@ -125,7 +152,9 @@ export function TerminalPanel({ projectId }: TerminalPanelProps): JSX.Element {
   // from pushing the page itself when fit.fit() races a layout pass.
   return (
     <div className="h-full w-full overflow-hidden bg-[#0a0a0a]">
-      <div ref={containerRef} className="h-full w-full p-2 pr-4" />
+      <div className="box-border h-full w-full p-2 pr-4">
+        <div ref={containerRef} className="h-full w-full" />
+      </div>
     </div>
   )
 }

@@ -3,7 +3,7 @@
  *
  * Splits the viewport horizontally:
  *   left  → CanvasPage (React Flow surface)
- *   right → TerminalPanel (xterm.js + node-pty bridge)
+ *   right → Agent terminal (xterm.js + node-pty bridge)
  *
  * ChatComposerProvider wraps both panels so SelectionToolbar's "Refer"
  * button can type `@<nodeId>` into the terminal without prop-drilling.
@@ -29,7 +29,6 @@ import CanvasPage from './CanvasPage'
 import { DraftGateModal } from './CanvasPage/DraftGateModal'
 import { AssetRail } from '@/components/AssetRail'
 import { TerminalPanel } from '@/components/TerminalPanel'
-import { ChatHistoryPanel } from '@/components/ChatHistoryPanel'
 import { TimelinePanel } from '@/components/TimelinePanel'
 import { CanvasFocusProvider } from '@/contexts/CanvasFocusContext'
 import { ChatComposerProvider } from '@/contexts/ChatComposerContext'
@@ -38,7 +37,6 @@ import { useWorkflow } from '@/hooks/useWorkflow'
 import { getSocket, VIEWER_URL } from '@/lib/socket'
 import { ModelsProvider } from '@/lib/useModels'
 
-type SidebarTab = 'terminal' | 'history'
 type CanvasTab = 'canvas' | 'timeline'
 
 const LS_RAIL_HIDDEN = 'pai-pro:asset-rail:hidden'
@@ -61,7 +59,6 @@ function writeRailHidden(hidden: boolean): void {
 export default function CanvasView(): JSX.Element {
   const { projectId = null } = useParams<{ projectId: string }>()
   const [activated, setActivated] = useState(false)
-  const [tab, setTab] = useState<SidebarTab>('terminal')
   const [canvasTab, setCanvasTab] = useState<CanvasTab>('canvas')
   // Owned at CanvasView so the toggle button in CanvasHeader (always
   // visible) can flip the same state the rail itself reads.
@@ -187,107 +184,86 @@ export default function CanvasView(): JSX.Element {
     <ChatComposerProvider>
     <CanvasFocusProvider>
     <MediaExpandProvider>
-    <div className="fixed inset-0 flex h-screen w-screen flex-col overflow-hidden">
-      {/* Top bar spans the full viewport so the project title stays
-          anchored regardless of the asset rail's width. */}
-      <CanvasHeader
-        title={title}
-        currentTab={canvasTab}
-        onTabChange={setCanvasTab}
-        onSaveTitle={saveTitle}
-        runImmediately={runImmediately}
-        onReviewDrafts={() => { patchRunImmediately(false) }}
-        onRunImmediately={() => setModalOpen(true)}
-      />
-      {runImmediately ? (
-        <div className="draft-gate-banner" role="alert">
-          <div className="draft-gate-banner-text">
-            <span className="draft-gate-banner-warn">⚠</span>
-            <span>
-              Draft review is off — agent generations run immediately and may
-              charge your card.
-            </span>
-          </div>
-          <button
-            type="button"
-            className="draft-gate-banner-action"
-            onClick={() => { patchRunImmediately(false) }}
-          >
-            Review drafts
-          </button>
-        </div>
-      ) : null}
-      <div className="relative flex flex-1 overflow-hidden">
-        <AssetRail
-          projectId={projectId}
-          workflow={workflow}
-          hidden={railHidden}
-          onToggleHidden={toggleRail}
-        />
-        <Group orientation="horizontal" className="flex-1 overflow-hidden">
-          <Panel defaultSize={65} minSize={30} className="overflow-hidden">
-            <div className="relative h-full w-full overflow-hidden">
-              {/*
-                Mount both. CanvasPage holds its own React Flow state +
-                drag handlers, so we keep it mounted and toggle visibility
-                rather than tearing it down on each tab switch.
-              */}
-              <div
-                className={
-                  'absolute inset-0 ' +
-                  (canvasTab === 'canvas' ? 'block' : 'hidden')
-                }
-              >
-                <CanvasPage />
+    <div className="fixed inset-0 h-screen w-screen overflow-hidden">
+      <Group orientation="horizontal" className="h-full w-full overflow-hidden">
+        <Panel defaultSize={65} minSize={30} className="overflow-hidden">
+          <div className="flex h-full w-full flex-col overflow-hidden">
+            <CanvasHeader
+              title={title}
+              currentTab={canvasTab}
+              onTabChange={setCanvasTab}
+              onSaveTitle={saveTitle}
+              runImmediately={runImmediately}
+              onReviewDrafts={() => { patchRunImmediately(false) }}
+              onRunImmediately={() => setModalOpen(true)}
+            />
+            {runImmediately ? (
+              <div className="draft-gate-banner" role="alert">
+                <div className="draft-gate-banner-text">
+                  <span className="draft-gate-banner-warn">⚠</span>
+                  <span>
+                    Draft review is off — agent generations run immediately and
+                    may charge your card.
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  className="draft-gate-banner-action"
+                  onClick={() => { patchRunImmediately(false) }}
+                >
+                  Review drafts
+                </button>
               </div>
-              <div
-                className={
-                  'absolute inset-0 ' +
-                  (canvasTab === 'timeline' ? 'block' : 'hidden')
-                }
-              >
-                <TimelinePanel projectId={projectId} workflow={workflow} />
-              </div>
-            </div>
-          </Panel>
-          <Separator className="w-1 bg-border hover:bg-primary/40 transition-colors" />
-          <Panel defaultSize={35} minSize={20} className="overflow-hidden">
-            <div className="flex h-full w-full flex-col bg-[#0a0a0a]">
-              <SidebarTabs current={tab} onChange={setTab} />
-              <div className="relative flex-1 overflow-hidden">
+            ) : null}
+            <div className="relative flex flex-1 overflow-hidden">
+              <AssetRail
+                projectId={projectId}
+                workflow={workflow}
+                hidden={railHidden}
+                onToggleHidden={toggleRail}
+              />
+              <div className="relative h-full flex-1 overflow-hidden">
                 {/*
-                  Keep the terminal mounted across tab switches so the pty
-                  survives — flipping `display` is enough to hide it without
-                  tearing down the node-pty session.
+                  Mount both. CanvasPage holds its own React Flow state +
+                  drag handlers, so we keep it mounted and toggle visibility
+                  rather than tearing it down on each tab switch.
                 */}
                 <div
                   className={
                     'absolute inset-0 ' +
-                    (tab === 'terminal' ? 'block' : 'hidden')
+                    (canvasTab === 'canvas' ? 'block' : 'hidden')
                   }
                 >
-                  {activated ? (
-                    <TerminalPanel projectId={projectId} />
-                  ) : (
-                    <div className="h-full w-full bg-[#0a0a0a]" />
-                  )}
+                  <CanvasPage />
                 </div>
                 <div
                   className={
                     'absolute inset-0 ' +
-                    (tab === 'history' ? 'block' : 'hidden')
+                    (canvasTab === 'timeline' ? 'block' : 'hidden')
                   }
                 >
-                  <ChatHistoryPanel
-                    projectId={projectId}
-                    active={tab === 'history'}
-                  />
+                  <TimelinePanel projectId={projectId} workflow={workflow} />
                 </div>
               </div>
             </div>
-          </Panel>
-        </Group>
-      </div>
+          </div>
+        </Panel>
+        <Separator className="w-1 bg-border hover:bg-primary/40 transition-colors" />
+        <Panel defaultSize={35} minSize={20} className="overflow-hidden">
+          <div className="flex h-full w-full flex-col bg-[#0a0a0a]">
+            <AgentHeader />
+            <div className="relative flex-1 overflow-hidden">
+              <div className="absolute inset-0">
+                {activated ? (
+                  <TerminalPanel projectId={projectId} />
+                ) : (
+                  <div className="h-full w-full bg-[#0a0a0a]" />
+                )}
+              </div>
+            </div>
+          </div>
+        </Panel>
+      </Group>
     </div>
     <DraftGateModal
       isOpen={modalOpen}
@@ -338,7 +314,7 @@ function CanvasHeader({
         <EditableTitle value={title} onSave={onSaveTitle} />
       </div>
       <CanvasTabs current={currentTab} onChange={onTabChange} />
-      <div className="flex items-center justify-end">
+      <div className="flex min-w-0 items-center justify-end">
         <div
           className="generation-mode-control"
           role="group"
@@ -471,34 +447,14 @@ function CanvasTabs({
   )
 }
 
-function SidebarTabs({
-  current,
-  onChange,
-}: {
-  current: SidebarTab
-  onChange: (t: SidebarTab) => void
-}): JSX.Element {
-  const tabClass = (t: SidebarTab): string =>
-    'px-3 py-1.5 text-xs uppercase tracking-wide transition-colors ' +
-    (current === t
-      ? 'text-neutral-100 border-b border-neutral-100'
-      : 'text-neutral-500 border-b border-transparent hover:text-neutral-300')
+function AgentHeader(): JSX.Element {
   return (
-    <div className="flex h-12 items-center gap-1 border-b border-neutral-800 bg-[#0a0a0a] px-2">
-      <button
-        type="button"
-        className={tabClass('terminal')}
-        onClick={() => onChange('terminal')}
-      >
-        Terminal
-      </button>
-      <button
-        type="button"
-        className={tabClass('history')}
-        onClick={() => onChange('history')}
-      >
-        History
-      </button>
+    <div className="flex h-12 shrink-0 items-center justify-center border-b border-neutral-800 bg-[#0a0a0a] px-2">
+      <div className="flex items-center rounded-full border border-border bg-card p-0.5">
+        <div className="relative rounded-full bg-foreground px-4 py-1 text-xs font-medium uppercase tracking-wider text-background">
+          Agent
+        </div>
+      </div>
     </div>
   )
 }

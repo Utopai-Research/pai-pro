@@ -175,8 +175,8 @@ function CanvasPageInner(): JSX.Element | null {
   //
   // Container dims come from the canvas wrapper's bounding rect, not
   // window.innerWidth/Height — the canvas only occupies the left
-  // Panel; the right Panel (terminal / chat history) would otherwise
-  // get counted as visible canvas and new nodes would land behind it.
+  // Panel; the right Agent panel would otherwise get counted as
+  // visible canvas and new nodes would land behind it.
   // Returns null when the wrapper isn't mounted (loading / error /
   // empty branches) or has zero size (Timeline tab hides it via
   // display:none); placement.ts handles null with its anchor-only

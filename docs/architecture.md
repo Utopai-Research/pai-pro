@@ -5,7 +5,7 @@ Three layers, each independent enough to hack on alone.
 ## At a glance
 
 ```
-┌─ Canvas │ Timeline ──────────────────┬─ Terminal │ History ─┐
+┌─ Canvas │ Timeline ──────────────────┬─ Agent ──────────────┐
 │                                      │                      │
 │   Detective Morris ──► Diner shot    │  > design morris,    │
 │        │                    │        │    weathered, noir   │
