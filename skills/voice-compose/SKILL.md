@@ -3,7 +3,7 @@ name: voice-compose
 description: Designs and attaches voices to characters on the filmmaking canvas via the local generate_voice.js CLI, following canvas-aware conventions for voice description, sample text, and attachment to the target node. Use when the user asks to give a character a voice; design a voice, sample, or read; preview how a character sounds; or generate a standalone narration / voice-over track that isn't tied to a specific character.
 ---
 
-**Background by default.** Every `generate_voice.js` Bash call must pass `run_in_background: true` and be polled with BashOutput — the PreToolUse hook blocks foreground attempts (including parallel bulk-voice calls; each one needs the flag).
+**Stage by default.** Every `generate_voice.js` call goes through `--stage`; the user reviews and fires the draft from the canvas unless bypass mode is enabled.
 
 ## Patterns
 

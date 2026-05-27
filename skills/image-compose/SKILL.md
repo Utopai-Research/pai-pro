@@ -13,7 +13,7 @@ node "$PAI_REPO_ROOT/server/cli/generate_image.js" --prompt "..." [--aspect-rati
 
 `$PAI_REPO_ROOT` is exported by the viewer — see the project `PROJECT_AGENT.md` § "Media CLIs / Invocation path".
 
-Calls go via `--stage` — see the project `PROJECT_AGENT.md` § "Draft gate". **Pass `run_in_background: true` on the Bash call and poll with BashOutput** — the PreToolUse hook blocks foreground attempts (each parallel-staged variant needs the flag too).
+Calls go via `--stage` — see the project `PROJECT_AGENT.md` § "Draft gate". The staging call returns quickly with a draft job id; when a fired result is needed, use the project result-feed and wait CLI described there.
 
 `--label` defaults to the truncated prompt (≤30 chars) if omitted; pass an explicit one when you have a better caption.
 

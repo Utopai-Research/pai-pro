@@ -57,14 +57,15 @@ export function registerProjectsRoutes({ app, io, projects, mutatorHooks }) {
           id = genProjectId();
         } while (projects.has(id) || fs.existsSync(projectDir(id)));
       }
-      await ensureProjectStructure(id);
+      const agentId = resolveAgentIdForNewProject();
+      await ensureProjectStructure(id, { agentId });
       const now = new Date().toISOString();
       const meta = {
         id,
         title: titleIn || "Untitled project",
         created_at: now,
         last_active_at: now,
-        agent_id: resolveAgentIdForNewProject(),
+        agent_id: agentId,
         use_server_owned_generation: true,
       };
       await fsp.writeFile(

@@ -20,7 +20,7 @@ Yes — canvas, terminal, and notes work. Media generation just fails with a cle
 
 ## How do I add a new skill?
 
-Read [skills/CLAUDE.md](../skills/CLAUDE.md) for the SKILL.md authoring contract. Drop a new directory under `skills/<your-skill>/` with a `SKILL.md` file and (optionally) any helper scripts. Run `./scripts/setup` to symlink it into `~/.claude/skills/`. The agent picks it up at next session start.
+Read [skills/CLAUDE.md](../skills/CLAUDE.md) for the SKILL.md authoring contract. Drop a new directory under `skills/<your-skill>/` with a `SKILL.md` file and (optionally) any helper scripts. Claude users run `./scripts/setup` to symlink it into `~/.claude/skills/`; Codex-owned projects get `.agents/skills/` symlinks when the project is created. The agent picks it up at next session start.
 
 ## How do parallel generations work?
 

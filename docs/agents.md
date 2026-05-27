@@ -7,7 +7,7 @@ Pai-pro is "bring-your-own AI coding agent" — the skills are standard SKILL.md
 | Compatible agent | Status |
 |---|---|
 | **Claude Code** | ✅ Tested. Embedded PTY + auto-discovered skills via `./scripts/setup`. |
-| **Codex CLI** | ⏳ Skills work via `~/.codex/skills/`; embedded terminal swap-in pending. |
+| **Codex CLI** | ⏳ New Codex-owned projects get repo-local `.agents/skills/`; embedded terminal swap-in pending. |
 | **Cursor agent** | ⏳ Skills work via `.cursor/rules/`; embedded terminal swap-in pending. |
 | **Gemini CLI** | ⏳ Skills work via `~/.gemini/skills/`; embedded terminal swap-in pending. |
 
@@ -20,7 +20,7 @@ The `SKILL.md` files live in `skills/`. To install for a different agent, symlin
 | Agent | Skill discovery path |
 |---|---|
 | Claude Code | `~/.claude/skills/` (run `./scripts/setup`) |
-| Codex CLI | `~/.codex/skills/` |
+| Codex CLI | project-local `.agents/skills/` |
 | Cursor agent | `.cursor/rules/` |
 | Gemini CLI | `~/.gemini/skills/` |
 

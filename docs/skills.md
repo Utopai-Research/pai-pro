@@ -1,6 +1,6 @@
 # Skills
 
-Each skill is a standard `SKILL.md` with YAML frontmatter — Claude Code auto-discovers them after `./scripts/setup`. You don't type a slash command; you describe what you want, and the agent invokes the right skill.
+Each skill is a standard `SKILL.md` with YAML frontmatter. Claude Code auto-discovers user-scope skills after `./scripts/setup`; Codex-owned projects get repo-local symlinks under `.agents/skills/`. You describe what you want, and the agent invokes the right skill.
 
 ## Reference table
 
@@ -12,7 +12,7 @@ Each skill is a standard `SKILL.md` with YAML frontmatter — Claude Code auto-d
 | `voice-compose` | "Give the detective a voice" | Wraps `generate_voice.js`. Attaches to the character node in place. |
 | `groups-compose` | "Group these as Scene 2", "Frame the character refs" | Maintains semantic groupings (scenes, ref sets, act beats) on the canvas. |
 
-Two more primitives — taking a note ("take a note", "jot down", "remember that") and summarizing the canvas ("what do we have?", "show the graph") — are tiny enough that they live inline in `agent-templates/PROJECT_AGENT.md` instead of as separate skill folders. See the `skills/CLAUDE.md` threshold rule for the rationale.
+Two more primitives — taking a note ("take a note", "jot down", "remember that") and summarizing the canvas ("what do we have?", "show the graph") — are tiny enough that they live inline in `agent-templates/PROJECT_AGENT.md` instead of as separate skill folders.
 
 ## Authoritative recipes
 
