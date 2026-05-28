@@ -23,3 +23,9 @@ test("docker compose passes default agent and isolates Docker Codex state", asyn
   assert.match(compose, /\.codex:\/home\/node\/\.codex-host:ro/);
   assert.doesNotMatch(compose, /\.codex:\/home\/node\/\.codex\s*$/m);
 });
+
+test("Docker entrypoint exports the normalized selected agent", async () => {
+  const entrypoint = await readFile(join(REPO_ROOT, "docker", "entrypoint.sh"), "utf8");
+  assert.match(entrypoint, /normalize_agent_id/);
+  assert.match(entrypoint, /export PAI_DEFAULT_AGENT_ID="\$\{SELECTED_AGENT\}"/);
+});

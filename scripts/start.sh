@@ -71,6 +71,10 @@ wait_until() {
     return 1
 }
 
+normalize_agent_id() {
+    printf '%s' "$1" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | tr '[:upper:]' '[:lower:]'
+}
+
 # ============================================================================
 # Phases
 # ============================================================================
@@ -143,7 +147,13 @@ sync_skills() {
     # symlink from another clone. --force re-links anything whose target
     # isn't us; already-correct symlinks short-circuit to "ok" with no rewrite.
     echo "Syncing agent setup…"
-    "$SCRIPT_DIR/setup" --agent all --force
+    if [ "$PAI_DEFAULT_AGENT_ID" = "codex" ]; then
+        "$SCRIPT_DIR/setup" --agent claude --force
+        echo ""
+        "$SCRIPT_DIR/setup" --agent codex
+    else
+        "$SCRIPT_DIR/setup" --agent all --force
+    fi
 }
 
 load_env() {
@@ -194,12 +204,14 @@ derive_config() {
         echo "WARNING: PAI_AGENT is ignored. Use PAI_DEFAULT_AGENT_ID to choose the default owner for new projects."
         unset PAI_AGENT
     fi
-    PAI_DEFAULT_AGENT_ID="${PAI_DEFAULT_AGENT_ID:-}"
+    PAI_DEFAULT_AGENT_ID_RAW="${PAI_DEFAULT_AGENT_ID:-}"
+    PAI_DEFAULT_AGENT_ID="$(normalize_agent_id "$PAI_DEFAULT_AGENT_ID_RAW")"
     case "$PAI_DEFAULT_AGENT_ID" in
-        ""|claude|Claude|CLAUDE) PAI_DEFAULT_AGENT_DISPLAY="claude" ;;
-        codex|Codex|CODEX) PAI_DEFAULT_AGENT_DISPLAY="codex" ;;
+        ""|claude) PAI_DEFAULT_AGENT_DISPLAY="claude" ;;
+        codex) PAI_DEFAULT_AGENT_DISPLAY="codex" ;;
         *)
-            echo "WARNING: unsupported PAI_DEFAULT_AGENT_ID='${PAI_DEFAULT_AGENT_ID}' — new projects will use claude."
+            echo "WARNING: unsupported PAI_DEFAULT_AGENT_ID='${PAI_DEFAULT_AGENT_ID_RAW}' — new projects will use claude."
+            PAI_DEFAULT_AGENT_ID=""
             PAI_DEFAULT_AGENT_DISPLAY="claude"
             ;;
     esac

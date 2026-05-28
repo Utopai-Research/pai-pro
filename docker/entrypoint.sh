@@ -14,6 +14,10 @@ CLAUDE_DIR="${HOME}/.claude"
 CODEX_DIR="${HOME}/.codex"
 CODEX_HOST_DIR="${HOME}/.codex-host"
 
+normalize_agent_id() {
+  printf '%s' "$1" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | tr '[:upper:]' '[:lower:]'
+}
+
 # 1. Skills — link /repo/skills/* into ~/.claude/skills/ so claude CLI
 #    auto-discovers them. The dir is in-image (NOT a bind-mount from host)
 #    to avoid the host/container target-collision when the same skill set
@@ -45,7 +49,8 @@ if [ -f "${CODEX_HOST_DIR}/auth.json" ] && [ ! -f "${CODEX_DIR}/auth.json" ]; th
   fi
 fi
 
-SELECTED_AGENT="$(printf '%s' "${PAI_DEFAULT_AGENT_ID:-}" | tr '[:upper:]' '[:lower:]')"
+PAI_DEFAULT_AGENT_ID_RAW="${PAI_DEFAULT_AGENT_ID:-}"
+SELECTED_AGENT="$(normalize_agent_id "${PAI_DEFAULT_AGENT_ID_RAW}")"
 case "${SELECTED_AGENT}" in
   ""|claude)
     SELECTED_AGENT="claude"
@@ -53,10 +58,11 @@ case "${SELECTED_AGENT}" in
   codex)
     ;;
   *)
-    echo "[entrypoint] warning: unsupported PAI_DEFAULT_AGENT_ID='${PAI_DEFAULT_AGENT_ID}'; defaulting new projects to claude" >&2
+    echo "[entrypoint] warning: unsupported PAI_DEFAULT_AGENT_ID='${PAI_DEFAULT_AGENT_ID_RAW}'; defaulting new projects to claude" >&2
     SELECTED_AGENT="claude"
     ;;
 esac
+export PAI_DEFAULT_AGENT_ID="${SELECTED_AGENT}"
 echo "[entrypoint] selected default agent: ${SELECTED_AGENT}"
 
 log_cli() {

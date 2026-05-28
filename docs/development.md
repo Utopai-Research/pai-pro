@@ -43,7 +43,7 @@ PAI_DEFAULT_AGENT_ID=codex ./scripts/start.sh
 
 `PAI_DEFAULT_AGENT_ID` controls only projects created after the viewer starts. Existing projects keep their saved `meta.json` `agent_id`, so a Claude project still opens Claude and a Codex project still opens Codex regardless of the current default.
 
-`./scripts/start.sh` runs `./scripts/setup --agent all --force` on boot. Missing Codex is a warning on Claude-only machines; starting explicitly with `./scripts/setup --agent codex` fails clearly if `codex` is not installed.
+`./scripts/start.sh` syncs Claude skills on boot. Missing Codex is only a warning on Claude-default machines; starting with `PAI_DEFAULT_AGENT_ID=codex` validates `codex` during preflight and fails clearly if it is not installed.
 
 ## Running tests
 

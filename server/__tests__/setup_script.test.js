@@ -133,3 +133,16 @@ test("scripts/setup --agent all keeps Claude setup working when Codex is missing
   const stat = await lstat(firstLink);
   assert.equal(stat.isSymbolicLink(), true);
 });
+
+test("scripts/setup --agent all validates Codex without host-mode instructions", async (t) => {
+  const home = await tempHome(t);
+  const fakeBin = await makeFakeCodexBin(t);
+  const result = await runSetup(["--agent", "all"], {
+    home,
+    path: `${fakeBin}${delimiter}${process.env.PATH}`,
+  });
+
+  assert.equal(result.code, 0, result.stderr);
+  assert.match(result.stdout, /codex CLI: codex-cli 9\.9\.9/);
+  assert.doesNotMatch(result.stdout, /PAI_DEFAULT_AGENT_ID=codex \.\/scripts\/start\.sh/);
+});
