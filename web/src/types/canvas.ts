@@ -50,6 +50,8 @@ export interface NoteNode {
 
 export interface ImageResultMetadata extends NodeMetadataBase {
   model?: string
+  /** Exact provider size for image-generation-pro, e.g. "2560x1440". */
+  size?: string
   aspect_ratio?: string
   image_size?: string
   grid?: string

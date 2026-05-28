@@ -46,6 +46,8 @@ export interface MediaRef {
 export interface MediaMetadata {
   model?: string
   source?: string
+  /** Exact provider size for image-generation-pro, e.g. "2560x1440". */
+  size?: string
   aspect_ratio?: string
   image_size?: string
   resolution?: string
@@ -149,6 +151,7 @@ export function MediaExpandOverlay({
     mediaHasMetadata ? mediaMetadata?.model : null,
     mediaHasMetadata
       ? {
+          size: mediaMetadata?.size,
           image_size: mediaMetadata?.image_size,
           resolution: mediaMetadata?.resolution,
           duration: mediaDuration,
@@ -846,6 +849,9 @@ function MetaTable({ nodeType, metadata, duration, cost }: MetaTableProps): JSX.
   if (generated !== null) rows.push(['generated', generated])
   if (typeof metadata.aspect_ratio === 'string' && metadata.aspect_ratio !== '') {
     rows.push(['aspect', metadata.aspect_ratio])
+  }
+  if (nodeType === 'image_result' && typeof metadata.size === 'string' && metadata.size !== '') {
+    rows.push(['provider size', metadata.size])
   }
   if (nodeType === 'image_result' && typeof metadata.image_size === 'string' && metadata.image_size !== '') {
     rows.push(['size', metadata.image_size])

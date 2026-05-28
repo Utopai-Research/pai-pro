@@ -196,6 +196,7 @@ function imageNodeData(n: ImageResultNode, shortId: string, derivedRefs: MediaRe
     derived_refs: derivedRefs,
     metadata: {
       aspect_ratio: d.metadata?.aspect_ratio,
+      size: d.metadata?.size,
       image_size: d.metadata?.image_size,
       model: d.metadata?.model,
       source: d.metadata?.source,

@@ -229,6 +229,7 @@ try {
     await kickPreupload({ projectId, localPath, mimeType: result.mime });
   }
 
+  const estimatedCostUsd = getCost(plannedModel, { size: result.size });
   const payload = {
     output_url: imageUrl,
     local_path: localPath,
@@ -237,7 +238,7 @@ try {
     aspect_ratio: result.aspectRatio,
     image_size: result.imageSize,
     duration_seconds: result.durationSeconds,
-    cost_usd: result.costUsd ?? null,
+    cost_usd: result.costUsd ?? estimatedCostUsd ?? null,
     generated_at: data.metadata.generated_at,
   };
   if (mutResult) Object.assign(payload, mutResult);

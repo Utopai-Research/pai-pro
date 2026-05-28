@@ -149,6 +149,7 @@ test("generate_image_pro.js direct fire writes pro metadata without provider_mod
   assert.equal(reply.size, "2560x1440");
   assert.equal(reply.aspect_ratio, "16:9");
   assert.equal(reply.image_size, "2K");
+  assert.equal(reply.cost_usd, 0.45);
   assert.equal(reply.local_path, "assets/images/image_pro_cli_1.png");
 
   assert.equal(pai.captures.generateBodies.length, 1);
