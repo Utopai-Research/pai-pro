@@ -3,13 +3,15 @@
 #
 # Boot tasks before exec'ing the viewer:
 #   1. Link in-image skills into ~/.claude/skills (idempotent).
-#   2. Ensure the projects dir exists on the named volume.
-#   3. Verify PUBLIC_VIEWER_URL or a quick tunnel before showing the web UI.
-#   4. Warn if PAI_KEY is absent.
-#   5. Hand off to node with exec so tini sees node directly.
+#   2. Ensure the projects dir and Codex state dir exist.
+#   3. Verify the selected agent CLI is available.
+#   4. Verify PUBLIC_VIEWER_URL or a quick tunnel before showing the web UI.
+#   5. Warn if PAI_KEY is absent.
+#   6. Hand off to node with exec so tini sees node directly.
 set -e
 
 CLAUDE_DIR="${HOME}/.claude"
+CODEX_DIR="${HOME}/.codex"
 
 # 1. Skills — link /repo/skills/* into ~/.claude/skills/ so claude CLI
 #    auto-discovers them. The dir is in-image (NOT a bind-mount from host)
@@ -28,8 +30,57 @@ for src in /repo/skills/*/; do
   ln -s "${src}" "${dst}"
 done
 
-# 2. Projects dir on the named volume (no-op after first boot).
+# 2. Projects dir on the named volume and Codex state dir on the host bind
+#    mount (no-op after first boot).
 mkdir -p /repo/projects
+if ! mkdir -p "${CODEX_DIR}" 2>/dev/null; then
+  echo "[entrypoint] warning: could not create ${CODEX_DIR}; Codex auth/state may be unavailable" >&2
+fi
+
+SELECTED_AGENT="$(printf '%s' "${PAI_DEFAULT_AGENT_ID:-}" | tr '[:upper:]' '[:lower:]')"
+case "${SELECTED_AGENT}" in
+  ""|claude)
+    SELECTED_AGENT="claude"
+    ;;
+  codex)
+    ;;
+  *)
+    echo "[entrypoint] warning: unsupported PAI_DEFAULT_AGENT_ID='${PAI_DEFAULT_AGENT_ID}'; defaulting new projects to claude" >&2
+    SELECTED_AGENT="claude"
+    ;;
+esac
+echo "[entrypoint] selected default agent: ${SELECTED_AGENT}"
+
+log_cli() {
+  name="$1"
+  if ! command -v "${name}" >/dev/null 2>&1; then
+    echo "[entrypoint] ${name} CLI: missing" >&2
+    return 1
+  fi
+  version="$("${name}" --version 2>&1 || true)"
+  echo "[entrypoint] ${name} CLI: ${version}"
+  return 0
+}
+
+CLAUDE_OK=0
+CODEX_OK=0
+if log_cli claude; then CLAUDE_OK=1; fi
+if log_cli codex; then CODEX_OK=1; fi
+
+if [ "${SELECTED_AGENT}" = "claude" ] && [ "${CLAUDE_OK}" -ne 1 ]; then
+  echo "[entrypoint] selected agent is claude but claude CLI is unavailable; refusing to boot" >&2
+  exit 1
+fi
+if [ "${SELECTED_AGENT}" = "codex" ] && [ "${CODEX_OK}" -ne 1 ]; then
+  echo "[entrypoint] selected agent is codex but codex CLI is unavailable; refusing to boot" >&2
+  exit 1
+fi
+if [ "${SELECTED_AGENT}" = "codex" ] && [ ! -w "${CODEX_DIR}" ]; then
+  echo "[entrypoint] selected agent is codex but ${CODEX_DIR} is not writable by UID $(id -u); refusing to boot" >&2
+  exit 1
+elif [ ! -w "${CODEX_DIR}" ]; then
+  echo "[entrypoint] warning: ${CODEX_DIR} is not writable by UID $(id -u); Codex sessions may not persist" >&2
+fi
 
 wait_until() {
   max_seconds="$1"
@@ -101,7 +152,7 @@ verify_tunnel_reachable() {
 }
 trap stop_probe_server EXIT
 
-# 3. Wire and verify the tunnel URL before the production viewer boots.
+# 4. Wire and verify the tunnel URL before the production viewer boots.
 #    The viewer serves the web UI in Docker, so this entrypoint owns the
 #    "don't show the browser URL until refs are publicly reachable" gate.
 rm -f /repo/.tunnel_url
@@ -151,7 +202,7 @@ fi
 verify_tunnel_reachable
 stop_probe_server
 
-# 4. PAI_KEY warn-but-don't-block. `docker compose up` has no TTY for an
+# 5. PAI_KEY warn-but-don't-block. `docker compose up` has no TTY for an
 #    interactive prompt; the next-best onboarding hint is a loud message
 #    before the viewer boots so the user knows why generation later
 #    fails. Canvas, terminal, project switching all work without a key —
@@ -172,6 +223,6 @@ if [ -z "${PAI_KEY:-}" ]; then
     echo ""
 fi
 
-# 5. Boot the viewer. exec ensures tini → node directly, so SIGTERM lands
+# 6. Boot the viewer. exec ensures tini -> node directly, so SIGTERM lands
 #    where the JS shutdown handler can react.
 exec node /repo/server/local_viewer.js

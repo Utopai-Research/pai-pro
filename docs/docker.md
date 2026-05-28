@@ -1,6 +1,6 @@
 # Docker setup
 
-Pai-pro's recommended onboarding path — every system dependency (ffmpeg, poppler, cloudflared, Claude CLI) bundled into a single image, one command to bring it up.
+Pai-pro's recommended onboarding path — every system dependency (ffmpeg, poppler, cloudflared, Claude Code, and Codex CLI) bundled into a single image, one command to bring it up.
 
 ## Quick start
 
@@ -15,13 +15,19 @@ docker compose up --build             # ~5-10 min first build, cached after
 open http://localhost:7588
 ```
 
-In the embedded terminal, pick a Claude Code theme and run `/login` once. After that the canvas is fully wired — generate images, chain into videos, drop notes, scrub the timeline.
+New projects use Claude Code by default. To make newly-created projects use Codex CLI instead:
+
+```bash
+PAI_DEFAULT_AGENT_ID=codex docker compose up --build
+```
+
+In the embedded terminal, sign in to the selected CLI if prompted. Claude users can run `/login`; Codex users can complete Codex's login prompt, or run `docker compose exec pai-pro codex login` if host `~/.codex` was not already mounted with a valid login.
 
 Your work lives in the `pai_projects` named volume and survives `docker compose restart` / `down`; only `docker compose down -v` wipes it.
 
 ## Prerequisites
 
-[Docker Desktop](https://www.docker.com/products/docker-desktop) (macOS / Windows, WSL2 backend on Windows) or Docker Engine + Compose v2 (Linux). Tested on Docker 28.
+[Docker Desktop](https://www.docker.com/products/docker-desktop) (macOS / Windows, WSL2 backend on Windows) or Docker Engine + Compose v2 (Linux).
 
 ### Windows users
 
@@ -31,10 +37,29 @@ Run the commands in **PowerShell** or a **WSL2 terminal** — not `cmd.exe` (whi
 
 - **Non-root runtime** as the `node` user (UID 1000).
 - **Multi-stage build** — native modules (`sharp`, `node-pty`) rebuilt against linux/glibc; runtime layer ships only what's needed.
-- **`/healthz` probe** verifies ffmpeg, poppler, Claude CLI, volume writability, and PTY availability on every healthcheck interval. Codex CLI availability is reported separately in the `agents` object, but a missing Codex binary does not fail the Docker healthcheck yet.
+- **Both embedded agent CLIs** — Claude Code plus pinned Codex CLI.
+- **`/healthz` probe** verifies ffmpeg, poppler, volume writability, and the selected default agent CLI. It reports all known agents under `agents`, but only the selected default gates `ok`.
 - **In-container Cloudflare quick tunnel** for provider reference fetching (video refs and image pro edit refs are fetched server-side, and `localhost` is unreachable to PAI). Anonymous, no account required, ~3s to land a URL. Set `PUBLIC_VIEWER_URL` in `.env` to skip the tunnel and use your own named domain instead.
 - **Hardened build context** — `.dockerignore` keeps `.env`, `.tunnel_url`, `projects/`, and other state out of any image layer. Credentials cannot land in the image even by accident.
 - **No published image.** Build-locally only, so a maintainer's laptop can never push secrets to a registry.
+
+## Agent selection
+
+`PAI_DEFAULT_AGENT_ID` controls only the default owner for new projects created after the viewer starts. It does not convert existing projects. Each project stores its owner in `meta.json` as `agent_id`, and the Agent panel launches that project's owner.
+
+```bash
+# Claude default
+docker compose up --build
+
+# Codex default
+PAI_DEFAULT_AGENT_ID=codex docker compose up --build
+```
+
+Docker bind-mounts host `~/.codex` into `/home/node/.codex`. If you are already logged into Codex on the host, the container can reuse that auth. Otherwise, complete Codex's login prompt in the Agent panel or run `docker compose exec pai-pro codex login`. On native Linux, make sure `~/.codex` is writable by UID 1000.
+
+Host-to-container Codex session resume is not guaranteed because Codex session metadata records absolute cwd paths. Docker-to-Docker resume across container restarts should work.
+
+For non-interactive enterprise access-token workflows, pipe the token into `codex login --with-access-token` inside the container as documented by Codex. Do not set `CODEX_ACCESS_TOKEN` as a passive compose environment variable; Codex does not use it that way.
 
 ## Ports
 
@@ -46,7 +71,7 @@ Default Docker output waits for the tunnel check before printing the ready banne
 
 ## Volume management
 
-The `pai_projects` named volume holds your projects directory across container rebuilds. To wipe everything (e.g., for a clean-slate test):
+The `pai_projects` named volume holds your projects directory across container rebuilds. Claude session JSONLs are bind-mounted from host `~/.claude/projects`, and Codex auth/config/session state is bind-mounted from host `~/.codex`. To wipe project data (e.g., for a clean-slate test):
 
 ```bash
 docker compose down -v

@@ -1,78 +1,183 @@
 #!/usr/bin/env bash
 # pai-pro / setup
 #
-# Installs pai-pro skills into Claude Code's user-scope skills dir
-# (~/.claude/skills/) by symlinking each skills/<name>/ into place.
+# Installs or validates local agent integration.
 #
 # Usage:
-#   ./scripts/setup              install (idempotent)
-#   ./scripts/setup --force      overwrite existing files
-#   ./scripts/setup --uninstall  remove the symlinks
+#   ./scripts/setup                         install Claude skills (default)
+#   ./scripts/setup --agent claude          install Claude skills
+#   ./scripts/setup --agent codex           validate Codex CLI
+#   ./scripts/setup --agent all             install Claude skills and validate Codex
+#   ./scripts/setup --force                 overwrite existing Claude skill entries
+#   ./scripts/setup --uninstall             remove managed Claude skill symlinks
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PAI_REPO_ROOT="${PAI_REPO_ROOT:-$(cd "$SCRIPT_DIR/.." && pwd)}"
 SKILLS_SRC="$PAI_REPO_ROOT/skills"
-TARGET_DIR="${HOME}/.claude/skills"
+CLAUDE_TARGET_DIR="${HOME}/.claude/skills"
 
+AGENT="claude"
 FORCE=0
 UNINSTALL=0
-for arg in "$@"; do
-  case "$arg" in
-    --force)     FORCE=1 ;;
-    --uninstall) UNINSTALL=1 ;;
-    -h|--help)   sed -n '2,11p' "$0" | sed 's/^# \?//'; exit 0 ;;
-    *)           echo "unknown arg: $arg" >&2; exit 2 ;;
+SKILL_NAMES=()
+
+usage() {
+  cat <<'USAGE'
+pai-pro / setup
+
+Usage:
+  ./scripts/setup                         install Claude skills (default)
+  ./scripts/setup --agent claude          install Claude skills
+  ./scripts/setup --agent codex           validate Codex CLI
+  ./scripts/setup --agent all             install Claude skills and validate Codex
+  ./scripts/setup --force                 overwrite existing Claude skill entries
+  ./scripts/setup --uninstall             remove managed Claude skill symlinks
+
+Examples:
+  ./scripts/setup --agent claude
+  ./scripts/setup --agent codex
+  PAI_DEFAULT_AGENT_ID=codex ./scripts/start.sh
+USAGE
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --agent)
+      shift
+      if [[ $# -eq 0 || "$1" == --* ]]; then
+        echo "error: --agent requires one of: claude, codex, all" >&2
+        exit 2
+      fi
+      AGENT="$1"
+      ;;
+    --force)
+      FORCE=1
+      ;;
+    --uninstall)
+      UNINSTALL=1
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "unknown arg: $1" >&2
+      exit 2
+      ;;
   esac
+  shift
 done
 
-[[ -d "$SKILLS_SRC" ]] || { echo "error: $SKILLS_SRC not found" >&2; exit 1; }
-mkdir -p "$TARGET_DIR"
+case "$AGENT" in
+  claude|codex|all) ;;
+  *)
+    echo "error: unknown agent '$AGENT' (expected claude, codex, or all)" >&2
+    exit 2
+    ;;
+esac
 
-names=()
-for d in "$SKILLS_SRC"/*/; do
-  [[ -d "$d" ]] && names+=("$(basename "$d")")
-done
-[[ ${#names[@]} -gt 0 ]] || { echo "error: no skills in $SKILLS_SRC" >&2; exit 1; }
+load_skill_names() {
+  [[ -d "$SKILLS_SRC" ]] || { echo "error: $SKILLS_SRC not found" >&2; exit 1; }
+  SKILL_NAMES=()
+  for d in "$SKILLS_SRC"/*/; do
+    [[ -d "$d" ]] && SKILL_NAMES+=("$(basename "$d")")
+  done
+  [[ ${#SKILL_NAMES[@]} -gt 0 ]] || { echo "error: no skills in $SKILLS_SRC" >&2; exit 1; }
+}
 
-action_count=0
-for name in "${names[@]}"; do
-  src="$SKILLS_SRC/$name"
-  dst="$TARGET_DIR/$name"
+setup_claude() {
+  load_skill_names
+  mkdir -p "$CLAUDE_TARGET_DIR"
 
-  if (( UNINSTALL )); then
-    if [[ -L "$dst" ]]; then
-      rm "$dst"
-      echo "removed  $name"
-      action_count=$(( action_count + 1 ))
-    fi
-    continue
-  fi
+  local action_count=0 name src dst
+  for name in "${SKILL_NAMES[@]}"; do
+    src="$SKILLS_SRC/$name"
+    dst="$CLAUDE_TARGET_DIR/$name"
 
-  if [[ -L "$dst" && "$(readlink "$dst")" == "$src" ]]; then
-    echo "ok       $name"
-    continue
-  fi
-
-  if [[ -e "$dst" || -L "$dst" ]]; then
-    if (( FORCE )); then
-      rm -rf "$dst"
-    else
-      echo "skip     $name  (exists; rerun with --force)"
+    if (( UNINSTALL )); then
+      if [[ -L "$dst" ]]; then
+        rm "$dst"
+        echo "removed  $name"
+        action_count=$(( action_count + 1 ))
+      fi
       continue
     fi
+
+    if [[ -L "$dst" && "$(readlink "$dst")" == "$src" ]]; then
+      echo "ok       $name"
+      continue
+    fi
+
+    if [[ -e "$dst" || -L "$dst" ]]; then
+      if (( FORCE )); then
+        rm -rf "$dst"
+      else
+        echo "skip     $name  (exists; rerun with --force)"
+        continue
+      fi
+    fi
+
+    ln -s "$src" "$dst"
+    echo "linked   $name"
+    action_count=$(( action_count + 1 ))
+  done
+
+  echo
+  if (( UNINSTALL )); then
+    echo "uninstalled $action_count skills from $CLAUDE_TARGET_DIR"
+  else
+    echo "installed $action_count new skills (out of ${#SKILL_NAMES[@]} total) into $CLAUDE_TARGET_DIR"
+    echo "open a new Claude Code session to load them"
+  fi
+}
+
+setup_codex() {
+  local tolerant="${1:-0}"
+  if (( UNINSTALL )); then
+    echo "codex setup: nothing to uninstall; pai-pro manages Codex skills per project."
+    return 0
   fi
 
-  ln -s "$src" "$dst"
-  echo "linked   $name"
-  action_count=$(( action_count + 1 ))
-done
+  if ! command -v codex >/dev/null 2>&1; then
+    if (( tolerant )); then
+      echo "warning: codex CLI not found on PATH; Codex-owned projects will not launch until it is installed." >&2
+      return 0
+    fi
+    echo "error: codex CLI not found on PATH." >&2
+    echo "Install Codex CLI, sign in, then rerun:" >&2
+    echo "  ./scripts/setup --agent codex" >&2
+    exit 1
+  fi
 
-echo
-if (( UNINSTALL )); then
-  echo "uninstalled $action_count skills from $TARGET_DIR"
-else
-  echo "installed $action_count new skills (out of ${#names[@]} total) into $TARGET_DIR"
-  echo "open a new Claude Code session to load them"
-fi
+  local version
+  if ! version="$(codex --version 2>&1)"; then
+    if (( tolerant )); then
+      echo "warning: codex --version failed; Codex-owned projects may not launch." >&2
+      return 0
+    fi
+    echo "error: codex --version failed:" >&2
+    echo "$version" >&2
+    exit 1
+  fi
+
+  echo "codex CLI: $version"
+  echo "codex setup: repo-local .agents/skills/ symlinks are created for each Codex-owned project."
+  echo "start host mode for new Codex projects with:"
+  echo "  PAI_DEFAULT_AGENT_ID=codex ./scripts/start.sh"
+}
+
+case "$AGENT" in
+  claude)
+    setup_claude
+    ;;
+  codex)
+    setup_codex 0
+    ;;
+  all)
+    setup_claude
+    echo
+    setup_codex 1
+    ;;
+esac

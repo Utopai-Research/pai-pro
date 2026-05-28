@@ -142,8 +142,8 @@ sync_skills() {
     # if ~/.claude/skills/<name> already has a dangling or foreign-checkout
     # symlink from another clone. --force re-links anything whose target
     # isn't us; already-correct symlinks short-circuit to "ok" with no rewrite.
-    echo "Syncing Claude Code skills…"
-    "$SCRIPT_DIR/setup" --force
+    echo "Syncing agent setup…"
+    "$SCRIPT_DIR/setup" --agent all --force
 }
 
 load_env() {
@@ -190,6 +190,10 @@ derive_config() {
     # cross-process URLs so both children (viewer + Vite) see them.
     VIEWER_PORT="${VIEWER_PORT:-7488}"
     WEB_PORT="${WEB_PORT:-7443}"
+    if [ -n "${PAI_AGENT:-}" ]; then
+        echo "WARNING: PAI_AGENT is ignored. Use PAI_DEFAULT_AGENT_ID to choose the default owner for new projects."
+        unset PAI_AGENT
+    fi
     PAI_DEFAULT_AGENT_ID="${PAI_DEFAULT_AGENT_ID:-}"
     case "$PAI_DEFAULT_AGENT_ID" in
         ""|claude|Claude|CLAUDE) PAI_DEFAULT_AGENT_DISPLAY="claude" ;;

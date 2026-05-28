@@ -7,7 +7,12 @@ import { constants as fsc } from "node:fs";
 import { promises as fsp } from "node:fs";
 import { promisify } from "node:util";
 
-import { getProvider, resolveAgentIdForMeta } from "../agents/index.js";
+import {
+  getProvider,
+  listProviders,
+  resolveAgentIdForMeta,
+  resolveAgentIdForNewProject,
+} from "../agents/index.js";
 import { MODELS, getCost } from "../model_registry.js";
 import { PROJECTS_DIR } from "../lib/paths.js";
 import { viewerUrlForLocalPath } from "../local_mirror.js";
@@ -53,7 +58,7 @@ async function safeCheck(fn) {
   }
 }
 
-export function registerSystemRoutes({ app, projects, nodePty, healthChecks = {} }) {
+export function registerSystemRoutes({ app, projects, nodePty, healthChecks = {}, env = process.env }) {
   app.get("/", (_req, res) => {
     res.json({
       service: "pai-pro viewer",
@@ -70,20 +75,34 @@ export function registerSystemRoutes({ app, projects, nodePty, healthChecks = {}
   app.get("/healthz", async (_req, res) => {
     const checkBinary = healthChecks.binaryOk ?? binaryOk;
     const checkWritable = healthChecks.canWrite ?? canWrite;
-    const [ffmpeg, poppler, claude_cli, volume_writable, codex_cli] = await Promise.all([
+    const defaultAgent = resolveAgentIdForNewProject(env);
+    const providerEntries = await Promise.all(
+      listProviders().map(async (provider) => {
+        const override = healthChecks[`${provider.id}Cli`];
+        const binary = await safeCheck(() => override ? override() : provider.healthCheck());
+        return [provider.id, { binary }];
+      }),
+    );
+    const agents = Object.fromEntries(providerEntries);
+    const [ffmpeg, poppler, volume_writable] = await Promise.all([
       safeCheck(() => checkBinary("ffmpeg")),
       safeCheck(() => checkBinary("pdftotext")),
-      safeCheck(() => healthChecks.claudeCli ? healthChecks.claudeCli() : getProvider("claude").healthCheck()),
       safeCheck(() => checkWritable(PROJECTS_DIR)),
-      safeCheck(() => healthChecks.codexCli ? healthChecks.codexCli() : getProvider("codex")?.healthCheck?.()),
     ]);
-    const checks = { ffmpeg, poppler, claude_cli, volume_writable };
-    const ok = Object.values(checks).every(Boolean);
-    const agents = {
-      claude: { binary: claude_cli },
-      codex: { binary: codex_cli },
+    const checks = {
+      ffmpeg,
+      poppler,
+      agent_cli: agents[defaultAgent]?.binary === true,
+      volume_writable,
     };
-    res.status(ok ? 200 : 503).json({ ok, checks, agents, pty_available: !!nodePty });
+    const ok = Object.values(checks).every(Boolean);
+    res.status(ok ? 200 : 503).json({
+      ok,
+      default_agent: defaultAgent,
+      checks,
+      agents,
+      pty_available: !!nodePty,
+    });
   });
 
   // Renderer reads this once at mount to resolve metadata.model → label.

@@ -1,6 +1,6 @@
 # Skills
 
-Each skill is a standard `SKILL.md` with YAML frontmatter. Claude Code auto-discovers user-scope skills after `./scripts/setup`; Codex-owned projects get repo-local symlinks under `.agents/skills/`. You describe what you want, and the agent invokes the right skill.
+Each skill is a standard `SKILL.md` with YAML frontmatter. Claude Code auto-discovers user-scope skills after `./scripts/setup --agent claude`; Codex-owned projects get repo-local symlinks under `.agents/skills/`. You describe what you want, and the agent invokes the right skill.
 
 ## Reference table
 
@@ -42,7 +42,7 @@ Each generation lands as a node, edges show provenance, assets mirror into `proj
 
 ## Adding a new skill
 
-See [skills/CLAUDE.md](../skills/CLAUDE.md) for the authoring contract: SKILL.md body ≤500 lines, reference files one level deep, third-person description in frontmatter, etc.
+See [skills/CLAUDE.md](../skills/CLAUDE.md) for the authoring contract: SKILL.md body ≤500 lines, reference files one level deep, third-person description in frontmatter, etc. Claude users rerun `./scripts/setup --agent claude` after adding a skill; Codex projects receive `.agents/skills/` symlinks when their project structure is created or healed by the viewer.
 
 ## Parallel calls
 

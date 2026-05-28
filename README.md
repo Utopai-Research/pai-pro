@@ -39,20 +39,24 @@ printf "Paste your PAI_KEY: " && read -r key && sed -i.bak "s|^PAI_KEY=.*|PAI_KE
 docker compose up --build
 ```
 
-When the logs say `PAI Pro is ready`, open <http://localhost:7588>.
+When the logs say `PAI Pro is ready`, open <http://localhost:7588>. New projects use Claude Code by default. To make new Docker projects use Codex CLI instead, start with:
+
+```bash
+PAI_DEFAULT_AGENT_ID=codex docker compose up --build
+```
 
 **Or paste this block into your coding agent** — Claude Code / Codex / Cursor / Gemini CLI all consume it the same way (host mode, Vite HMR for live reload):
 
 ```bash
 git clone https://github.com/Utopai-Research/pai-pro.git ~/pai-pro && cd ~/pai-pro
-./scripts/setup && npm --prefix server install && npm --prefix web install
+./scripts/setup --agent claude && npm --prefix server install && npm --prefix web install
 cp .env.example .env
 # Get your PAI_KEY at https://pai-pro.utopaistudios.com/keys (format: PAI_<random>)
 printf "Paste your PAI_KEY: " && read -r key && sed -i.bak "s|^PAI_KEY=.*|PAI_KEY=$key|" .env && rm -f .env.bak
 ./scripts/start.sh
 ```
 
-Open <http://localhost:7443>. Sign in to the selected CLI in the embedded terminal if prompted.
+For Codex-owned new projects in host mode, run `./scripts/setup --agent codex`, then start with `PAI_DEFAULT_AGENT_ID=codex ./scripts/start.sh`. Open <http://localhost:7443>. Sign in to the selected CLI in the embedded terminal if prompted.
 
 > See [docs/docker.md](docs/docker.md) for the multi-stage build internals, Windows / WSL2 notes, and what the image contains. [docs/development.md](docs/development.md) covers the host-mode Vite HMR loop and contributor setup.
 

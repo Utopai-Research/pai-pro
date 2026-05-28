@@ -5,8 +5,8 @@
 # Multi-stage:
 #   builder  rebuilds native node modules (node-pty, sharp) against
 #            linux/glibc and produces web/dist from the React+Vite source.
-#   runtime  slim image with ffmpeg + poppler + cloudflared + claude CLI,
-#            running as non-root `node` user.
+#   runtime  slim image with ffmpeg + poppler + cloudflared + supported
+#            agent CLIs, running as non-root `node` user.
 
 ARG NODE_TAG=22-slim
 # Pinned cloudflared. Releases ship every 2-4 weeks; using `latest` lets
@@ -14,6 +14,7 @@ ARG NODE_TAG=22-slim
 # build. Bump via
 # `docker compose build --build-arg CLOUDFLARED_VERSION=<x>` to test.
 ARG CLOUDFLARED_VERSION=2026.5.0
+ARG CODEX_VERSION=0.134.0
 
 # ─── builder ──────────────────────────────────────────────────────────
 FROM node:${NODE_TAG} AS builder
@@ -44,6 +45,7 @@ RUN cd web && npm run build
 
 # ─── runtime ──────────────────────────────────────────────────────────
 FROM node:${NODE_TAG} AS runtime
+ARG CODEX_VERSION
 
 # Runtime system binaries.
 #   ffmpeg          reel stitching (reel_stitch.js)
@@ -92,7 +94,7 @@ RUN chmod +x /usr/local/bin/pai-entrypoint.sh
 
 # Ensure node user owns everything it needs to write (incl. ~/.local for
 # the claude CLI install in the next step).
-RUN mkdir -p /repo/projects /home/node/.claude/skills /home/node/.local/bin && \
+RUN mkdir -p /repo/projects /home/node/.claude/skills /home/node/.codex /home/node/.local/bin && \
     chown -R node:node /repo /home/node
 
 # Advisory — keeps customer data out of the writable container layer if
@@ -114,10 +116,17 @@ USER node
 # Claude Code CLI — install AS the node user so it lands in
 # /home/node/.local/bin (visible on PATH above). Running as root would
 # put it in /root/.local/, which the node user can't traverse. The
-# install script is non-interactive; if it fails the build continues —
-# the canvas works without it, only the embedded PTY tab degrades.
+# install script is non-interactive; if it fails the build continues so a
+# Codex-selected deployment can still run. The entrypoint refuses to boot a
+# Claude-selected deployment without the Claude CLI.
 RUN curl -fsSL https://claude.ai/install.sh | bash || \
     echo "[build] claude CLI install failed — PTY tab will be degraded"
+
+# Codex CLI — pin the npm package so Docker's supported-agent surface is
+# reproducible. Install as node into /home/node/.local/bin, which is on PATH.
+RUN npm config set prefix /home/node/.local && \
+    npm install -g "@openai/codex@${CODEX_VERSION}" --no-audit --no-fund && \
+    codex --version
 
 # tini → entrypoint → node. Three layers but each does one thing.
 ENTRYPOINT ["tini", "--", "/usr/local/bin/pai-entrypoint.sh"]

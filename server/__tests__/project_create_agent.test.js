@@ -15,7 +15,7 @@ async function freePort() {
   return 17800 + Math.floor(Math.random() * 1000);
 }
 
-async function startViewer({ paiDefaultAgentId } = {}) {
+async function startViewer({ paiDefaultAgentId, paiAgent } = {}) {
   const projectsDir = await mkdtemp(join(tmpdir(), "project-create-agent-"));
   const port = await freePort();
   const baseUrl = `http://127.0.0.1:${port}`;
@@ -27,7 +27,8 @@ async function startViewer({ paiDefaultAgentId } = {}) {
     PAI_ROOT_LINK: join(projectsDir, "workflow.json"),
     WEB_ORIGIN: "http://localhost:0",
   };
-  delete env.PAI_AGENT;
+  if (paiAgent === undefined) delete env.PAI_AGENT;
+  else env.PAI_AGENT = paiAgent;
   if (paiDefaultAgentId === undefined) delete env.PAI_DEFAULT_AGENT_ID;
   else env.PAI_DEFAULT_AGENT_ID = paiDefaultAgentId;
 
@@ -109,6 +110,18 @@ test("POST /projects stores claude agent_id when PAI_DEFAULT_AGENT_ID is unset",
     assert.match(claudeMd, /run_in_background: true/);
     assert.match(claudeMd, /BashOutput/);
     assert.equal(await pathExists(join(dir, ".claude", "settings.local.json")), true);
+  } finally {
+    await stopViewer(handle);
+  }
+});
+
+test("POST /projects ignores unsupported PAI_AGENT alias", async () => {
+  const handle = await startViewer({ paiAgent: "codex" });
+  try {
+    const { meta, row } = await createProject(handle, "Agent Legacy Alias");
+    assert.equal(meta.agent_id, "claude");
+    assert.equal(row.agent_id, "claude");
+    assert.equal(row.agent_label, "Claude");
   } finally {
     await stopViewer(handle);
   }

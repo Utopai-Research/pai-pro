@@ -51,6 +51,7 @@ pai-pro/
 ├── skills/                        # filmmaking skills + skills/CLAUDE.md author guide
 ├── server/
 │   ├── local_viewer.js            # Express + Socket.IO + chokidar + node-pty + asset routes
+│   ├── agents/                    # Claude/Codex provider registry and launch/resume shims
 │   ├── local_mirror.js            # writes/mirrors generated media into projects/<active>/assets/
 │   ├── cli/                       # CLI wrappers (generate_*, canvas_mutate, split_image, …)
 │   ├── pai_client.js              # shared HTTP plumbing for /api/v1/generate, /submit, /task/status
@@ -64,7 +65,7 @@ pai-pro/
 ├── CLAUDE.md                      # repo maintainer guide (dev sessions auto-load this)
 ├── agent-templates/PROJECT_AGENT.md # canvas schema + agent persona + skill routing (copied into each project)
 ├── .claude-plugin/marketplace.json
-└── scripts/                       # tmux launcher (start.sh) + teardown (stop.sh) + skills symlinker (setup)
+└── scripts/                       # tmux launcher (start.sh) + teardown (stop.sh) + agent setup
 ```
 
 ## Where each layer is documented
@@ -79,4 +80,5 @@ pai-pro/
 - **Skills are markdown, not code.** Agent-portable across Claude Code / Codex / Cursor / Gemini CLI. Adding a skill is editing a `SKILL.md`, not writing a TypeScript plugin.
 - **CLI scripts are stdout-JSON wrappers.** Each one does one thing, prints one structured line, can be invoked from any agent that can call shell commands.
 - **Canvas state is just files on disk.** No database. `chokidar` watches; `workflow.json` is the source of truth. You can hand-edit it (carefully) and the viewer picks up the change.
+- **Agent ownership is per project.** `PAI_DEFAULT_AGENT_ID` only chooses the owner for new projects. Existing projects keep their saved `agent_id`, and the PTY bridge asks the provider registry how to launch or resume that owner.
 - **PTY bridge is opt-in.** If the embedded terminal is broken or you'd rather drive your agent in your own terminal, everything still works — just stripped of the live-canvas-in-browser experience.

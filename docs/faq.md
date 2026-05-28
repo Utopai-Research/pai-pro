@@ -2,7 +2,7 @@
 
 ## Skills don't trigger
 
-Restart your AI agent session after `./scripts/setup` — skills load at session start. If you're inside the embedded terminal, close the project and reopen.
+Claude Code users should rerun `./scripts/setup --agent claude` and restart the agent session; Claude skills load at session start. Codex-owned projects use repo-local `.agents/skills/` symlinks, so close and reopen the project after the viewer has healed the project structure.
 
 ## Generation fails with `bad_args`
 
@@ -20,7 +20,7 @@ Yes — canvas, terminal, and notes work. Media generation just fails with a cle
 
 ## How do I add a new skill?
 
-Read [skills/CLAUDE.md](../skills/CLAUDE.md) for the SKILL.md authoring contract. Drop a new directory under `skills/<your-skill>/` with a `SKILL.md` file and (optionally) any helper scripts. Claude users run `./scripts/setup` to symlink it into `~/.claude/skills/`; Codex-owned projects get `.agents/skills/` symlinks when the project is created. The agent picks it up at next session start.
+Read [skills/CLAUDE.md](../skills/CLAUDE.md) for the SKILL.md authoring contract. Drop a new directory under `skills/<your-skill>/` with a `SKILL.md` file and (optionally) any helper scripts. Claude users run `./scripts/setup --agent claude` to symlink it into `~/.claude/skills/`; Codex-owned projects get `.agents/skills/` symlinks when the project is created or healed. The agent picks it up at next session start.
 
 ## How do parallel generations work?
 
@@ -40,4 +40,8 @@ Per call: image ~$0.07–0.15 / voice $0.01 per 500 chars / asset upload $0.01 p
 
 ## Can I use a different AI coding agent?
 
-Claude Code and Codex CLI are wired with the embedded terminal. New projects default to Claude; start host mode with `PAI_DEFAULT_AGENT_ID=codex ./scripts/start.sh` to create Codex-owned projects. Cursor and Gemini can use the skills from their own shells, but they do not have embedded terminal providers yet — see [docs/agents.md](agents.md).
+Claude Code and Codex CLI are wired with the embedded terminal. New projects default to Claude; start host mode with `PAI_DEFAULT_AGENT_ID=codex ./scripts/start.sh` or Docker with `PAI_DEFAULT_AGENT_ID=codex docker compose up --build` to create Codex-owned projects. Cursor and Gemini can use the skills from their own shells, but they do not have embedded terminal providers yet — see [docs/agents.md](agents.md).
+
+## Why does `/healthz` not require both agents?
+
+`/healthz` gates on the selected default agent for new projects. A Claude deployment should not fail just because Codex is missing, and a Codex deployment should not fail just because Claude is missing. The response still reports every known agent under `agents`.

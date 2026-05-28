@@ -24,3 +24,7 @@ export function resolveAgentIdForMeta(meta) {
 export function getProvider(agentId) {
   return providers.get(agentId) ?? null;
 }
+
+export function listProviders() {
+  return Array.from(providers.values());
+}

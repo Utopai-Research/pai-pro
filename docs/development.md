@@ -20,7 +20,7 @@ The two use different ports (`:7588` and `:7488`) so you can run both side by si
 ```bash
 git clone https://github.com/Utopai-Research/pai-pro.git ~/pai-pro
 cd ~/pai-pro
-./scripts/setup                      # symlinks skills into Claude Code's user-scope skills dir
+./scripts/setup --agent claude       # symlinks skills into Claude Code's user-scope skills dir
 npm --prefix server install
 npm --prefix web install
 cp .env.example .env
@@ -31,6 +31,19 @@ open http://localhost:7443
 ```
 
 The first run creates `projects/` (gitignored) and brings up the projects grid. Click **+ New project** to start.
+
+## Codex host mode
+
+For Codex-owned new projects:
+
+```bash
+./scripts/setup --agent codex        # validates codex on PATH
+PAI_DEFAULT_AGENT_ID=codex ./scripts/start.sh
+```
+
+`PAI_DEFAULT_AGENT_ID` controls only projects created after the viewer starts. Existing projects keep their saved `meta.json` `agent_id`, so a Claude project still opens Claude and a Codex project still opens Codex regardless of the current default.
+
+`./scripts/start.sh` runs `./scripts/setup --agent all --force` on boot. Missing Codex is a warning on Claude-only machines; starting explicitly with `./scripts/setup --agent codex` fails clearly if `codex` is not installed.
 
 ## Running tests
 

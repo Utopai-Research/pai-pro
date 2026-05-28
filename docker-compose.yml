@@ -30,6 +30,9 @@ services:
       NODE_ENV: production
       VIEWER_PORT: 7488
       VIEWER_BIND: 0.0.0.0
+      # Controls only the default owner for newly-created projects.
+      # Existing projects keep their saved meta.json agent_id.
+      PAI_DEFAULT_AGENT_ID: "${PAI_DEFAULT_AGENT_ID:-}"
       # Re-read for the viewer's boot banner so users see the URL they
       # should actually open, not the container-internal port.
       HOST_VIEWER_PORT: "${HOST_VIEWER_PORT:-7588}"
@@ -37,13 +40,16 @@ services:
       # Customer's canvas data — named volume so it survives container rebuild.
       # NEVER rename this key across versions — customer data lives in it forever.
       - pai_projects:/repo/projects
-      # Bind-mount the host's claude session JSONLs so the canvas can
-      # resume sessions across container restarts. Optional — if the
+      # Bind-mount the host's Claude session JSONLs so the canvas can
+      # resume Claude sessions across container restarts. Optional — if the
       # host has no ~/.claude/projects yet, Docker creates an empty dir.
       # ${HOME:-${USERPROFILE}} → POSIX shells use $HOME; Windows
       # PowerShell where $env:HOME may be unset falls back to $USERPROFILE
       # (always set by the OS).
       - ${HOME:-${USERPROFILE}}/.claude/projects:/home/node/.claude/projects
+      # Bind-mount Codex auth/config/session state so Docker Codex can reuse
+      # host login and persist container-created Codex sessions.
+      - ${HOME:-${USERPROFILE}}/.codex:/home/node/.codex
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:7488/healthz"]
       interval: 15s

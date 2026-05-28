@@ -6,12 +6,34 @@ Pai-pro is "bring-your-own AI coding agent" — the skills are standard SKILL.md
 
 | Compatible agent | Status |
 |---|---|
-| **Claude Code** | ✅ Tested. Embedded PTY + auto-discovered skills via `./scripts/setup`. |
+| **Claude Code** | ✅ Tested. Embedded PTY + auto-discovered skills via `./scripts/setup --agent claude`. |
 | **Codex CLI** | ✅ Tested. Embedded PTY + project-local `.agents/skills/`. Start host mode with `PAI_DEFAULT_AGENT_ID=codex ./scripts/start.sh` for new Codex projects. |
 | **Cursor agent** | ⏳ Skills work via `.cursor/rules/`; embedded terminal swap-in pending. |
 | **Gemini CLI** | ⏳ Skills work via `~/.gemini/skills/`; embedded terminal swap-in pending. |
 
 Cursor and Gemini currently use the host-mode flow with their own native CLI shell. Pai-pro's React Flow canvas + WebSocket bridge are provider-backed for Claude Code and Codex CLI; other CLIs need their own process bootstrap and resume support.
+
+## Choosing the default agent
+
+`PAI_DEFAULT_AGENT_ID` controls only the default owner for new projects created after the viewer starts. It does not convert existing projects. Each project stores its owner in `meta.json` as `agent_id`, and the Agent panel launches that project's owner.
+
+```bash
+# Host, Claude
+./scripts/setup --agent claude
+./scripts/start.sh
+
+# Host, Codex
+./scripts/setup --agent codex
+PAI_DEFAULT_AGENT_ID=codex ./scripts/start.sh
+
+# Docker, Claude
+docker compose up --build
+
+# Docker, Codex
+PAI_DEFAULT_AGENT_ID=codex docker compose up --build
+```
+
+`PAI_AGENT` is not a supported alias. Leave it unset and use `PAI_DEFAULT_AGENT_ID`.
 
 ## Installing skills for non-Claude-Code agents
 
@@ -19,7 +41,7 @@ The `SKILL.md` files live in `skills/`. To install for a different agent, symlin
 
 | Agent | Skill discovery path |
 |---|---|
-| Claude Code | `~/.claude/skills/` (run `./scripts/setup`) |
+| Claude Code | `~/.claude/skills/` (run `./scripts/setup --agent claude`) |
 | Codex CLI | project-local `.agents/skills/` |
 | Cursor agent | `.cursor/rules/` |
 | Gemini CLI | `~/.gemini/skills/` |
