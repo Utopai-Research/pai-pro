@@ -25,6 +25,7 @@ import { withProjectMutationLock, writeResult } from "../lib/writers.js";
 
 const ALLOWED_SCRIPTS = new Set([
   "generate_image.js",
+  "generate_image_pro.js",
   "generate_video.js",
   "generate_voice.js",
 ]);
@@ -41,8 +42,19 @@ const PATCH_FLAGS = {
   text:          "--text",
 };
 
+const IMAGE_PRO_DISPLAY_ONLY_PATCH_KEYS = new Set(["aspect_ratio", "image_size"]);
+
 function pendingPath(id, jobId) {
   return path.join(pendingDir(id), `${jobId}.json`);
+}
+
+function isImageProSidecar(entry) {
+  return entry?.script === "generate_image_pro.js" || entry?.model === "image-generation-pro";
+}
+
+function isPatchKeyEditableForEntry(key, entry) {
+  if (!Object.prototype.hasOwnProperty.call(PATCH_FLAGS, key)) return false;
+  return !(isImageProSidecar(entry) && IMAGE_PRO_DISPLAY_ONLY_PATCH_KEYS.has(key));
 }
 
 function isValidPosition(p) {
@@ -131,7 +143,9 @@ export function registerPendingRoutes({ app, projects, broadcasters }) {
     // too, and the position is purely view state. Everything else is
     // gated on draft.
     const positionPatch = isValidPosition(patch.position) ? { x: patch.position.x, y: patch.position.y } : null;
-    const hasContentEdit = Object.keys(PATCH_FLAGS).some((k) => patch[k] !== undefined);
+    const hasContentEdit = Object.keys(PATCH_FLAGS).some((k) => (
+      patch[k] !== undefined && isPatchKeyEditableForEntry(k, entry)
+    ));
     if (hasContentEdit && entry.stage !== "draft") {
       return res.status(409).json({ error: `cannot edit ${entry.stage} entry` });
     }
@@ -151,6 +165,7 @@ export function registerPendingRoutes({ app, projects, broadcasters }) {
           let costedChanged = false;
           for (const [key, flag] of Object.entries(PATCH_FLAGS)) {
             if (patch[key] === undefined) continue;
+            if (!isPatchKeyEditableForEntry(key, sidecar)) continue;
             sidecar[key] = patch[key];
             if (key === "image_size" || key === "resolution" || key === "duration") {
               costedChanged = true;

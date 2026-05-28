@@ -32,7 +32,7 @@ Run the commands in **PowerShell** or a **WSL2 terminal** — not `cmd.exe` (whi
 - **Non-root runtime** as the `node` user (UID 1000).
 - **Multi-stage build** — native modules (`sharp`, `node-pty`) rebuilt against linux/glibc; runtime layer ships only what's needed.
 - **`/healthz` probe** verifies ffmpeg, poppler, Claude CLI, volume writability, and PTY availability on every healthcheck interval. Codex CLI availability is reported separately in the `agents` object, but a missing Codex binary does not fail the Docker healthcheck yet.
-- **In-container Cloudflare quick tunnel** for video-gen reference fetching (PAI's `video-generation-assets` endpoint fetches refs server-side and `localhost` is unreachable to it). Anonymous, no account required, ~3s to land a URL. Set `PUBLIC_VIEWER_URL` in `.env` to skip the tunnel and use your own named domain instead.
+- **In-container Cloudflare quick tunnel** for provider reference fetching (video refs and image pro edit refs are fetched server-side, and `localhost` is unreachable to PAI). Anonymous, no account required, ~3s to land a URL. Set `PUBLIC_VIEWER_URL` in `.env` to skip the tunnel and use your own named domain instead.
 - **Hardened build context** — `.dockerignore` keeps `.env`, `.tunnel_url`, `projects/`, and other state out of any image layer. Credentials cannot land in the image even by accident.
 - **No published image.** Build-locally only, so a maintainer's laptop can never push secrets to a registry.
 

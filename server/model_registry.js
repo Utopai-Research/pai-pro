@@ -14,7 +14,7 @@
 //                   POST /api/v1/generate or /submit). Also stamped
 //                   onto canvas node metadata.model.
 //   provider        always "pai" in this codebase.
-//   kind            "image" | "video" | "voice" | "asset"
+//   kind            "image" | "image_pro" | "video" | "voice" | "asset"
 //   label           human-readable name (UI-friendly).
 //   cost_approx_usd number, function(params) -> number, or null when
 //                   unknown. Display-only; the actual freeze/charge
@@ -34,6 +34,10 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { config as dotenvConfig } from "dotenv";
+import {
+  IMAGE_PRO_DEFAULT_SIZE,
+  imageProCostBySize,
+} from "./image_pro_sizes.js";
 
 // Load .env defensively. local_viewer.js calls config() after it has
 // already imported this module (ES modules evaluate imports before the
@@ -88,6 +92,18 @@ export const MODELS = [
     capabilities: ["text-to-image", "image-to-image", "multi-ref"],
     default_params: { aspect_ratio: "16:9", image_size: "2K" },
     notes: "Sync image generation via PAI raw passthrough. Drafts, illustrative, stylized. ~10-30s.",
+  },
+
+  // ───────────── image (pro tier) ─────────────
+  {
+    id: "image-generation-pro",
+    provider: "pai",
+    kind: "image_pro",
+    label: "Image Pro (image-generation-pro)",
+    cost_approx_usd: imageProCostBySize,
+    capabilities: ["text-to-image", "image-to-image", "multi-ref", "rendered-text"],
+    default_params: { size: IMAGE_PRO_DEFAULT_SIZE, output_format: "png" },
+    notes: "Sync pro image generation/editing via PAI raw passthrough. Routes refs internally to image-edit-pro. ~3 min.",
   },
 
   // ───────────── video ─────────────

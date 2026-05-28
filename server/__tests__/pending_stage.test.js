@@ -87,6 +87,44 @@ test("generate_image.js --stage writes a draft sidecar and exits 0", async (t) =
   assert.ok(sidecar.argv.includes("a test cat"));
 });
 
+test("generate_image_pro.js --stage writes a draft sidecar and exits 0", async (t) => {
+  const cwd = await setupCwd();
+  t.after(() => rm(cwd, { recursive: true, force: true }));
+
+  const { code, stdout, stderr } = await runCli({
+    script: "generate_image_pro.js",
+    args: [
+      "--stage",
+      "--prompt", "a crisp storyboard frame",
+      "--size", "1024x1024",
+      "--ref-source-id", "image_42",
+    ],
+    cwd,
+  });
+
+  assert.strictEqual(code, 0, `expected exit 0; stderr:\n${stderr}`);
+
+  const reply = parseReply(stdout);
+  assert.strictEqual(reply.ok, true);
+  assert.strictEqual(reply.stage, "draft");
+  assert.strictEqual(reply.model, "image-generation-pro");
+  assert.ok(reply.cost_usd > 0);
+
+  const sidecar = await readSidecar(cwd, reply.job_id);
+  assert.strictEqual(sidecar.stage, "draft");
+  assert.strictEqual(sidecar.kind, "image");
+  assert.strictEqual(sidecar.prompt, "a crisp storyboard frame");
+  assert.strictEqual(sidecar.script, "generate_image_pro.js");
+  assert.strictEqual(sidecar.model, "image-generation-pro");
+  assert.strictEqual(sidecar.image_size, "1K");
+  assert.strictEqual(sidecar.aspect_ratio, "1:1");
+  assert.deepEqual(sidecar.reference_source_ids, ["image_42"]);
+  assert.ok(Array.isArray(sidecar.argv));
+  assert.ok(!sidecar.argv.includes("--stage"));
+  assert.ok(sidecar.argv.includes("--size"));
+  assert.ok(sidecar.argv.includes("1024x1024"));
+});
+
 test("generate_video.js --stage writes a draft sidecar and exits 0", async (t) => {
   const cwd = await setupCwd();
   t.after(() => rm(cwd, { recursive: true, force: true }));
@@ -151,6 +189,40 @@ test("generate_image.js --stage without --prompt fails bad_args", async (t) => {
   const reply = parseReply(stdout);
   assert.strictEqual(reply.ok, false);
   assert.strictEqual(reply.klass, "bad_args");
+});
+
+test("generate_image_pro.js rejects unsupported provider sizing flags", async (t) => {
+  const cwd = await setupCwd();
+  t.after(() => rm(cwd, { recursive: true, force: true }));
+
+  for (const flag of ["--aspect-ratio", "--image-size"]) {
+    const { code, stdout } = await runCli({
+      script: "generate_image_pro.js",
+      args: ["--stage", "--prompt", "x", flag, "16:9"],
+      cwd,
+    });
+    assert.strictEqual(code, 2);
+    const reply = parseReply(stdout);
+    assert.strictEqual(reply.ok, false);
+    assert.strictEqual(reply.klass, "bad_args");
+    assert.match(reply.message, /argv|unknown option/i);
+  }
+});
+
+test("generate_image_pro.js rejects unsupported exact size", async (t) => {
+  const cwd = await setupCwd();
+  t.after(() => rm(cwd, { recursive: true, force: true }));
+
+  const { code, stdout } = await runCli({
+    script: "generate_image_pro.js",
+    args: ["--stage", "--prompt", "x", "--size", "1920x1080"],
+    cwd,
+  });
+  assert.strictEqual(code, 2);
+  const reply = parseReply(stdout);
+  assert.strictEqual(reply.ok, false);
+  assert.strictEqual(reply.klass, "bad_args");
+  assert.match(reply.message, /unsupported --size/);
 });
 
 // --- isBypassEnabled + writePending -------------------------------------

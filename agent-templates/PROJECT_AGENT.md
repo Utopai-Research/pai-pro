@@ -105,6 +105,7 @@ Do not write `node server/cli/...` (no such directory under your cwd) and do not
 | CLI | Skill | Provider | Model (PAI raw model name) | Notes |
 |---|---|---|---|---|
 | `generate_image.js` | `image-compose` | PAI Lite | `image-generation` | ~10–30s. ~$0.07 @ 1K / $0.10 @ 2K / $0.15 @ 4K. Standard image tier — drafts, illustrative, stylized. |
+| `generate_image_pro.js` | `image-compose` | PAI Lite | `image-generation-pro` | ~3–6 min. ~$0.26 @ 1K / $0.45 @ 2K / $0.77 @ 4K. Pro image tier — exact `--size` only; refs route internally to image edit. |
 | `generate_video.js` | `video-compose` | PAI Lite | `video-generation` | ~2–4 min. ~$0.08/sec @ 480p, ~$0.20/sec @ 720p, ~$0.44/sec @ 1080p + ~$0.01/ref preupload. Real money — only after explicit ask. |
 | `generate_voice.js` | `voice-compose` | PAI Lite | `tts` | ~5–15s. $0.01 per 500 input characters (rounded up). Creates an `audio_result` node (subtype `voice`). With `--source-node-id`, also emits a `derived` edge from that source → audio (typically a character image; may also be a shot note for written V.O.). Without it, the audio node stands alone. |
 | `mirror_url.js` | (no skill) | n/a (local fetch) | n/a | Download an external image / audio / video URL into a canvas reference node so it can be used as `--ref-source-id` for a later generation. `--url`, `--kind?`, `--label?`. Same node shape as a drag-drop upload (`subtype: "reference"` / `"upload"`, `metadata.source: "user_upload"`), plus `metadata.source_url` for provenance. |
@@ -113,7 +114,7 @@ Do not write `node server/cli/...` (no such directory under your cwd) and do not
 
 **Asset mirroring.** Every generation CLI mirrors its output into `projects/<active>/assets/<kind>/` and returns both `output_url` (the viewer's HTTP URL pointing at that mirrored file) and `local_path` (repo-relative). The renderer reads `image_url` / `video_url` for display, so the URL in the canvas always resolves to a local file via the viewer — no cloud hosting in the loop. `generate_video.js` additionally includes `provider_output_url` (PAI's rehosted signed CDN URL for the MP4, ephemeral ~24h) in the success JSON for visibility, but does NOT put it on the canvas node. `generate_voice.js` no longer emits `provider_output_url` (PAI's `tts` returns the MP3 bytes inline).
 
-**Ref chains across calls.** Every generation ref is a canvas node referenced by `--ref-source-id <NODE_ID>`. The CLI resolves the source node's `local_path`, rewrites the viewer URL's host to the cloudflared tunnel origin via `.tunnel_url`, and hands that URL to the provider. For external URLs (a pasted-in CDN link, a still you want to use as a ref), mirror it onto the canvas first via `mirror_url.js` and use the returned `node_id` like any other source — no separate URL-passthrough flag.
+**Ref chains across calls.** Every generation ref is a canvas node referenced by `--ref-source-id <NODE_ID>`. The CLI resolves the source node's `local_path`, rewrites the viewer URL's host to the cloudflared tunnel origin via `.tunnel_url`, and hands that URL to the provider. For external URLs (a pasted-in CDN link, a still you want to use as a ref), mirror it onto the canvas first via `mirror_url.js` and use the returned `node_id` like any other source — no separate URL-passthrough flag. Standard image refs cap at 16; image pro refs cap at 32.
 
 **Authorship edges.** `--source-node-id <NODE_ID>` on every generation CLI emits one `derived` edge from that node → the new asset, no bytes attached. Use when a canvas node authored the asset (shot note rendered as a clip, script note designing a character). Single value — pick the one most-essential parent. Deduped against `--ref-source-id`.
 
@@ -183,7 +184,7 @@ Schema is `{ version: 2, workflow_id, title, nodes: [...], edges: [...], groups?
 
 **`note`** — `data: { label (≤30), body, metadata: { author, timestamp } }`.
 
-**`image_result`** — `data: { label, image_url, local_path?, prompt, metadata: { source, task_type, model, aspect_ratio, image_size, generated_at, source_url? } }`. Optional `data.subtype`:
+**`image_result`** — `data: { label, image_url, local_path?, prompt, metadata: { source, task_type, model, size?, aspect_ratio, image_size, generated_at, source_url? } }`. Optional `data.subtype`:
 - `"character"` — adds `name`, `role`, `description`. No incoming edges (identity anchor). Character voices live on linked `audio_result` (subtype `voice`) nodes — see below.
 - `"location"` — adds `name`, `description`. No incoming edges (setting anchor).
 - `"edit"` — adds `source_id`.

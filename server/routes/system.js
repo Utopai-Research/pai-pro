@@ -108,8 +108,9 @@ export function registerSystemRoutes({ app, projects, nodePty, healthChecks = {}
 
   // Per-asset cost estimator. Body: { model: "<id>", params: { ... } }.
   // Params shape matches what the registry's cost functions expect
-  // (image_size for image-tier, resolution+duration for video). Suffixed
-  // IDs fall through to a -YYYYMMDD strip before lookup.
+  // (image_size for standard image, size for image pro,
+  // resolution+duration for video). Suffixed IDs fall through to a
+  // -YYYYMMDD strip before lookup.
   app.post("/cost", (req, res) => {
     const { model, params = {} } = req.body ?? {};
     if (typeof model !== "string" || model === "") {

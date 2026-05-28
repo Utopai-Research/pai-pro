@@ -19,7 +19,7 @@ import { VIEWER_URL } from './socket'
 export interface ModelInfo {
   id: string
   provider: string
-  kind: 'image' | 'video' | 'voice'
+  kind: 'image' | 'image_pro' | 'video' | 'voice'
   label: string
   capabilities: string[]
   cost_approx_usd: number | null
@@ -104,16 +104,16 @@ export function useModels(): ModelsValue {
 
 /**
  * Per-asset cost estimate. POSTs to /cost with the model id + asset
- * params (image_size, resolution, duration). Returns null while loading
+ * params (size, image_size, resolution, duration). Returns null while loading
  * or when the registry can't price the call.
  */
 export function useCost(
   modelId: string | null | undefined,
-  params: { image_size?: string; resolution?: string; duration?: number | string } | undefined,
+  params: { size?: string; image_size?: string; resolution?: string; duration?: number | string } | undefined,
 ): number | null {
   const [cost, setCost] = useState<number | null>(null)
   const key = modelId !== undefined && modelId !== null && modelId !== ''
-    ? `${modelId}|${params?.image_size ?? ''}|${params?.resolution ?? ''}|${params?.duration ?? ''}`
+    ? `${modelId}|${params?.size ?? ''}|${params?.image_size ?? ''}|${params?.resolution ?? ''}|${params?.duration ?? ''}`
     : null
   useEffect(() => {
     if (key === null || modelId === undefined || modelId === null || modelId === '') {
@@ -137,6 +137,6 @@ export function useCost(
     return () => {
       cancelled = true
     }
-  }, [key, modelId, params?.image_size, params?.resolution, params?.duration])
+  }, [key, modelId, params?.size, params?.image_size, params?.resolution, params?.duration])
   return cost
 }

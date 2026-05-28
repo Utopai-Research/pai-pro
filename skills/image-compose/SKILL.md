@@ -1,15 +1,23 @@
 ---
 name: image-compose
-description: Generates or edits images on the filmmaking canvas with generate_image.js, including subtype stamping, reference wiring, provenance edges, and source selection. Use for character design, portraits, actor/character reference sheets, locations, hero stills, scene shots, edits, variations, standalone images, and storyboard or previs mosaics. Character routing: if a character may appear in any downstream video, clip, promo, film, scene, or shot, default to Pattern 7, a 4-panel front/profile/back/closeup reference sheet, whether or not actor refs exist; this gives the video model multi-view identity anchors. Use Pattern 1 only for one-off static portraits, posters, print art, or illustrations that will not feed video. Before generating video-bound characters, announce the 4-panel choice. Storyboard routing: use Pattern 6, one composite mosaic per location, not one CLI call per panel.
+description: Generates or edits images on the filmmaking canvas with generate_image.js and generate_image_pro.js, including subtype stamping, reference wiring, provenance edges, and source selection. Use for character design, portraits, actor/character reference sheets, locations, hero stills, scene shots, edits, variations, standalone images, and storyboard or previs mosaics. Character routing: if a character may appear in any downstream video, clip, promo, film, scene, or shot, default to Pattern 7, a 4-panel front/profile/back/closeup reference sheet, whether or not actor refs exist; this gives the video model multi-view identity anchors. Use Pattern 1 only for one-off static portraits, posters, print art, or illustrations that will not feed video. Before generating video-bound characters, announce the 4-panel choice. Storyboard routing: use Pattern 6 with generate_image_pro.js, one composite mosaic per location, not one CLI call per panel.
 ---
 
 ## CLI shape
 
-All patterns below shell out to:
+Most patterns below use the standard image tier:
 
 ```
 node "$PAI_REPO_ROOT/server/cli/generate_image.js" --prompt "..." [--aspect-ratio 16:9] [--image-size 2K] [--label "..."] [--subtype <character|location|edit|reference|split>] [--name "..."] [--role "..."] [--description "..."] [--source-node-id <id>] [--ref-source-id <id> ...]
 ```
+
+Storyboard mosaics use the pro image tier:
+
+```
+node "$PAI_REPO_ROOT/server/cli/generate_image_pro.js" --prompt "..." --size 2560x1440 [--label "..."] [--subtype <character|location|edit|reference|split>] [--name "..."] [--role "..."] [--description "..."] [--source-node-id <id>] [--ref-source-id <id> ...]
+```
+
+Pro tier accepts `--size` only. Do not pass `--aspect-ratio` or `--image-size` to `generate_image_pro.js`. Common exact sizes: `1024x1024`, `1280x720`, `720x1280`, `1920x1920`, `2560x1440`, `1440x2560`, `3840x2160`, `2160x3840`.
 
 `$PAI_REPO_ROOT` is exported by the viewer — see the project `PROJECT_AGENT.md` § "Media CLIs / Invocation path".
 
@@ -95,16 +103,16 @@ Triggers: a fresh image unrelated to existing canvas content ("generate a mounta
 
 Triggers: user asks for a storyboard, mosaic, NxN / N×M grid, shot list, coverage, keyframe sheet, shot planning, or image previs. The intent is **ONE composite image with N×M panels per location**, NOT one image per panel and NOT a video.
 
-- **Tool**: `generate_image.js` (standard tier). Layout fidelity is best at ≤4 cells; past that, cells drift in framing and identity. Warn the user one short line before firing for any grid larger than 2×2: "Heads up — the standard image tier loses layout fidelity past ~4 cells; cells may drift in framing."
-- **Single call per mosaic**: ONE `node "$PAI_REPO_ROOT/server/cli/generate_image.js" --prompt "..." --aspect-ratio 16:9 --image-size 2K --label "Storyboard — <location>"` per mosaic. The pattern's point is one composite image per location, not N×M small generations.
-- **Aspect ratio**: ALWAYS default to **`16:9`** — this is filmmaking. Each panel inside the mosaic is a 16:9 cinematic frame, and the overall sheet should also feel cinematic landscape. The grid shape (3×3, 4×2, etc.) describes cell layout, NOT canvas shape. Only override `16:9` if the user explicitly says "portrait", "square", "vertical", or names a different ratio:
-  - "3x3 storyboard" → `16:9` (default)
-  - "3x3 square storyboard" → `1:1`
-  - "3x3 portrait storyboard" → `9:16`
-  - "vertical 2x4 mosaic" → `9:16`
+- **Tool**: `generate_image_pro.js` (pro tier). Use it for better rendered text, panel boundaries, and multi-cell layout fidelity.
+- **Single call per mosaic**: ONE `node "$PAI_REPO_ROOT/server/cli/generate_image_pro.js" --prompt "..." --size 2560x1440 --label "Storyboard — <location>"` per mosaic. The pattern's point is one composite image per location, not N×M small generations.
+- **Exact size**: default to **`2560x1440`** — this is filmmaking. Each panel inside the mosaic is a 16:9 cinematic frame, and the overall sheet should also feel cinematic landscape. The grid shape (3×3, 4×2, etc.) describes cell layout, NOT canvas shape. Only override if the user explicitly says "portrait", "square", "vertical", or names a different ratio:
+  - "3x3 storyboard" → `2560x1440` (default)
+  - "3x3 square storyboard" → `1920x1920`
+  - "3x3 portrait storyboard" → `1440x2560`
+  - "vertical 2x4 mosaic" → `1440x2560`
 - **Default grid**: 2×2 unless the user specified another. Announce in chat one short line before each call ("Generating a 2×2 mosaic for <location>" or "Generating a 2×2 mosaic.") — don't paste the prompt.
-- **Optional refs**: if a character / location reference is on the canvas, pass it via `--ref-source-id` (≤16) so identity stays locked across cells and the provenance edges land. The script-analyzed case (shot notes + locations on the canvas) triggers one-mosaic-per-location iteration with required ref ordering — see `references/storyboard-mosaic.md`.
-- **Grid size limit**: standard-tier layout fidelity degrades fast past ~4 cells. If the user asks for `3×3` or larger, warn first: "grids past 2×2 lose layout fidelity on the standard tier — consider a smaller grid or per-panel generation."
+- **Optional refs**: if a character / location reference is on the canvas, pass it via `--ref-source-id` (≤32 for pro) so identity stays locked across cells and the provenance edges land. The script-analyzed case (shot notes + locations on the canvas) triggers one-mosaic-per-location iteration with required ref ordering — see `references/storyboard-mosaic.md`.
+- **Grid size limit**: default to 2×2. Larger grids are allowed, but if the user asks for `3×3` or larger, warn first: "larger storyboard grids are harder to keep clean — I can run it as one pro mosaic, or split into smaller sheets."
 
 **For the canvas pre-flight, per-location iteration logic, no-location nudge, verbatim prompt template, and default 9-panel coverage when no script slice exists**: see [references/storyboard-mosaic.md](references/storyboard-mosaic.md).
 
@@ -146,4 +154,4 @@ One sentence with the price — see the project `PROJECT_AGENT.md` § "Draft gat
 
 ## On failure
 
-See the project `PROJECT_AGENT.md` § "Failure handling". `limits.max_image_refs` is 16. For `content_filtered`, propose softer wording.
+See the project `PROJECT_AGENT.md` § "Failure handling". `limits.max_image_refs` is 16 for standard image and 32 for image pro. For `content_filtered`, propose softer wording.

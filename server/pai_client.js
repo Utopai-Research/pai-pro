@@ -11,6 +11,7 @@
 //
 // Used by:
 //   pai_image_client.js   — image-generation
+//   pai_image_pro_client.js — image-generation-pro / image-edit-pro
 //   pai_voice_client.js   — tts
 //   pai_assets_client.js  — video-generation-assets (CreateAsset, etc.)
 //   pai_video_client.js   — video-generation

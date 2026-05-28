@@ -58,6 +58,21 @@ test("generate_image.js rejects --ref-image-url (flag removed)", async (t) => {
   assert.match(reply.message, /argv|--ref-image-url|unknown option/i);
 });
 
+test("generate_image_pro.js rejects --ref-image-url (flag removed)", async (t) => {
+  const cwd = await setupCwd();
+  t.after(() => rm(cwd, { recursive: true, force: true }));
+  const { code, stdout } = await runCli({
+    script: "generate_image_pro.js",
+    args: ["--stage", "--prompt", "x", "--ref-image-url", "https://example.com/a.png"],
+    cwd,
+  });
+  assert.strictEqual(code, 2);
+  const reply = parseReply(stdout);
+  assert.strictEqual(reply.ok, false);
+  assert.strictEqual(reply.klass, "bad_args");
+  assert.match(reply.message, /argv|--ref-image-url|unknown option/i);
+});
+
 test("generate_video.js rejects --reference-image-url (flag removed)", async (t) => {
   const cwd = await setupCwd();
   t.after(() => rm(cwd, { recursive: true, force: true }));
@@ -118,6 +133,22 @@ test("generate_image.js --stage captures --ref-source-id in sidecar", async (t) 
   const sidecar = await readSidecar(cwd, reply.job_id);
   assert.deepEqual(sidecar.reference_source_ids, ["image_42"]);
   // references[] is gone — projection resolves via reference_source_ids only.
+  assert.strictEqual(sidecar.references, undefined);
+});
+
+test("generate_image_pro.js --stage captures --ref-source-id in sidecar", async (t) => {
+  const cwd = await setupCwd();
+  t.after(() => rm(cwd, { recursive: true, force: true }));
+  const { code, stdout } = await runCli({
+    script: "generate_image_pro.js",
+    args: ["--stage", "--prompt", "x", "--size", "1024x1024", "--ref-source-id", "image_42"],
+    cwd,
+  });
+  assert.strictEqual(code, 0);
+  const reply = parseReply(stdout);
+  assert.strictEqual(reply.stage, "draft");
+  const sidecar = await readSidecar(cwd, reply.job_id);
+  assert.deepEqual(sidecar.reference_source_ids, ["image_42"]);
   assert.strictEqual(sidecar.references, undefined);
 });
 

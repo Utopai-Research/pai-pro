@@ -1,6 +1,11 @@
 // Provider hard caps surfaced in CLI failure JSON (`limits` field).
 // Agents compare against `sent` to recover.
 
+import {
+  IMAGE_PRO_MAX_IMAGE_REFS,
+  IMAGE_PRO_SUPPORTED_SIZES,
+} from "../image_pro_sizes.js";
+
 export const VIDEO_LIMITS = {
   // video-generation. Duration caps are asymmetric across audio / video:
   //  - Each audio / video ref must be 1.8s-15.2s per file (the asset-upload
@@ -21,4 +26,9 @@ export const VIDEO_LIMITS = {
 };
 
 export const IMAGE_LIMITS     = { max_image_refs: 16, min_ref_image_dimension: 300 };  // image-generation (standard tier)
+export const IMAGE_PRO_LIMITS = {
+  max_image_refs: IMAGE_PRO_MAX_IMAGE_REFS,
+  min_ref_image_dimension: 300,
+  supported_sizes: IMAGE_PRO_SUPPORTED_SIZES,
+};
 export const VOICE_LIMITS     = {};                      // tts — no documented caps

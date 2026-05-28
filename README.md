@@ -58,7 +58,7 @@ Open <http://localhost:7443>. Sign in to the selected CLI in the embedded termin
 
 ## API key
 
-One key, **PAI_KEY**, drives every capability — image, video, voice, and reference-asset uploads all route through PAI Lite. Get a key (and watch your live balance) at <https://pai-pro.utopaistudios.com/keys>. Format is `PAI_<random>`. CLIs only fire when you explicitly ask for media; chat suggestions don't burn credits.
+One key, **PAI_KEY**, drives every capability — image, image pro, video, voice, and reference-asset uploads all route through PAI Lite. Get a key (and watch your live balance) at <https://pai-pro.utopaistudios.com/keys>. Format is `PAI_<random>`. CLIs only fire when you explicitly ask for media; chat suggestions don't burn credits.
 
 ## Resources
 

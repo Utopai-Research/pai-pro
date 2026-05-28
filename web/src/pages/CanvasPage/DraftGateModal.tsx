@@ -73,7 +73,7 @@ export function DraftGateModal({
             with no draft card to approve first.
           </p>
           <p className="draft-gate-pricing">
-            A 10s 1080p clip is ~$3.41; an image generation is ~$0.10.
+            A 10s 1080p clip is ~$3.41; images range from ~$0.10 standard to ~$0.77 pro.
           </p>
         </div>
 

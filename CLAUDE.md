@@ -26,6 +26,7 @@ Spirit borrowed from [Karpathy's observations](https://x.com/karpathy/status/201
 - `server/pai_*.js` — PAI Lite clients imported by the CLIs:
   - **Shared HTTP**: `pai_client.js` (auth, retry policy, classified errors, `callGenerate` / `callSubmit` / `pollStatus`).
   - **Image**: `pai_image_client.js`.
+  - **Image Pro**: `pai_image_pro_client.js`.
   - **Video**: `pai_video_client.js` (upstream payload forwarded byte-for-byte; async submit + poll).
   - **Voice**: `pai_voice_client.js` (PAI raw `tts`, `body_base64`-decoded).
   - **Asset uploads**: `pai_assets_client.js` (`video-generation-assets` raw; chip-UX cache + event-emitter surface — exports `paiAssetEvents`, `snapshotAssetStates`, `seedAssetCache`, `uploadReferenceUrl`, `preuploadReferenceUrl`, `preuploadCanvasUrl`, `uploadReferences`).

@@ -6,7 +6,7 @@ Restart your AI agent session after `./scripts/setup` — skills load at session
 
 ## Generation fails with `bad_args`
 
-Either `.env` is missing `PAI_KEY`, or you asked for a video with a local ref and the tunnel isn't running. Re-run `./scripts/start.sh`; if `cloudflared` is missing, install it (macOS: `brew install cloudflared`; Linux/Windows: <https://github.com/cloudflare/cloudflared/releases>) and re-run.
+Either `.env` is missing `PAI_KEY`, or you asked for a video/image-pro edit with a local ref and the tunnel isn't running. Re-run `./scripts/start.sh`; if `cloudflared` is missing, install it (macOS: `brew install cloudflared`; Linux/Windows: <https://github.com/cloudflare/cloudflared/releases>) and re-run.
 
 Last resort: pass a public URL via `--reference-image-url` / `--reference-audio-url` / `--reference-video-url`.
 

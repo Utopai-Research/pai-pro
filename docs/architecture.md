@@ -32,6 +32,7 @@ The canvas on the left, the embedded agent terminal on the right, both sharing t
                                                        │
                 ┌─ skills/ ─┐   ┌─ server/cli/ ────────┴────┐
                 │  *.md     │──►│ generate_image.js          │
+                │           │   │ generate_image_pro.js      │
                 │           │   │ generate_video.js          │  local mirror
                 │ agent in  │   │ generate_voice.js          │  → assets/
                 │ the PTY   │   │ split_image.js             │
@@ -40,7 +41,7 @@ The canvas on the left, the embedded agent terminal on the right, both sharing t
 ```
 
 1. **Skills** are plain markdown read by the agent inside the embedded terminal.
-2. **CLI scripts** call PAI Lite (one key, one base URL — image, video, voice, asset uploads all route through `/api/v1/generate` or `/api/v1/submit`), write each result into `projects/<slug>/assets/`, and print one JSON line.
+2. **CLI scripts** call PAI Lite (one key, one base URL — image, image pro, video, voice, asset uploads all route through `/api/v1/generate` or `/api/v1/submit`), write each result into `projects/<slug>/assets/`, and print one JSON line.
 3. **Viewer** watches every project's files and pushes deltas to the browser over Socket.IO, bridges xterm.js ↔ the project's owning agent via node-pty, and serves the mirrored assets at `/projects/:id/assets/...`.
 
 ## Directory layout
@@ -54,6 +55,7 @@ pai-pro/
 │   ├── cli/                       # CLI wrappers (generate_*, canvas_mutate, split_image, …)
 │   ├── pai_client.js              # shared HTTP plumbing for /api/v1/generate, /submit, /task/status
 │   ├── pai_image_client.js        # image (PAI raw `image-generation`)
+│   ├── pai_image_pro_client.js    # image pro (PAI raw `image-generation-pro` / `image-edit-pro`)
 │   ├── pai_video_client.js        # video (PAI raw `video-generation`)
 │   ├── pai_voice_client.js        # voice (PAI raw `tts`)
 │   └── pai_assets_client.js       # asset preupload for video refs (PAI raw `video-generation-assets`)

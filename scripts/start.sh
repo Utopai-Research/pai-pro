@@ -305,7 +305,7 @@ ensure_tunnel() {
 smoke_check_clis() {
     echo "Smoke-checking CLIs…"
     local script out
-    for script in generate_image generate_video generate_voice split_image switch_project; do
+    for script in generate_image generate_image_pro generate_video generate_voice split_image switch_project; do
         out=$(cd "$PAI_REPO_ROOT" && node "server/cli/${script}.js" 2>/dev/null || true)
         if echo "$out" | grep -q '"ok":false,"klass":"bad_args"'; then
             echo "  OK  ${script}.js"

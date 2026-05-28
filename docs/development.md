@@ -12,7 +12,7 @@ The two use different ports (`:7588` and `:7488`) so you can run both side by si
 - **Node.js ≥20** and **npm**
 - **A supported embedded agent CLI** installed and logged in: Claude Code (`claude`) by default, or Codex CLI (`codex`) when you start with `PAI_DEFAULT_AGENT_ID=codex`
 - **tmux** — `./scripts/start.sh` launches viewer + web in detached tmux sessions
-- **[cloudflared](https://github.com/cloudflare/cloudflared)** — `brew install cloudflared` on macOS, or [binary download](https://github.com/cloudflare/cloudflared/releases) for Linux/Windows. `./scripts/start.sh` auto-launches it as a quick tunnel so PAI's `video-generation-assets` endpoint can fetch local video refs from a publicly-reachable URL. Only required for video generation.
+- **[cloudflared](https://github.com/cloudflare/cloudflared)** — `brew install cloudflared` on macOS, or [binary download](https://github.com/cloudflare/cloudflared/releases) for Linux/Windows. `./scripts/start.sh` auto-launches it as a quick tunnel so PAI can fetch local refs from a publicly-reachable URL for video generation and image pro edits.
 - **[poppler](https://poppler.freedesktop.org/)** (`pdftotext`) — `brew install poppler` on macOS, `apt-get install poppler-utils` on Debian/Ubuntu. `./scripts/start.sh` auto-installs on macOS. Used at upload time to inline a PDF's text into the note body so the agent can read it without a shell-out. Missing → PDF notes fall back to filename-only.
 
 ## Install

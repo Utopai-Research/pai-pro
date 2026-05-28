@@ -197,6 +197,27 @@ test("PATCH image_size recomputes cost and rewrites argv", async () => {
   assert.ok(after.cost_usd > 0);
 });
 
+test("PATCH image_size is not editable for image pro drafts", async () => {
+  const { jobId } = await seedDraft({
+    overrides: {
+      model: "image-generation-pro",
+      image_size: "1K",
+      cost_usd: 0.26,
+      script: "generate_image_pro.js",
+      argv: ["--prompt", "a test cat", "--size", "1024x1024"],
+    },
+  });
+  const r = await fetch(`${baseUrl}/projects/${TEST_PROJECT_ID}/pending/${jobId}`, {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ image_size: "4K" }),
+  });
+  assert.equal(r.status, 400);
+  const after = await readSidecar(jobId);
+  assert.equal(after.image_size, "1K");
+  assert.deepEqual(after.argv, ["--prompt", "a test cat", "--size", "1024x1024"]);
+});
+
 test("PATCH on a running entry → 409", async () => {
   const { jobId } = await seedDraft({ overrides: { stage: "running" } });
   const r = await fetch(`${baseUrl}/projects/${TEST_PROJECT_ID}/pending/${jobId}`, {
@@ -233,6 +254,33 @@ test("POST /generate writes durable result sidecar and removes pending", async (
   assert.ok(summary, "bundle exposes durable generation result summary");
   assert.equal(summary.status, "failed");
   assert.equal(summary.klass, "bad_args");
+  await assert.rejects(stat(sidecarPath(jobId)), /ENOENT/);
+});
+
+test("POST /generate accepts generate_image_pro.js sidecars", async () => {
+  const { jobId } = await seedDraft({
+    overrides: {
+      model: "image-generation-pro",
+      image_size: "1K",
+      cost_usd: 0.26,
+      script: "generate_image_pro.js",
+      argv: ["--definitely-unknown-flag"],
+    },
+  });
+  const r = await fetch(`${baseUrl}/projects/${TEST_PROJECT_ID}/pending/${jobId}/generate`, {
+    method: "POST",
+  });
+  assert.equal(r.status, 202);
+  const body = await r.json();
+  assert.equal(body.ok, true);
+  assert.equal(body.job_id, jobId);
+
+  const result = await waitForResult(jobId);
+  assert.equal(result.ok, false);
+  assert.equal(result.job_id, jobId);
+  assert.equal(result.kind, "image");
+  assert.equal(result.model, "image-generation-pro");
+  assert.equal(result.klass, "bad_args");
   await assert.rejects(stat(sidecarPath(jobId)), /ENOENT/);
 });
 

@@ -70,8 +70,9 @@ export function projectIdFromCanvasUrl(url) {
 
 // Running-stage sidecars older than this are treated as orphans — most
 // likely from a CLI that crashed before its `finally` could unlink them.
-// Generation wall-clocks: image ~30s, video ~4min.
-// 15min gives a generous buffer.
+// Generation wall-clocks: image ~30s, image pro ~3-6min, video ~4min.
+// 15min gives a generous buffer and stays above image pro's 10min
+// client timeout so a still-running pro call is not swept as stale.
 export const PENDING_STALE_RUNNING_MS = 15 * 60 * 1000;
 // Draft-stage sidecars are user-staged calls awaiting approval. Drafts
 // can sit on the canvas across a working session, so give them a much
