@@ -3,7 +3,6 @@
  *
  *   - NodeHead — head row with label, lifecycle state chip, asset status chip
  *   - ImageWithFade — <img> with lazy decode + 300ms opacity fade-in
- *   - ZoomedOutPlaceholder / useZoomedOut — viewport-cull below ZOOM_THRESHOLD
  *   - nodePropsEqual — narrow memo equality (data ref + selected)
  *
  * `data` from RF flows through projection.ts which preserves identity
@@ -117,20 +116,6 @@ export function NodeHead({ label, state, stateLabel, assetStatusUrl, hideStateCh
   )
 }
 
-// ───────────────────────────────────────────────────────────────────
-// B2: viewport culling + zoom-threshold media skip.
-//
-// Below ZOOM_THRESHOLD a node is small enough on-screen that the
-// detailed <img>/<video> contributes no visible information but
-// still costs decode, layout, and paint. Render a solid gray block
-// instead. useStore's selector ensures we only re-render when the
-// zoom value actually changes (not on every pan tick).
-const ZOOM_THRESHOLD = 0.5
-
-export function useZoomedOut(): boolean {
-  return useStore((s) => s.transform[2] < ZOOM_THRESHOLD)
-}
-
 // True when this node is a member of a currently-selected group_frame.
 // Boolean selector → re-renders only on flip, not on every store tick.
 export function useIsInSelectedFrame(nodeId: string): boolean {
@@ -145,19 +130,7 @@ export function useIsInSelectedFrame(nodeId: string): boolean {
   })
 }
 
-export function ZoomedOutPlaceholder(): JSX.Element {
-  return (
-    <div
-      style={{
-        width: '100%',
-        height: '100%',
-        background: 'rgba(80, 80, 100, 0.7)',
-      }}
-    />
-  )
-}
-
-// ImageWithFade — wraps <img> with B1's polish:
+// ImageWithFade — wraps <img> with canvas-friendly loading behavior:
 //   * loading="lazy" so off-screen images aren't fetched on mount
 //   * decoding="async" so the main thread isn't stalled on big decodes
 //   * fetchPriority="low" tells the browser these are nice-to-have

@@ -863,11 +863,10 @@ function CanvasPageInner(): JSX.Element | null {
             fitView={rfNodes.length > 0}
             minZoom={0.2}
             maxZoom={2.5}
-            // B2: skip rendering nodes whose bbox is outside the
-            // viewport. RF's internal cull is O(n) on every
+            // Skip rendering nodes whose bbox is outside the viewport.
+            // RF's internal cull is O(n) on every
             // transform tick but saves work for every actual node
-            // renderer beyond that. Pairs with the zoom-threshold
-            // placeholder in image/video nodes (nodes.tsx).
+            // renderer beyond that.
             onlyRenderVisibleElements={true}
             proOptions={REACT_FLOW_PRO_OPTIONS}
             nodesDraggable={true}

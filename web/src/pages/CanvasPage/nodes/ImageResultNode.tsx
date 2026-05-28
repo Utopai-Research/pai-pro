@@ -22,7 +22,7 @@ import {
   type NodeState,
 } from '../nodeData'
 import { useNodeActions } from '../NodeActionsContext'
-import { ImageWithFade, NodeHead, useIsInSelectedFrame, useZoomedOut, ZoomedOutPlaceholder } from './_shared'
+import { ImageWithFade, NodeHead, useIsInSelectedFrame } from './_shared'
 import type { MediaRef } from '../MediaExpandOverlay'
 
 // `derived_refs` is added by projection.ts — refs to source nodes that
@@ -87,7 +87,6 @@ export function ImageResultNode({ id, data, selected }: NodeProps): JSX.Element 
       metadata: d.metadata,
     })
   }
-  const zoomedOut = useZoomedOut()
   const isGroupSelected = useIsInSelectedFrame(id)
   const target = Position.Left, source = Position.Right
 
@@ -111,14 +110,9 @@ export function ImageResultNode({ id, data, selected }: NodeProps): JSX.Element 
           cursor: canExpand ? 'zoom-in' : 'default',
         }}
       >
-        {zoomedOut ? (
-          // B2: zoomed-out — skip the bitmap entirely.
-          <ZoomedOutPlaceholder />
-        ) : url !== null && url !== '' ? (
-          // B1: lazy load + async decode + low fetch priority for off-
-          // screen images; 300ms opacity fade-in once the bitmap is
-          // ready avoids the paint-jank pop on a large canvas. Pattern
-          // from pai-next 86eb510e.
+        {url !== null && url !== '' ? (
+          // Lazy load + async decode + low fetch priority for off-screen
+          // images; fade in once the bitmap is ready to avoid paint-jank.
           <ImageWithFade
             src={url}
             alt={label}
@@ -159,4 +153,3 @@ export function ImageResultNode({ id, data, selected }: NodeProps): JSX.Element 
     </div>
   )
 }
-

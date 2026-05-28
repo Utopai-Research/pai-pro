@@ -8,7 +8,7 @@ import {
   type NodeState,
 } from '../nodeData'
 import { useNodeActions } from '../NodeActionsContext'
-import { NodeHead, useIsInSelectedFrame, useZoomedOut, ZoomedOutPlaceholder } from './_shared'
+import { NodeHead, useIsInSelectedFrame } from './_shared'
 import type { MediaRef } from '../MediaExpandOverlay'
 
 // `derived_refs` is added by projection.ts — refs to source nodes that
@@ -61,7 +61,6 @@ export function VideoResultNode({ id, data, selected }: NodeProps): JSX.Element 
     })
   }
 
-  const zoomedOut = useZoomedOut()
   const isGroupSelected = useIsInSelectedFrame(id)
   const target = Position.Left, source = Position.Right
 
@@ -84,11 +83,7 @@ export function VideoResultNode({ id, data, selected }: NodeProps): JSX.Element 
           cursor: canExpand ? 'zoom-in' : 'default',
         }}
       >
-        {zoomedOut ? (
-          // B2: zoomed-out — skip the <video> entirely (decode + buffer
-          // both expensive). Same threshold + placeholder as image nodes.
-          <ZoomedOutPlaceholder />
-        ) : url !== null && url !== '' ? (
+        {url !== null && url !== '' ? (
           // biome-ignore lint/a11y/useMediaCaption: provider videos lack captions.
           <video
             src={url}
