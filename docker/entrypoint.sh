@@ -12,6 +12,7 @@ set -e
 
 CLAUDE_DIR="${HOME}/.claude"
 CODEX_DIR="${HOME}/.codex"
+CODEX_HOST_DIR="${HOME}/.codex-host"
 
 # 1. Skills — link /repo/skills/* into ~/.claude/skills/ so claude CLI
 #    auto-discovers them. The dir is in-image (NOT a bind-mount from host)
@@ -30,11 +31,18 @@ for src in /repo/skills/*/; do
   ln -s "${src}" "${dst}"
 done
 
-# 2. Projects dir on the named volume and Codex state dir on the host bind
-#    mount (no-op after first boot).
+# 2. Projects dir on the named volume and Docker-owned Codex state dir.
 mkdir -p /repo/projects
 if ! mkdir -p "${CODEX_DIR}" 2>/dev/null; then
   echo "[entrypoint] warning: could not create ${CODEX_DIR}; Codex auth/state may be unavailable" >&2
+fi
+if [ -f "${CODEX_HOST_DIR}/auth.json" ] && [ ! -f "${CODEX_DIR}/auth.json" ]; then
+  if cp "${CODEX_HOST_DIR}/auth.json" "${CODEX_DIR}/auth.json" 2>/dev/null; then
+    chmod 600 "${CODEX_DIR}/auth.json" 2>/dev/null || true
+    echo "[entrypoint] codex auth: imported host auth.json into Docker Codex home"
+  else
+    echo "[entrypoint] warning: could not import ${CODEX_HOST_DIR}/auth.json; run codex login in Docker if needed" >&2
+  fi
 fi
 
 SELECTED_AGENT="$(printf '%s' "${PAI_DEFAULT_AGENT_ID:-}" | tr '[:upper:]' '[:lower:]')"

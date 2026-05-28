@@ -47,3 +47,34 @@ test("shared project instructions and skills do not contain Claude-only phrases"
     }
   }
 });
+
+test("skill frontmatter avoids unquoted YAML colon traps", async () => {
+  for (const file of await sharedInstructionFiles()) {
+    if (!file.endsWith("/SKILL.md")) continue;
+    const text = await readFile(file, "utf8");
+    const match = text.match(/^---\n([\s\S]*?)\n---\n/);
+    assert.ok(match, `${file} is missing YAML frontmatter`);
+    const lines = match[1].split("\n");
+    for (const line of lines) {
+      if (!line.trim() || /^\s/.test(line)) continue;
+      const keyValue = line.match(/^([A-Za-z0-9_-]+):\s+(.+)$/);
+      if (!keyValue) continue;
+      const value = keyValue[2].trim();
+      if (
+        value.startsWith("\"")
+        || value.startsWith("'")
+        || value === ">"
+        || value === ">-"
+        || value === "|"
+        || value === "|-"
+      ) {
+        continue;
+      }
+      assert.equal(
+        /:\s/.test(value),
+        false,
+        `${file} frontmatter line has an unquoted colon-space; quote it or use a block scalar: ${line}`,
+      );
+    }
+  }
+});

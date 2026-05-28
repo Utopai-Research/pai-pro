@@ -47,9 +47,12 @@ services:
       # PowerShell where $env:HOME may be unset falls back to $USERPROFILE
       # (always set by the OS).
       - ${HOME:-${USERPROFILE}}/.claude/projects:/home/node/.claude/projects
-      # Bind-mount Codex auth/config/session state so Docker Codex can reuse
-      # host login and persist container-created Codex sessions.
-      - ${HOME:-${USERPROFILE}}/.codex:/home/node/.codex
+      # Docker-owned Codex home. Keeps container sessions/config persistent
+      # without loading host-only MCP config into the container.
+      - pai_codex:/home/node/.codex
+      # Optional read-only host Codex home. Entrypoint imports only auth.json
+      # from here when the Docker Codex home has no auth yet.
+      - ${HOME:-${USERPROFILE}}/.codex:/home/node/.codex-host:ro
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:7488/healthz"]
       interval: 15s
@@ -76,3 +79,6 @@ services:
 volumes:
   # Locked key — customer data lives in this volume across container rebuilds.
   pai_projects:
+  # Docker Codex auth/session state. Separate from host ~/.codex so host-only
+  # MCP config cannot break the container's Codex startup.
+  pai_codex:

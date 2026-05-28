@@ -52,12 +52,14 @@ ARG CODEX_VERSION
 #   poppler-utils   pdftotext for script-compose skill
 #   tini            PID 1, signal forwarding
 #   curl            healthcheck + cloudflared/claude install
+#   bubblewrap      Codex sandboxing on Linux
 #   ca-certificates HTTPS to providers
 RUN apt-get update && apt-get install -y --no-install-recommends \
       ffmpeg \
       poppler-utils \
       tini \
       curl \
+      bubblewrap \
       ca-certificates \
  && rm -rf /var/lib/apt/lists/*
 
