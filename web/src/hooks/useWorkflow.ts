@@ -46,6 +46,7 @@ function failedResultToPending(result: GenerationResult): PendingGeneration | nu
     aspect_ratio: result.aspect_ratio ?? '16:9',
     created_at: result.completed_at ?? null,
     model: result.model,
+    size: result.size,
     image_size: result.image_size,
     resolution: result.resolution,
     duration: result.duration,

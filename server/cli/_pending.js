@@ -196,6 +196,7 @@ async function pendingContextForResult(jobId, cwd) {
       "prompt",
       "aspect_ratio",
       "model",
+      "size",
       "image_size",
       "resolution",
       "duration",
@@ -253,7 +254,7 @@ export async function writeResultSidecar(jobId, result, { cwd = process.cwd() } 
 // stage time carry through to the running phase.
 export async function writePending({
   jobId, kind, prompt, aspectRatio,
-  model, imageSize, resolution, duration,
+  model, size, imageSize, resolution, duration,
   stage = "running",
   costUsd,
   script,
@@ -273,6 +274,7 @@ export async function writePending({
     created_at: new Date().toISOString(),
   };
   if (typeof model === "string" && model !== "") payload.model = model;
+  if (typeof size === "string" && size !== "") payload.size = size;
   if (typeof imageSize === "string" && imageSize !== "") payload.image_size = imageSize;
   if (typeof resolution === "string" && resolution !== "") payload.resolution = resolution;
   if (typeof duration === "number" && Number.isFinite(duration)) payload.duration = duration;

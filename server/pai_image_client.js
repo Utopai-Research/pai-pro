@@ -10,9 +10,8 @@
 // `fileData.fileUri` part. The upstream model fetches each URL
 // server-side. data: URIs are rejected at the boundary; if the caller
 // needs to pass a canvas-local file, they should route through
-// buildProviderRefs() with `providerRequiresPublicUrl: true` so the
-// tunnel-rewrite step runs first. Inline data has a ~5-ref cap upstream;
-// URL refs are validated to 16.
+// buildProviderRefs() so the tunnel-rewrite step runs first. Inline
+// data has a ~5-ref cap upstream; URL refs are validated to 16.
 //
 // Safety blocks come back inside the 200 body (not as a 4xx). We detect
 // them by inspecting candidates[0].finishReason and
@@ -44,8 +43,7 @@ function buildContents(prompt, refImageUrls) {
       throw err(
         "bad_args",
         "pai_image_client expects URL refs only — got a data: URI. Route through "
-        + "buildProviderRefs({ providerRequiresPublicUrl: true }) so local files "
-        + "get rewritten to the cloudflared tunnel URL first.",
+        + "buildProviderRefs() so local files get rewritten to the cloudflared tunnel URL first.",
       );
     }
     parts.push({ fileData: { fileUri: ref } });

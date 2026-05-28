@@ -26,6 +26,7 @@ interface PendingGenerationData {
   aspect_ratio?: string
   references?: { kind: 'image' | 'video' | 'audio'; url: string }[]
   model?: string
+  size?: string
   image_size?: string
   resolution?: string
   duration?: number
@@ -173,6 +174,7 @@ export function PendingGenerationNode({ id, data, selected }: NodeProps): JSX.El
     const metadata = {
       model: d.model,
       source: overlaySource,
+      size: d.size,
       aspect_ratio: rawAr,
       ...(kind === 'video' ? { resolution: d.resolution }
         : kind === 'image' ? { image_size: d.image_size }

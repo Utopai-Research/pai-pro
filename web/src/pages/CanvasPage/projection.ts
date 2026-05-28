@@ -464,6 +464,7 @@ export function projectWorkflowToCanvas(
         aspect_ratio: pg.aspect_ratio,
         references: refs,
         model: pg.model,
+        size: pg.size,
         image_size: pg.image_size,
         resolution: pg.resolution,
         duration: pg.duration,

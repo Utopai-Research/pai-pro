@@ -24,4 +24,5 @@ test("model registry prices image pro by exact size tier", () => {
   assert.equal(getCost("image-generation-pro", { size: "2560x1440" }), 0.45);
   assert.equal(getCost("image-generation-pro", { size: "3840x2160" }), 0.77);
   assert.equal(getCost("image-generation-pro", { size: "1920x1080" }), null);
+  assert.equal(getCost("image-generation-pro", { image_size: "2K" }), null);
 });

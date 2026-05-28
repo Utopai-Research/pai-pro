@@ -112,7 +112,7 @@ Do not write `node server/cli/...` (no such directory under your cwd) and do not
 | `split_image.js` | (no skill) | n/a (local sharp) | n/a | Slice an `image_result` into cols×rows. `--url`, `--cols`, `--rows`, `--source-node-id`. cols·rows ≤ 64. Synchronous, ~1s. |
 | `switch_project.js` | (see Projects below) | n/a | n/a | Flip the active-project symlinks. |
 
-**Asset mirroring.** Every generation CLI mirrors its output into `projects/<active>/assets/<kind>/` and returns both `output_url` (the viewer's HTTP URL pointing at that mirrored file) and `local_path` (repo-relative). The renderer reads `image_url` / `video_url` for display, so the URL in the canvas always resolves to a local file via the viewer — no cloud hosting in the loop. `generate_video.js` additionally includes `provider_output_url` (PAI's rehosted signed CDN URL for the MP4, ephemeral ~24h) in the success JSON for visibility, but does NOT put it on the canvas node. `generate_voice.js` no longer emits `provider_output_url` (PAI's `tts` returns the MP3 bytes inline).
+**Asset mirroring.** Every generation CLI mirrors its output into `projects/<active>/assets/<kind>/` and returns both `output_url` (the viewer URL for the mirrored file) and `local_path` (repo-relative). Persisted canvas nodes store `local_path`; the renderer derives `image_url` / `video_url` / `audio_url` for display, so no cloud hosting is in the loop. `generate_video.js` additionally includes `provider_output_url` (PAI's rehosted signed CDN URL for the MP4, ephemeral ~24h) in the success JSON for visibility, but does NOT put it on the canvas node. `generate_voice.js` no longer emits `provider_output_url` (PAI's `tts` returns the MP3 bytes inline).
 
 **Ref chains across calls.** Every generation ref is a canvas node referenced by `--ref-source-id <NODE_ID>`. The CLI resolves the source node's `local_path`, rewrites the viewer URL's host to the cloudflared tunnel origin via `.tunnel_url`, and hands that URL to the provider. For external URLs (a pasted-in CDN link, a still you want to use as a ref), mirror it onto the canvas first via `mirror_url.js` and use the returned `node_id` like any other source — no separate URL-passthrough flag. Standard image refs cap at 16; image pro refs cap at 32.
 
@@ -174,7 +174,7 @@ Three ways into the mutator, all equivalent:
 
 3. **Direct HTTP** for the browser / other clients: `POST /projects/:id/mutate` with body `{ request_id, op, payload, ts?, actor? }`.
 
-**Asset-bearing nodes (`addNode` with `tmp_path`).** Image/video/audio nodes are minted via a temp-then-rename hand-off: the CLI (or the browser upload route) writes the provider's bytes to `projects/<id>/assets/.tmp/<random>.<ext>`, then passes that absolute path as `tmp_path` alongside the node payload — `{ type, data, tmp_path }`. The mutator mints the node id, renames the file to `assets/<bucket>/<node-id>.<ext>` (bucket = `images` / `videos` / `audios`), fills `data.local_path` and `data.<image|video|audio>_url` itself, and persists workflow.json — all atomic under the mutationQueue lock with rollback on either failure. CLIs leave `image_url` / `video_url` / `audio_url` / `local_path` blank when supplying `tmp_path`. `local_mirror.js` exposes `writeBytesToTmp` and `mirrorToTmp` for the staging step.
+**Asset-bearing nodes (`addNode` with `tmp_path`).** Image/video/audio nodes are minted via a temp-then-rename hand-off: the CLI (or the browser upload route) writes the provider's bytes to `projects/<id>/assets/.tmp/<random>.<ext>`, then passes that absolute path as `tmp_path` alongside the node payload — `{ type, data, tmp_path }`. The mutator mints the node id, renames the file to `assets/<bucket>/<node-id>.<ext>` (bucket = `images` / `videos` / `audios`), fills `data.local_path`, and persists workflow.json — all atomic under the mutationQueue lock with rollback on either failure. CLIs leave `local_path` blank when supplying `tmp_path`. `local_mirror.js` exposes `writeBytesToTmp` and `mirrorToTmp` for the staging step.
 
 The full op surface, reducer table, idempotency rules, and failure-class taxonomy live in [server/canvas_mutator.js](server/canvas_mutator.js). The JSON schema is [server/canvas_schema.js](server/canvas_schema.js); it is hand-mirrored from [web/src/types/canvas.ts](web/src/types/canvas.ts) (the renderer's source of truth).
 
@@ -184,16 +184,16 @@ Schema is `{ version: 2, workflow_id, title, nodes: [...], edges: [...], groups?
 
 **`note`** — `data: { label (≤30), body, metadata: { author, timestamp } }`.
 
-**`image_result`** — `data: { label, image_url, local_path?, prompt, metadata: { source, task_type, model, size?, aspect_ratio, image_size, generated_at, source_url? } }`. Optional `data.subtype`:
+**`image_result`** — `data: { label, local_path, prompt?, metadata: { source, task_type, model, size?, aspect_ratio, image_size, generated_at, source_url? } }`. Optional `data.subtype`:
 - `"character"` — adds `name`, `role`, `description`. No incoming edges (identity anchor). Character voices live on linked `audio_result` (subtype `voice`) nodes — see below.
 - `"location"` — adds `name`, `description`. No incoming edges (setting anchor).
 - `"edit"` — adds `source_id`.
 - `"reference"` — adds `source_filename`, `attachment_id`. `metadata.source = "user_upload"`.
 - `"split"` — adds `source_id`, `grid_position: [row, col]`. `metadata.source = "split"`, `metadata.grid = "<cols>x<rows>"`.
 
-**`video_result`** — `data: { label, video_url, local_path?, prompt, duration: int, aspect, shot_id: int|null, metadata: { source: "pai", task_type, model, duration, aspect_ratio, resolution, generate_audio, generated_at, source_url? } }`. `shot_id` is null by default — only set when the user explicitly asks for a reel position.
+**`video_result`** — `data: { label, local_path, prompt, duration: int, aspect, shot_id: int|null, metadata: { source: "pai", task_type, model, duration, aspect_ratio, resolution, generate_audio, generated_at, source_url? } }`. `shot_id` is null by default — only set when the user explicitly asks for a reel position.
 
-**`audio_result`** — `data: { subtype, label, audio_url, local_path?, prompt?, text?, source_id?, metadata: { source, task_type?, model?, duration_sec?, source_filename?, content_type?, generated_at } }`. Required `data.subtype`:
+**`audio_result`** — `data: { subtype, label, local_path, prompt?, text?, source_id?, metadata: { source, task_type?, model?, duration_sec?, source_filename?, content_type?, generated_at } }`. Required `data.subtype`:
 - `"voice"` — generated TTS. `text` is what was spoken, `prompt` is the voice-design brief, `source_id` (optional) is the node this voice was generated for (typically a character image, may also be a shot note authoring the dialogue). When attached, there is also an edge `source → audio_result` with `kind: "derived"`.
 - `"upload"` — user-dropped audio file. `metadata.source = "user_upload"`, plus `source_filename`, `content_type`, `size_bytes`, `attachment_id`.
 
@@ -206,7 +206,7 @@ Schema is `{ version: 2, workflow_id, title, nodes: [...], edges: [...], groups?
 - **Never `Write` or `Edit` `workflow.json` directly.** Always go through canvas-mutate. The hook will block you; the corruption + lost-write classes the mutator exists to kill come right back if you bypass it.
 - Never set `x` / `y` on any node — the renderer computes layout.
 - `type` must match a literal: `note`, `image_result`, `video_result`, `audio_result`. `"video"` does NOT render.
-- `image_url` / `video_url` / `audio_url` is the URL as-received from the CLI. Don't re-host, proxy, or rename.
+- Don't set `image_url` / `video_url` / `audio_url` manually; the renderer derives them from `local_path`.
 - `duration` is an integer.
 - Don't mint node ids yourself — pass `addNode` with no `id` and the mutator assigns the next `image_N` / `video_N` / `audio_N` / `note_N`. The counter is persisted in `workflow.json` under `next_ids` so ids never repeat after a delete (the on-disk file at the deleted id sticks around per the leave-orphans policy, so reuse would collide).
 

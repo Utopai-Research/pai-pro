@@ -7,7 +7,7 @@ Each skill is a standard `SKILL.md` with YAML frontmatter. Claude Code auto-disc
 | Skill | Triggers on phrases like | What it does |
 |---|---|---|
 | `script-compose` | "Write a screenplay for…", "Break this into shots" | Triages screenplay vs. concept, iterates dialogue, splits into ≤15s shots. |
-| `image-compose` | "Design a character", "Edit this image", "Storyboard mosaic" | Wraps `generate_image.js` (~10–30s) and `generate_image_pro.js` for storyboard mosaics (~3–6 min). |
+| `image-compose` | "Design a character", "Edit this image", "Storyboard mosaic" | Wraps `generate_image.js` (~10–30s) and `generate_image_pro.js` for storyboard mosaics and video-bound character sheets (~3–6 min). |
 | `video-compose` | "Animate this", "Continue the clip", "Restyle the shot" | Wraps `generate_video.js`. Handles I2V, V2V continuation, voice-locked dubs, narrative sequencing. |
 | `voice-compose` | "Give the detective a voice" | Wraps `generate_voice.js`. Attaches to the character node in place. |
 | `groups-compose` | "Group these as Scene 2", "Frame the character refs" | Maintains semantic groupings (scenes, ref sets, act beats) on the canvas. |

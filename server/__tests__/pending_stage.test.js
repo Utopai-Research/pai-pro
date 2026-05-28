@@ -116,6 +116,7 @@ test("generate_image_pro.js --stage writes a draft sidecar and exits 0", async (
   assert.strictEqual(sidecar.prompt, "a crisp storyboard frame");
   assert.strictEqual(sidecar.script, "generate_image_pro.js");
   assert.strictEqual(sidecar.model, "image-generation-pro");
+  assert.strictEqual(sidecar.size, "1024x1024");
   assert.strictEqual(sidecar.image_size, "1K");
   assert.strictEqual(sidecar.aspect_ratio, "1:1");
   assert.deepEqual(sidecar.reference_source_ids, ["image_42"]);

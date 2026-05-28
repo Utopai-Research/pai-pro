@@ -11,7 +11,7 @@ Most patterns below use the standard image tier:
 node "$PAI_REPO_ROOT/server/cli/generate_image.js" --prompt "..." [--aspect-ratio 16:9] [--image-size 2K] [--label "..."] [--subtype <character|location|edit|reference|split>] [--name "..."] [--role "..."] [--description "..."] [--source-node-id <id>] [--ref-source-id <id> ...]
 ```
 
-Storyboard mosaics use the pro image tier:
+Storyboard mosaics and video-bound character sheets use the pro image tier:
 
 ```
 node "$PAI_REPO_ROOT/server/cli/generate_image_pro.js" --prompt "..." --size 2560x1440 [--label "..."] [--subtype <character|location|edit|reference|split>] [--name "..."] [--role "..."] [--description "..."] [--source-node-id <id>] [--ref-source-id <id> ...]
@@ -114,7 +114,7 @@ Triggers: user asks for a storyboard, mosaic, NxN / N×M grid, shot list, covera
 - **Optional refs**: if a character / location reference is on the canvas, pass it via `--ref-source-id` (≤32 for pro) so identity stays locked across cells and the provenance edges land. The script-analyzed case (shot notes + locations on the canvas) triggers one-mosaic-per-location iteration with required ref ordering — see `references/storyboard-mosaic.md`.
 - **Grid size limit**: default to 2×2. Larger grids are allowed, but if the user asks for `3×3` or larger, warn first: "larger storyboard grids are harder to keep clean — I can run it as one pro mosaic, or split into smaller sheets."
 
-**For the canvas pre-flight, per-location iteration logic, no-location nudge, verbatim prompt template, and default 9-panel coverage when no script slice exists**: see [references/storyboard-mosaic.md](references/storyboard-mosaic.md).
+**For the canvas pre-flight, per-location iteration logic, no-location nudge, verbatim prompt template, and default panel coverage when no script slice exists**: see [references/storyboard-mosaic.md](references/storyboard-mosaic.md).
 
 #### Node fields the CLI sets
 
@@ -137,6 +137,7 @@ Distinct from Pattern 1: Pattern 1 produces a single static portrait (poster, pr
 
 - Pre-flight: for current uploaded refs, follow the project `PROJECT_AGENT.md` § "Choosing context" and identify reference image nodes (`subtype: "reference"`, ideally ≥3 photos of the same actor from different angles or lighting). Confirm the ref count to the user in one short line before firing.
 - `node "$PAI_REPO_ROOT/server/cli/generate_image_pro.js" --prompt "..." --size 2560x1440 --subtype character --name "<character_name>" --role "..." --ref-source-id <ref1> --ref-source-id <ref2> --ref-source-id <ref3> --source-node-id <ref1>` — pro tier is the default for character sheets because panel layout, text suppression, and identity consistency are load-bearing. Do not pass `--aspect-ratio` or `--image-size`. Never fire Mode A with fewer than 3 refs (model overfits to the one angle it has).
+- With 0-2 actor refs, use the Mode B text-only command from `references/character-sheet.md`: same pro command, but omit every `--ref-source-id` and omit `--source-node-id`.
 - ONE call. ONE sheet per character.
 - The sheet plugs into `generate_video.js` as `--ref-source-id <sheet_id>` for any downstream shot (front / back / profile) — no cropping needed for typical use.
 

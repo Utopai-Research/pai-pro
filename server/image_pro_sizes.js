@@ -76,12 +76,8 @@ export function imageProSizeTier(size) {
   return SIZE_TO_TIER.get(String(size || "")) ?? null;
 }
 
-export function isImageProSize(size) {
-  return imageProSizeTier(size) !== null;
-}
-
 export function imageProCostBySize(params = {}) {
-  const size = params.size || params.image_size || params.imageSize || IMAGE_PRO_DEFAULT_SIZE;
+  const size = params.size;
   const tier = imageProSizeTier(size);
   return tier ? COST_BY_TIER[tier] : null;
 }

@@ -115,6 +115,7 @@ if (args.stage) {
       sourceNodeId: args["source-node-id"] || null,
       referenceSourceIds: refSources,
       model: plannedModel,
+      size: args.size,
       imageSize,
       costUsd,
       script: "generate_image_pro.js",
@@ -155,6 +156,7 @@ await writePending({
   sourceNodeId: args["source-node-id"] || null,
   referenceSourceIds: refSources,
   model: plannedModel,
+  size: args.size,
   imageSize,
 });
 

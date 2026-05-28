@@ -118,6 +118,7 @@ function pendingContext(entry) {
     "prompt",
     "aspect_ratio",
     "model",
+    "size",
     "image_size",
     "resolution",
     "duration",

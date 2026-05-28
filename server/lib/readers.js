@@ -90,6 +90,7 @@ export async function readPendingEntry(id, jobId) {
       created_at: parsed.created_at || null,
     };
     if (typeof parsed.model === "string" && parsed.model !== "") out.model = parsed.model;
+    if (typeof parsed.size === "string" && parsed.size !== "") out.size = parsed.size;
     if (typeof parsed.image_size === "string" && parsed.image_size !== "") out.image_size = parsed.image_size;
     if (typeof parsed.resolution === "string" && parsed.resolution !== "") out.resolution = parsed.resolution;
     if (typeof parsed.duration === "number" && Number.isFinite(parsed.duration)) out.duration = parsed.duration;
@@ -215,6 +216,7 @@ export function normalizeResultEntry(jobId, raw, { mtimeMs = 0 } = {}) {
   if (typeof raw.output_url === "string" && raw.output_url !== "") out.output_url = raw.output_url;
   if (typeof raw.model === "string" && raw.model !== "") out.model = raw.model;
   if (typeof raw.prompt === "string") out.prompt = raw.prompt;
+  if (typeof raw.size === "string" && raw.size !== "") out.size = raw.size;
   if (typeof raw.aspect_ratio === "string" && raw.aspect_ratio !== "") out.aspect_ratio = raw.aspect_ratio;
   if (typeof raw.image_size === "string" && raw.image_size !== "") out.image_size = raw.image_size;
   if (typeof raw.resolution === "string" && raw.resolution !== "") out.resolution = raw.resolution;

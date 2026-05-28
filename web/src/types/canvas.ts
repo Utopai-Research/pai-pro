@@ -245,6 +245,8 @@ export interface PendingGeneration {
   /** Wire-side model id (e.g. "image-generation"); absent if the
    * CLI couldn't resolve a model before writing the sidecar. */
   model?: string
+  /** Image pro only: exact provider size (e.g. "2560x1440"). */
+  size?: string
   /** Image-only: requested output size ("1K" / "2K" / "4K"). */
   image_size?: string
   /** Video-only: requested resolution ("720p" / "1080p"). */
@@ -291,6 +293,7 @@ export interface GenerationResult {
   output_url?: string | null
   model?: string
   prompt?: string
+  size?: string
   aspect_ratio?: string
   image_size?: string
   resolution?: string
