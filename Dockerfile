@@ -125,8 +125,9 @@ RUN curl -fsSL https://claude.ai/install.sh | bash || \
 # Codex CLI — pin the npm package so Docker's supported-agent surface is
 # reproducible. Install as node into /home/node/.local/bin, which is on PATH.
 RUN npm config set prefix /home/node/.local && \
-    npm install -g "@openai/codex@${CODEX_VERSION}" --no-audit --no-fund && \
-    codex --version
+    (npm install -g "@openai/codex@${CODEX_VERSION}" --no-audit --no-fund && \
+     codex --version || \
+     echo "[build] codex CLI install failed - Codex PTY will be degraded")
 
 # tini → entrypoint → node. Three layers but each does one thing.
 ENTRYPOINT ["tini", "--", "/usr/local/bin/pai-entrypoint.sh"]

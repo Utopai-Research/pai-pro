@@ -12,6 +12,7 @@ test("Docker image installs Codex CLI with a pinned build arg", async () => {
   assert.match(dockerfile, /ARG CODEX_VERSION=0\.134\.0/);
   assert.match(dockerfile, /npm install -g "@openai\/codex@\$\{CODEX_VERSION\}"/);
   assert.match(dockerfile, /codex --version/);
+  assert.match(dockerfile, /codex CLI install failed - Codex PTY will be degraded/);
 });
 
 test("docker compose passes default agent and persists Codex state", async () => {
