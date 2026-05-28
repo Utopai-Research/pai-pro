@@ -1,6 +1,25 @@
 # Character reference sheet from actor refs — prompt template
 
-For `node "$PAI_REPO_ROOT/server/cli/generate_image.js"` with multiple `--ref-source-id` flags. Produces ONE composite 16:9 character reference sheet with FOUR panels (Front-full / Profile-full / Back-full / Closeup-bust) per character. The sheet is consumable directly as a `--ref-source-id` for downstream video gen — no cropping required for typical use.
+For `node "$PAI_REPO_ROOT/server/cli/generate_image_pro.js"` with exact `--size 2560x1440` by default and optional multiple `--ref-source-id` flags. Produces ONE composite 16:9 character reference sheet with FOUR panels (Front-full / Profile-full / Back-full / Closeup-bust) per character. The sheet is consumable directly as a `--ref-source-id` for downstream video gen — no cropping required for typical use.
+
+Default fire command shape for Mode A with actor refs:
+
+```
+node "$PAI_REPO_ROOT/server/cli/generate_image_pro.js" \
+  --prompt "<filled 4-panel prompt>" \
+  --size 2560x1440 \
+  --subtype character \
+  --name "<character_name>" \
+  --role "<role>" \
+  --ref-source-id <ref1> \
+  --ref-source-id <ref2> \
+  --ref-source-id <ref3> \
+  --source-node-id <ref1>
+```
+
+Pro tier accepts exact `--size` only. Do not pass `--aspect-ratio` or `--image-size` for this flow.
+
+For Mode B with no actor refs, use the same command but omit all `--ref-source-id` flags and omit `--source-node-id`.
 
 ## Contents
 
@@ -48,7 +67,7 @@ EXACT same face in all 4 panels. EXACT same costume. EXACT same hair. Identical 
 No captions, no labels, no English words, no Chinese characters, no numbers, no headers, no gibberish text, no annotations, no logos. The image is purely visual.
 
 [OUTPUT]
-4K resolution, clean editorial layout, no decorative borders between panels.
+High-resolution 16:9 production sheet, clean editorial layout, no decorative borders between panels.
 ```
 
 For an elderly character, add to the `[PHOTOGRAPHIC AESTHETIC]` block: `actor's age signs preserved (deep wrinkles around eyes and mouth, age spots, white/silver beard hairs); do NOT youthify.`
@@ -83,7 +102,7 @@ EXACT same face in all 4 panels. EXACT same costume. EXACT same hair / accessori
 No captions, no labels, no English words, no Chinese characters, no numbers, no headers, no gibberish text, no annotations, no logos. The image is purely visual.
 
 [OUTPUT]
-4K resolution, clean editorial layout, no decorative borders between panels.
+High-resolution 16:9 production sheet, clean editorial layout, no decorative borders between panels.
 ```
 
 Mode B is less robust than Mode A — identity has to come from words alone, so the model has more freedom to drift between panels. Mitigations:
@@ -119,7 +138,7 @@ Workflow:
      projects/<id>/assets/images/<sheet>.jpg \
      --out projects/<id>/assets/.tmp/back_crop_$(date +%s).jpg
    ```
-   For a 16:9 2K sheet (2752×1536) with 4 equal panels: each panel is ~688px wide × 1536px tall. Front panel `--cropOffset 0 0`, profile `--cropOffset 0 688`, back `--cropOffset 0 1376`, closeup `--cropOffset 0 2064`. Tighten to the figure as needed.
+   For the default pro 16:9 sheet (`--size 2560x1440`) with 4 equal panels: each panel is ~640px wide × 1440px tall. Front panel `--cropOffset 0 0`, profile `--cropOffset 0 640`, back `--cropOffset 0 1280`, closeup `--cropOffset 0 1920`. Tighten to the figure as needed.
 
 2. **Upload to canvas** as a new reference node via `canvas_mutate`:
    ```
