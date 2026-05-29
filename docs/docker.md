@@ -64,9 +64,14 @@ For non-interactive enterprise access-token workflows, pipe the token into `code
 
 ## Agent permissions
 
-Each project's agent launches with its permission/sandbox guardrails bypassed by default — `claude --dangerously-skip-permissions` for Claude, `codex --dangerously-bypass-approvals-and-sandbox` for Codex — so it can edit project files and run the media CLIs without stopping to ask. The agent only ever runs in its project's own cwd, and the container is the "externally sandboxed environment" Codex's flag is intended for (non-root `node` user, isolated `pai_projects` volume).
+Each project's agent launches fully unattended by default:
 
-To restore the normal permission prompts, set `PAI_AGENT_BYPASS=0`:
+1. **Guardrails bypassed** — `claude --dangerously-skip-permissions` for Claude, `codex --dangerously-bypass-approvals-and-sandbox` for Codex — so it edits project files and runs the media CLIs without per-action prompts.
+2. **Project folder pre-trusted** — the project's path is seeded into the agent's own trust store (`~/.claude.json` for Claude, `~/.codex/config.toml` for Codex) right before launch, so the one-time "do you trust this folder?" dialog doesn't block startup.
+
+The agent only ever runs in its project's own cwd, and the container is the "externally sandboxed environment" Codex's flag is intended for (non-root `node` user, isolated `pai_projects` volume).
+
+To restore both the permission prompts and the trust gate, set `PAI_AGENT_BYPASS=0`:
 
 ```bash
 PAI_AGENT_BYPASS=0 docker compose up --build

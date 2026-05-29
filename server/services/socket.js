@@ -33,6 +33,7 @@ import {
   snapshotAssetStates,
 } from "../pai_assets_client.js";
 import { getProvider, resolveAgentIdForMeta } from "../agents/index.js";
+import { resolveAgentBypass } from "../agents/bypass.js";
 import {
   PAI_REPO_ROOT,
   projectDir,
@@ -212,6 +213,13 @@ function registerSocketPtyHandlers({ socket, io, projects, nodePty }) {
         persistDiscoveredAgentSession(projectId, project, latest).catch((e) => {
           console.warn(`[viewer] failed to persist agent session for ${projectId}: ${e.message}`);
         });
+      }
+      // When the permission bypass is on, also pre-trust the project folder so
+      // the agent's one-time workspace-trust prompt doesn't block the launch.
+      // Best-effort: a failure here just means the trust prompt appears once.
+      if (resolveAgentBypass() && typeof provider.ensureTrust === "function") {
+        try { await provider.ensureTrust(cwd); }
+        catch (e) { console.warn(`[viewer] ensureTrust failed for ${projectId}: ${e.message}`); }
       }
       const input = { projectId, meta: project.meta, session: latest };
       const cmd = latest

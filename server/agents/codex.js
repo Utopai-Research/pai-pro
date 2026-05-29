@@ -25,12 +25,14 @@ function safeSetValue(value, allowed) {
   return typeof value === "string" && allowed.has(value);
 }
 
+function codexHomeDir(env = process.env) {
+  return typeof env.CODEX_HOME === "string" && env.CODEX_HOME.trim() !== ""
+    ? env.CODEX_HOME.trim()
+    : path.join(os.homedir(), ".codex");
+}
+
 function codexSessionsRoot(env = process.env) {
-  const codexHome =
-    typeof env.CODEX_HOME === "string" && env.CODEX_HOME.trim() !== ""
-      ? env.CODEX_HOME.trim()
-      : path.join(os.homedir(), ".codex");
-  return path.join(codexHome, "sessions");
+  return path.join(codexHomeDir(env), "sessions");
 }
 
 function optionSuffix(meta = {}, env) {
@@ -183,6 +185,28 @@ export async function findLatestCodexSession(
   return null;
 }
 
+// Mark a project directory trusted so `codex` launches without its "Do you
+// trust the contents of this directory?" prompt. Appends to config.toml only
+// when absent, so it respects an existing decision; auth lives in a separate
+// auth.json, so login is untouched. Gated by the same PAI_AGENT_BYPASS switch
+// as the launch flags.
+async function ensureCodexTrust(projectDir, env = process.env) {
+  let abs;
+  try { abs = await fsp.realpath(projectDir); }
+  catch { abs = path.resolve(projectDir); }
+  if (abs.includes('"')) return; // a quote would make a malformed TOML key
+
+  const file = path.join(codexHomeDir(env), "config.toml");
+  let toml = "";
+  try { toml = await fsp.readFile(file, "utf8"); }
+  catch (e) { if (e.code !== "ENOENT") throw e; }
+  if (toml.includes(`[projects."${abs}"]`)) return;
+
+  const sep = toml === "" ? "" : toml.endsWith("\n") ? "\n" : "\n\n";
+  await fsp.mkdir(path.dirname(file), { recursive: true });
+  await fsp.appendFile(file, `${sep}[projects."${abs}"]\ntrust_level = "trusted"\n`);
+}
+
 export const codexProvider = {
   id: "codex",
   label: "Codex",
@@ -202,6 +226,8 @@ export const codexProvider = {
   findLatestSession(projectId) {
     return findLatestCodexSession(projectId);
   },
+
+  ensureTrust: ensureCodexTrust,
 
   healthCheck() {
     return binaryOk("codex");
