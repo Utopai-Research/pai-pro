@@ -20,16 +20,14 @@
 
 </div>
 
-Filmmaking skills + a React Flow canvas + an embedded coding-agent terminal. Write a screenplay, design characters, generate clips, lay them out on a timeline — all from inside Claude Code or Codex. Local-first: project files live on disk, generated media mirrors alongside, nothing leaves your machine except the actual generation calls. Built by [Utopai Studios](https://www.utopaistudios.com/).
+## What's PAI-Pro?
 
-## Key capabilities
+PAI-Pro is a local-first AI filmmaking workspace: project-aware `SKILL.md` skills, a React Flow production canvas, a timeline, and an embedded coding-agent terminal in one app. From Claude Code or Codex, you can write scenes, design characters and locations, generate image / video / voice assets, arrange shots, and keep every project's `workflow.json` plus generated media on disk. Nothing leaves your machine except the actual generation calls. Built by [Utopai Studios](https://www.utopaistudios.com/).
 
-- **Filmmaking skills** in standard SKILL.md format — image, video, voice, script, groups, notes, summary. ([Reference →](docs/skills.md))
-- **A React Flow canvas** with character / location / image / video / note nodes, grouped scenes, mention-pill references.
-- **A Timeline tab** that plays your shots in sequence — drag clips onto the reel, reorder, scrub.
-- **Embedded agent terminal** in the right rail. Real PTY, tmux-style, auto-resumes the project session.
-- **Per-project memory** — every project owns its `workflow.json` and asset folder; agent context follows when you switch.
-- **Bring-your-own coding agent** — Claude Code and Codex are wired into the embedded terminal; Cursor / Gemini CLI can still use the same SKILL.md format in host mode. ([Compatibility →](docs/agents.md))
+- **Create** with filmmaking skills for scripts, images, videos, voice, groups, notes, and summaries. ([Reference →](docs/skills.md))
+- **Organize** character, location, image, video, and note nodes on a grouped React Flow canvas.
+- **Cut** clips on the Timeline tab with drag-to-reel sequencing, reordering, scrubbing, and playback.
+- **Work from your agent** with Claude Code or Codex in a real PTY terminal that resumes project context. ([Compatibility →](docs/agents.md))
 
 ## Agent support
 
