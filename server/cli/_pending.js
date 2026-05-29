@@ -24,7 +24,7 @@ import {
 import {
   AGENT_RESULT_CONSUMER_HEADER,
   WAITING_CLI_RESULT_CONSUMER,
-} from "../lib/agent_result_notifications.js";
+} from "../lib/continuation_events.js";
 
 const PENDING_DIR_NAME = ".pending";
 const RESULTS_DIR_NAME = ".results";
@@ -214,6 +214,7 @@ async function pendingContextForResult(jobId, cwd) {
       "position",
       "reference_source_ids",
       "source_node_id",
+      "origin",
     ]) {
       if (parsed[key] !== undefined) out[key] = parsed[key];
     }
@@ -272,6 +273,7 @@ export async function writePending({
   position,
   referenceSourceIds,
   sourceNodeId,
+  origin,
 }) {
   if (!jobId || !kind || !prompt) return;
   const payload = {
@@ -300,6 +302,9 @@ export async function writePending({
   if (typeof sourceNodeId === "string" && sourceNodeId !== "") {
     payload.source_node_id = sourceNodeId;
   }
+  if (origin && typeof origin === "object") {
+    payload.origin = origin;
+  }
   const dir = pendingDir();
   try {
     await fsp.mkdir(dir, { recursive: true });
@@ -309,7 +314,8 @@ export async function writePending({
     // fire path having to thread them through.
     if (payload.position === undefined
         || payload.reference_source_ids === undefined
-        || payload.source_node_id === undefined) {
+        || payload.source_node_id === undefined
+        || payload.origin === undefined) {
       try {
         const prev = JSON.parse(await fsp.readFile(pendingPath(jobId), "utf8"));
         if (payload.position === undefined && prev?.position &&
@@ -321,6 +327,9 @@ export async function writePending({
         }
         if (payload.source_node_id === undefined && typeof prev?.source_node_id === "string" && prev.source_node_id !== "") {
           payload.source_node_id = prev.source_node_id;
+        }
+        if (payload.origin === undefined && prev?.origin && typeof prev.origin === "object") {
+          payload.origin = prev.origin;
         }
       } catch { /* no prior sidecar, or unreadable — fresh write */ }
     }

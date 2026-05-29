@@ -18,8 +18,8 @@ import { getCost } from "../model_registry.js";
 import {
   AGENT_RESULT_CONSUMER_HEADER,
   WAITING_CLI_RESULT_CONSUMER,
-  enqueueGenerationResultNotification,
-} from "../lib/agent_result_notifications.js";
+} from "../lib/continuation_events.js";
+import { enqueueGenerationContinuation } from "../lib/generation_continuations.js";
 import { PAI_REPO_ROOT, pendingDir, projectDir } from "../lib/paths.js";
 import {
   normalizeResultEntry,
@@ -137,6 +137,7 @@ function pendingContext(entry) {
     "position",
     "reference_source_ids",
     "source_node_id",
+    "origin",
   ]) {
     if (entry?.[key] !== undefined) out[key] = entry[key];
   }
@@ -271,9 +272,9 @@ export function registerPendingRoutes({ app, projects, broadcasters }) {
               broadcasters?.broadcastGenerationResults?.(id);
               if (notifyAgent) {
                 try {
-                  await enqueueGenerationResultNotification(id, summary);
+                  await enqueueGenerationContinuation(id, summary);
                 } catch (notifyErr) {
-                  console.warn(`[viewer] agent notification enqueue failed for ${id}/${jobId}:`, notifyErr);
+                  console.warn(`[viewer] continuation enqueue failed for ${id}/${jobId}:`, notifyErr);
                 }
               }
             }

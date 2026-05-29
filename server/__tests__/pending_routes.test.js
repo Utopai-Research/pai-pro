@@ -54,6 +54,7 @@ async function startViewer() {
     PAI_ACTIVE_FILE: join(projectsDir, ".active_project"),
     PAI_ROOT_LINK: join(projectsDir, "workflow.json"),
     WEB_ORIGIN: "http://localhost:0",
+    PAI_CONTINUATION_WORKERS: "0",
   };
   viewerProc = spawn(process.execPath, [VIEWER_PATH], { env, stdio: ["ignore", "pipe", "pipe"] });
   const start = Date.now();
@@ -92,7 +93,7 @@ function resultPath(jobId) {
 }
 
 function notificationPath(jobId) {
-  return projectPath(".agent_notifications", `${jobId}.json`);
+  return projectPath(".continuation_events", `continuation_event_${jobId}.json`);
 }
 
 async function waitForResult(jobId, timeoutMs = 5000) {
@@ -116,7 +117,7 @@ async function waitForNotification(jobId, timeoutMs = 5000) {
       await new Promise((r) => setTimeout(r, 50));
     }
   }
-  throw new Error(`agent notification sidecar did not appear for ${jobId}`);
+  throw new Error(`continuation event sidecar did not appear for ${jobId}`);
 }
 
 async function waitForBundleResult(jobId, timeoutMs = 5000) {
@@ -257,7 +258,15 @@ test("PATCH on a running entry → 409", async () => {
 
 test("POST /generate writes durable result sidecar and removes pending", async () => {
   const { jobId } = await seedDraft({
-    overrides: { argv: ["--definitely-unknown-flag"] },
+    overrides: {
+      argv: ["--definitely-unknown-flag"],
+      origin: {
+        kind: "agent_skill",
+        skill_id: "image-compose",
+        workflow_id: "test-workflow",
+        workflow_step: "character_reference",
+      },
+    },
   });
   const r = await fetch(`${baseUrl}/projects/${TEST_PROJECT_ID}/pending/${jobId}/generate`, {
     method: "POST",
@@ -275,15 +284,17 @@ test("POST /generate writes durable result sidecar and removes pending", async (
   assert.equal(result.klass, "bad_args");
   assert.equal(result.prompt, "a test cat");
   assert.equal(result.aspect_ratio, "1:1");
+  assert.equal(result.origin.skill_id, "image-compose");
+  assert.equal(result.origin.workflow_step, "character_reference");
   assert.ok(result.completed_at);
   const summary = await waitForBundleResult(jobId);
   assert.equal(summary.status, "failed");
   assert.equal(summary.klass, "bad_args");
-  const notification = await waitForNotification(jobId);
-  assert.equal(notification.kind, "generation_result");
-  assert.equal(notification.job_id, jobId);
-  assert.equal(notification.status, "failed");
-  assert.equal(notification.delivered_at, null);
+  const event = await waitForNotification(jobId);
+  assert.equal(event.kind, "generation_result");
+  assert.equal(event.job_id, jobId);
+  assert.equal(event.status, "failed");
+  assert.equal(event.consumed_at, null);
   await assert.rejects(stat(sidecarPath(jobId)), /ENOENT/);
 });
 
@@ -314,7 +325,7 @@ test("POST /generate accepts generate_image_pro.js sidecars", async () => {
   await assert.rejects(stat(sidecarPath(jobId)), /ENOENT/);
 });
 
-test("POST /generate with waiting-cli consumer header suppresses agent notification", async () => {
+test("POST /generate with waiting-cli consumer header suppresses continuation event", async () => {
   const { jobId } = await seedDraft({
     overrides: { argv: ["--definitely-unknown-flag"] },
   });

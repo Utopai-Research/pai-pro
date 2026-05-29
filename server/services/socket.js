@@ -5,7 +5,8 @@
 // Connection lifecycle:
 //   client connects → `subscribe { projectId }` joins the room, seeds
 //   state events (title, canvas-state, canvas-positions,
-//   pending-generations, generation-results, pai-assets-snapshot), and
+//   pending-generations, generation-results, agent-continuations,
+//   pai-assets-snapshot), and
 //   re-pre-uploads any image_result whose asset-cache entry has expired. Same socket can
 //   then issue pty:* messages to drive the embedded terminal.
 //
@@ -42,9 +43,9 @@ import {
   projectIdFromCanvasUrl,
 } from "../lib/paths.js";
 import {
-  configureAgentResultNotifications,
-  scheduleFlush,
-} from "../lib/agent_result_notifications.js";
+  AGENT_CONTINUATIONS_BUNDLE_LIMIT,
+  compareContinuations,
+} from "../lib/agent_continuations.js";
 import {
   compareResultSummaries,
   GENERATION_RESULTS_BUNDLE_LIMIT,
@@ -128,7 +129,6 @@ export async function submitAgentNotification(projectId, text, { requireIdleMs =
   if (!entry) {
     const spawned = await ensureProjectPty(projectId);
     if (!spawned.ok) return { ok: false, reason: spawned.reason || "no_pty" };
-    scheduleFlush(projectId, { delayMs: 3000 });
     return { ok: false, reason: "busy", idleForMs: 0 };
   }
   if (typeof text !== "string" || text.length === 0) {
@@ -172,8 +172,6 @@ export async function submitAgentNotification(projectId, text, { requireIdleMs =
     return { ok: false, reason: "write_failed", message: e.message, idleForMs };
   }
 }
-
-configureAgentResultNotifications({ submitAgentNotification });
 
 // Walk a project's image_result nodes and pre-upload any whose canvas
 // URL isn't already in the cache. Used by subscribe to recover chip
@@ -233,7 +231,6 @@ function launchAgentWhenReady({ projectId, project, entry, provider }) {
       ? provider.buildResumeCommand(input)
       : provider.buildLaunchCommand(input);
     try { writePtyInput(entry, cmd); } catch {}
-    scheduleFlush(projectId, { delayMs: 3000 });
   }, 500);
 }
 
@@ -331,7 +328,6 @@ function registerSocketPtyHandlers({ socket, io, projects, nodePty }) {
       try { existing.pty.resize(cols, rows); } catch {}
       socket.emit("pty:spawned", { pid: existing.pty.pid, attached: true });
       if (existing.buffer) socket.emit("pty:output", existing.buffer);
-      scheduleFlush(projectId);
       return;
     }
 
@@ -414,6 +410,12 @@ export function registerSocketHandlers({ io, projects, nodePty }) {
         state: Array.from(p.generationResults?.values() ?? [])
           .sort(compareResultSummaries)
           .slice(0, GENERATION_RESULTS_BUNDLE_LIMIT),
+      });
+      socket.emit("agent-continuations", {
+        projectId,
+        state: Array.from(p.agentContinuations?.values() ?? [])
+          .sort(compareContinuations)
+          .slice(0, AGENT_CONTINUATIONS_BUNDLE_LIMIT),
       });
       // Replay cached asset statuses so chips render on load, not on the next flip.
       const projectEntries = {};

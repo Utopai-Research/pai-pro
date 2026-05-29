@@ -7,6 +7,14 @@ import {
   resolveAgentIdForNewProject,
 } from "../agents/index.js";
 import { resolveAgentBypass } from "../agents/bypass.js";
+import {
+  buildClaudeContinuationCommand,
+  parseClaudeContinuationOutput,
+} from "../agents/claude.js";
+import {
+  buildCodexContinuationCommand,
+  parseCodexContinuationOutput,
+} from "../agents/codex.js";
 
 // Disables the default-on permission bypass so a test can assert the
 // model/effort/sandbox mapping in isolation.
@@ -205,13 +213,13 @@ test("providers submit notifications as text followed by a separate enter", asyn
     const provider = getProvider(id);
     const writes = [];
     const result = await provider.submitAgentNotification({
-      text: "[task-notification]\nhello\n[/task-notification]",
+      text: "manual follow-up\nhello",
       phaseGapMs: 0,
       write: (data) => writes.push(data),
     });
     assert.equal(result.ok, true, id);
     assert.deepEqual(writes, [
-      "[task-notification]\nhello\n[/task-notification]",
+      "manual follow-up\nhello",
       "\r",
     ], id);
   }
@@ -236,7 +244,7 @@ test("providers report unconfirmed submit when output confirmation is required",
   for (const id of ["claude", "codex"]) {
     const provider = getProvider(id);
     const result = await provider.submitAgentNotification({
-      text: "[task-notification]\nhello\n[/task-notification]",
+      text: "manual follow-up\nhello",
       phaseGapMs: 0,
       write: () => {},
       waitForOutput: async () => false,
@@ -244,4 +252,74 @@ test("providers report unconfirmed submit when output confirmation is required",
     assert.equal(result.ok, false, id);
     assert.equal(result.reason, "unconfirmed_submit", id);
   }
+});
+
+test("claude continuation command is non-interactive and capped", () => {
+  const schema = { type: "object" };
+  const built = buildClaudeContinuationCommand({
+    meta: { agent_model: "sonnet", agent_effort: "high" },
+    schema,
+    env: { PAI_CONTINUATION_MAX_BUDGET_USD: "0.12" },
+  });
+  assert.equal(built.command, "claude");
+  assert.deepEqual(built.args.slice(0, 7), [
+    "-p",
+    "--output-format", "json",
+    "--json-schema", JSON.stringify(schema),
+    "--allowedTools", "",
+  ]);
+  assert.ok(built.args.includes("--no-session-persistence"));
+  assert.ok(built.args.includes("--max-budget-usd"));
+  assert.ok(built.args.includes("0.12"));
+  assert.ok(built.args.includes("--model"));
+  assert.ok(built.args.includes("sonnet"));
+});
+
+test("claude continuation parser extracts structured_output wrapper", () => {
+  const parsed = parseClaudeContinuationOutput(JSON.stringify({
+    type: "result",
+    total_cost_usd: 0.01,
+    structured_output: {
+      summary: "Done",
+      diagnostics: [],
+      suggested_next_steps: [{ kind: "none" }],
+    },
+  }));
+  assert.equal(parsed.output.summary, "Done");
+  assert.equal(parsed.raw_provider.total_cost_usd, 0.01);
+});
+
+test("codex continuation command uses exec json schema and read-only sandbox", () => {
+  const built = buildCodexContinuationCommand({
+    meta: { agent_model: "gpt-5.3-codex", agent_effort: "high" },
+    schemaPath: "/tmp/schema.json",
+    lastMessagePath: "/tmp/last.json",
+    workdir: "/tmp/work",
+  });
+  assert.equal(built.command, "codex");
+  assert.deepEqual(built.args.slice(0, 10), [
+    "exec",
+    "--json",
+    "--output-schema", "/tmp/schema.json",
+    "--output-last-message", "/tmp/last.json",
+    "--cd", "/tmp/work",
+    "--sandbox", "read-only",
+  ]);
+  assert.ok(built.args.includes("--ephemeral"));
+  assert.ok(built.args.includes("--ignore-rules"));
+  assert.ok(built.args.includes("--skip-git-repo-check"));
+  assert.ok(built.args.includes("-"));
+});
+
+test("codex continuation parser prefers output-last-message", () => {
+  const parsed = parseCodexContinuationOutput({
+    stdout: JSON.stringify({ type: "ignored", message: "not json" }) + "\n",
+    lastMessage: JSON.stringify({
+      summary: "Codex done",
+      diagnostics: [],
+      suggested_next_steps: [{ kind: "none" }],
+    }),
+  });
+  assert.equal(parsed.output.summary, "Codex done");
+  assert.equal(parsed.raw_provider.source, "output-last-message");
 });

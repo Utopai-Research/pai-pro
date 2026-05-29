@@ -26,6 +26,10 @@ import {
   readResultEntry,
   GENERATION_RESULTS_BUNDLE_LIMIT,
 } from "../lib/readers.js";
+import {
+  AGENT_CONTINUATIONS_BUNDLE_LIMIT,
+  readAgentContinuationDir,
+} from "../lib/agent_continuations.js";
 import { writeMeta, writeActive, writeResult } from "../lib/writers.js";
 
 // Per-project Claude wrapper. The `@./PROJECT_AGENT.md` import pulls in the
@@ -249,6 +253,7 @@ export async function loadProject(projects, id) {
   const canvasPositions = await readCanvasPositions(id);
   const pendingGenerations = await readPendingDir(id);
   const generationResults = await readResultDir(id, { limit: GENERATION_RESULTS_BUNDLE_LIMIT });
+  const agentContinuations = await readAgentContinuationDir(id, { limit: AGENT_CONTINUATIONS_BUNDLE_LIMIT });
   const entry = {
     id,
     meta,
@@ -256,6 +261,7 @@ export async function loadProject(projects, id) {
     canvasPositions,
     pendingGenerations,
     generationResults: new Map(generationResults.map((r) => [r.job_id, r])),
+    agentContinuations: new Map(agentContinuations.map((r) => [r.id, r])),
   };
   initProjectMutatorState(entry, {
     workflowPath: workflowPath(id),

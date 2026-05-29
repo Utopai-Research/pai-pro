@@ -5,6 +5,7 @@
 //   meta.json             → title (+ in-memory meta refresh)
 //   .pending/<job>.json   → pending-generations
 //   .results/<job>.json   → generation-results
+//   .agent_continuations/<id>.json → agent-continuations
 //
 // External edits (the agent rewriting workflow.json from inside its
 // per-project terminal session) are the primary use case. Viewer-side
@@ -22,6 +23,9 @@ import {
   isValidId,
   projectDir,
 } from "../lib/paths.js";
+import {
+  readAgentContinuation,
+} from "../lib/agent_continuations.js";
 import {
   EMPTY_POSITIONS,
   readCanvas,
@@ -45,6 +49,7 @@ export async function watchProjects({ projects, io, broadcasters }) {
     broadcastPositions,
     broadcastPending,
     broadcastGenerationResults,
+    broadcastAgentContinuations,
   } = broadcasters;
 
   const watcher = chokidar.watch(PROJECTS_DIR, {
@@ -121,6 +126,19 @@ export async function watchProjects({ projects, io, broadcasters }) {
       if (entry) p.generationResults.set(jobId, entry);
       else       p.generationResults.delete(jobId);
       broadcastGenerationResults(id);
+      return;
+    }
+
+    if (rel.startsWith(".agent_continuations/") && rel.endsWith(".json")) {
+      const continuationId = path.basename(rel, ".json");
+      const record = await readAgentContinuation(id, continuationId);
+      let p = projects.get(id);
+      if (!p) p = await loadProject(projects, id);
+      if (!p) return;
+      if (!p.agentContinuations) p.agentContinuations = new Map();
+      if (record) p.agentContinuations.set(record.id, record);
+      else p.agentContinuations.delete(continuationId);
+      broadcastAgentContinuations(id);
     }
   };
 
@@ -158,6 +176,13 @@ export async function watchProjects({ projects, io, broadcasters }) {
       if (p?.generationResults?.has(jobId)) {
         p.generationResults.delete(jobId);
         broadcastGenerationResults(id);
+      }
+    } else if (rel.startsWith(".agent_continuations/") && rel.endsWith(".json")) {
+      const continuationId = path.basename(rel, ".json");
+      const p = projects.get(id);
+      if (p?.agentContinuations?.has(continuationId)) {
+        p.agentContinuations.delete(continuationId);
+        broadcastAgentContinuations(id);
       }
     }
   });

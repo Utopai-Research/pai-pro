@@ -3,6 +3,10 @@
 // Map are closed-over once and re-used across routes and the watcher.
 
 import {
+  AGENT_CONTINUATIONS_BUNDLE_LIMIT,
+  compareContinuations,
+} from "./agent_continuations.js";
+import {
   compareResultSummaries,
   EMPTY_POSITIONS,
   GENERATION_RESULTS_BUNDLE_LIMIT,
@@ -67,6 +71,16 @@ export function createBroadcasters({ io, projects }) {
     });
   }
 
+  function broadcastAgentContinuations(id) {
+    const p = projects.get(id);
+    io.to(id).emit("agent-continuations", {
+      projectId: id,
+      state: Array.from(p?.agentContinuations?.values() ?? [])
+        .sort(compareContinuations)
+        .slice(0, AGENT_CONTINUATIONS_BUNDLE_LIMIT),
+    });
+  }
+
   // Copy the dragged pending position onto the freshly-minted node.
   // Emits canvas-positions BEFORE canvas-state so the browser merges
   // both in one React batch — no spiral-placement flash. Disk write is
@@ -112,6 +126,7 @@ export function createBroadcasters({ io, projects }) {
     broadcastPositions,
     broadcastPending,
     broadcastGenerationResults,
+    broadcastAgentContinuations,
     mutatorHooks,
   };
 }
