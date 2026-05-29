@@ -91,6 +91,10 @@ function resultPath(jobId) {
   return projectPath(".results", `${jobId}.json`);
 }
 
+function notificationPath(jobId) {
+  return projectPath(".agent_notifications", `${jobId}.json`);
+}
+
 async function waitForResult(jobId, timeoutMs = 5000) {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
@@ -101,6 +105,29 @@ async function waitForResult(jobId, timeoutMs = 5000) {
     }
   }
   throw new Error(`result sidecar did not appear for ${jobId}`);
+}
+
+async function waitForNotification(jobId, timeoutMs = 5000) {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    try {
+      return JSON.parse(await readFile(notificationPath(jobId), "utf8"));
+    } catch {
+      await new Promise((r) => setTimeout(r, 50));
+    }
+  }
+  throw new Error(`agent notification sidecar did not appear for ${jobId}`);
+}
+
+async function waitForBundleResult(jobId, timeoutMs = 5000) {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    const bundle = await fetch(`${baseUrl}/projects/${TEST_PROJECT_ID}`).then((res) => res.json());
+    const summary = bundle.generation_results?.find((r) => r.job_id === jobId);
+    if (summary) return summary;
+    await new Promise((r) => setTimeout(r, 50));
+  }
+  throw new Error(`bundle did not expose generation result ${jobId}`);
 }
 
 async function seedDraft({ jobId, overrides = {} } = {}) {
@@ -249,11 +276,14 @@ test("POST /generate writes durable result sidecar and removes pending", async (
   assert.equal(result.prompt, "a test cat");
   assert.equal(result.aspect_ratio, "1:1");
   assert.ok(result.completed_at);
-  const bundle = await fetch(`${baseUrl}/projects/${TEST_PROJECT_ID}`).then((res) => res.json());
-  const summary = bundle.generation_results.find((r) => r.job_id === jobId);
-  assert.ok(summary, "bundle exposes durable generation result summary");
+  const summary = await waitForBundleResult(jobId);
   assert.equal(summary.status, "failed");
   assert.equal(summary.klass, "bad_args");
+  const notification = await waitForNotification(jobId);
+  assert.equal(notification.kind, "generation_result");
+  assert.equal(notification.job_id, jobId);
+  assert.equal(notification.status, "failed");
+  assert.equal(notification.delivered_at, null);
   await assert.rejects(stat(sidecarPath(jobId)), /ENOENT/);
 });
 
@@ -282,6 +312,22 @@ test("POST /generate accepts generate_image_pro.js sidecars", async () => {
   assert.equal(result.model, "image-generation-pro");
   assert.equal(result.klass, "bad_args");
   await assert.rejects(stat(sidecarPath(jobId)), /ENOENT/);
+});
+
+test("POST /generate with waiting-cli consumer header suppresses agent notification", async () => {
+  const { jobId } = await seedDraft({
+    overrides: { argv: ["--definitely-unknown-flag"] },
+  });
+  const r = await fetch(`${baseUrl}/projects/${TEST_PROJECT_ID}/pending/${jobId}/generate`, {
+    method: "POST",
+    headers: { "X-PAI-Agent-Result-Consumer": "waiting-cli" },
+  });
+  assert.equal(r.status, 202);
+
+  const result = await waitForResult(jobId);
+  assert.equal(result.ok, false);
+  assert.equal(result.job_id, jobId);
+  await assert.rejects(stat(notificationPath(jobId)), /ENOENT/);
 });
 
 test("POST /generate with non-whitelisted script → 400", async () => {
@@ -329,6 +375,7 @@ test("new-project bypass mode fires through viewer and waits on result sidecar",
   const result = await waitForResult(reply.job_id);
   assert.deepEqual(result, reply);
   await assert.rejects(stat(sidecarPath(reply.job_id)), /ENOENT/);
+  await assert.rejects(stat(notificationPath(reply.job_id)), /ENOENT/);
 });
 
 test("DELETE unlinks the sidecar; second DELETE is idempotent", async () => {

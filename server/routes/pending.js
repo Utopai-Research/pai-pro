@@ -15,6 +15,11 @@ import fsp from "node:fs/promises";
 import path from "node:path";
 
 import { getCost } from "../model_registry.js";
+import {
+  AGENT_RESULT_CONSUMER_HEADER,
+  WAITING_CLI_RESULT_CONSUMER,
+  enqueueGenerationResultNotification,
+} from "../lib/agent_result_notifications.js";
 import { PAI_REPO_ROOT, pendingDir, projectDir } from "../lib/paths.js";
 import {
   normalizeResultEntry,
@@ -46,6 +51,11 @@ const IMAGE_PRO_DISPLAY_ONLY_PATCH_KEYS = new Set(["aspect_ratio", "image_size"]
 
 function pendingPath(id, jobId) {
   return path.join(pendingDir(id), `${jobId}.json`);
+}
+
+function hasWaitingCliConsumer(req) {
+  return String(req.get(AGENT_RESULT_CONSUMER_HEADER) || "").toLowerCase()
+    === WAITING_CLI_RESULT_CONSUMER;
 }
 
 function isImageProSidecar(entry) {
@@ -216,6 +226,7 @@ export function registerPendingRoutes({ app, projects, broadcasters }) {
     if (!entry.script || !ALLOWED_SCRIPTS.has(entry.script)) {
       return res.status(400).json({ error: `unknown script: ${entry.script}` });
     }
+    const notifyAgent = !hasWaitingCliConsumer(req);
     try {
       const child = spawn(
         "node",
@@ -258,6 +269,13 @@ export function registerPendingRoutes({ app, projects, broadcasters }) {
               if (!p.generationResults) p.generationResults = new Map();
               p.generationResults.set(jobId, summary);
               broadcasters?.broadcastGenerationResults?.(id);
+              if (notifyAgent) {
+                try {
+                  await enqueueGenerationResultNotification(id, summary);
+                } catch (notifyErr) {
+                  console.warn(`[viewer] agent notification enqueue failed for ${id}/${jobId}:`, notifyErr);
+                }
+              }
             }
           }
           await removePendingSidecar(id, jobId);

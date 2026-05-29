@@ -21,6 +21,10 @@ import {
   normalizeResultForRead,
   normalizeResultForWrite,
 } from "../lib/generation_result_normalize.js";
+import {
+  AGENT_RESULT_CONSUMER_HEADER,
+  WAITING_CLI_RESULT_CONSUMER,
+} from "../lib/agent_result_notifications.js";
 
 const PENDING_DIR_NAME = ".pending";
 const RESULTS_DIR_NAME = ".results";
@@ -153,7 +157,12 @@ export async function fireAndWait({ projectId, jobId, kind, timeoutMs } = {}) {
   );
   let response;
   try {
-    response = await fetch(url, { method: "POST" });
+    response = await fetch(url, {
+      method: "POST",
+      headers: {
+        [AGENT_RESULT_CONSUMER_HEADER]: WAITING_CLI_RESULT_CONSUMER,
+      },
+    });
   } catch (e) {
     return {
       ok: false,

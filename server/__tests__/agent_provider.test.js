@@ -199,3 +199,49 @@ test("resolveAgentBypass defaults on and only falsy strings disable it", () => {
     assert.equal(resolveAgentBypass({ PAI_AGENT_BYPASS: off }), false, off);
   }
 });
+
+test("providers submit notifications as text followed by a separate enter", async () => {
+  for (const id of ["claude", "codex"]) {
+    const provider = getProvider(id);
+    const writes = [];
+    const result = await provider.submitAgentNotification({
+      text: "[task-notification]\nhello\n[/task-notification]",
+      phaseGapMs: 0,
+      write: (data) => writes.push(data),
+    });
+    assert.equal(result.ok, true, id);
+    assert.deepEqual(writes, [
+      "[task-notification]\nhello\n[/task-notification]",
+      "\r",
+    ], id);
+  }
+});
+
+test("providers reject empty notification text before writing", async () => {
+  for (const id of ["claude", "codex"]) {
+    const provider = getProvider(id);
+    const writes = [];
+    const result = await provider.submitAgentNotification({
+      text: "",
+      phaseGapMs: 0,
+      write: (data) => writes.push(data),
+    });
+    assert.equal(result.ok, false, id);
+    assert.equal(result.reason, "empty_input", id);
+    assert.deepEqual(writes, [], id);
+  }
+});
+
+test("providers report unconfirmed submit when output confirmation is required", async () => {
+  for (const id of ["claude", "codex"]) {
+    const provider = getProvider(id);
+    const result = await provider.submitAgentNotification({
+      text: "[task-notification]\nhello\n[/task-notification]",
+      phaseGapMs: 0,
+      write: () => {},
+      waitForOutput: async () => false,
+    });
+    assert.equal(result.ok, false, id);
+    assert.equal(result.reason, "unconfirmed_submit", id);
+  }
+});
