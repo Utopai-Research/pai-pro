@@ -33,16 +33,14 @@ PAI-Pro is a local-first AI filmmaking workspace built around four things:
 
 Use Claude Code or Codex to install PAI-Pro for you. Paste this into your agent:
 
-> Clone `https://github.com/Utopai-Research/pai-pro`, read the setup docs in `README.md`, `docs/docker.md`, `docs/development.md`, and `docs/agents.md`, then install PAI-Pro for my current agent. Ask me for my `PAI_KEY`, use Docker unless I ask for local development, and start the app when setup is complete.
+> Clone [`https://github.com/Utopai-Research/pai-pro`](https://github.com/Utopai-Research/pai-pro), read the setup docs in [README.md](README.md), [docs/docker.md](docs/docker.md), [docs/development.md](docs/development.md), and [docs/agents.md](docs/agents.md), then install PAI-Pro for my current agent. Ask me for my `PAI_KEY`, use Docker unless I ask for local development, and start the app when setup is complete.
 
 | Choose | Commands |
 | --- | --- |
-| <img src="https://cdn.jsdelivr.net/npm/simple-icons/icons/anthropic.svg" alt="Anthropic" width="16" height="16" /> **[Claude Code][claude-code-url]** | Docker: `docker compose up --build`<br />Local: `./scripts/setup --agent claude` then `./scripts/start.sh` |
-| <img src="https://cdn.jsdelivr.net/gh/glincker/thesvg@main/public/icons/openai/light.svg" alt="OpenAI" width="16" height="16" /> **[Codex][codex-url]** | Docker: `PAI_DEFAULT_AGENT_ID=codex docker compose up --build`<br />Local: `./scripts/setup --agent codex` then `PAI_DEFAULT_AGENT_ID=codex ./scripts/start.sh` |
+| <img src="https://cdn.jsdelivr.net/npm/simple-icons/icons/anthropic.svg" alt="Anthropic" width="16" height="16" /> **[Claude Code][claude-code-url]** | Docker: `docker compose up --build`<br />Local: `./scripts/setup --agent claude` then `./scripts/start.sh`<br />Stop local: `./scripts/stop.sh` |
+| <img src="https://cdn.jsdelivr.net/gh/glincker/thesvg@main/public/icons/openai/light.svg" alt="OpenAI" width="16" height="16" /> **[Codex][codex-url]** | Docker: `PAI_DEFAULT_AGENT_ID=codex docker compose up --build`<br />Local: `./scripts/setup --agent codex` then `PAI_DEFAULT_AGENT_ID=codex ./scripts/start.sh`<br />Stop local: `./scripts/stop.sh` |
 
-Open Docker at <http://localhost:7588> or local at <http://localhost:7443>. Stop local services with `./scripts/stop.sh`.
-
-For manual setup, see [Docker](docs/docker.md), [Development](docs/development.md), or [agent compatibility](docs/agents.md).
+Open Docker at <http://localhost:7588> or local at <http://localhost:7443>.
 
 ## API key
 
