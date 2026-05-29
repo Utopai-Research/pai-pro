@@ -5,6 +5,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 
 import { projectDir } from "../lib/paths.js";
+import { resolveAgentBypass } from "./bypass.js";
 
 const execAsync = promisify(exec);
 const CLAUDE_PROJECTS_ROOT = path.join(os.homedir(), ".claude", "projects");
@@ -17,7 +18,7 @@ function claudeSessionDir(projectId) {
   return path.join(CLAUDE_PROJECTS_ROOT, projectDir(projectId).replace(/[/_.]/g, "-"));
 }
 
-function flagsSuffix(meta = {}) {
+function flagsSuffix(meta = {}, env) {
   const model =
     safeCliValue(meta.agent_model) ? meta.agent_model
     : safeCliValue(meta.claude_model) ? meta.claude_model
@@ -26,7 +27,8 @@ function flagsSuffix(meta = {}) {
     safeCliValue(meta.agent_effort) ? meta.agent_effort
     : safeCliValue(meta.claude_effort) ? meta.claude_effort
     : "max";
-  return `--model ${model} --effort ${effort}`;
+  const bypass = resolveAgentBypass(env) ? "--dangerously-skip-permissions " : "";
+  return `${bypass}--model ${model} --effort ${effort}`;
 }
 
 async function binaryOk(name) {
@@ -66,16 +68,58 @@ async function findLatestSession(projectId) {
   return candidates[0] ?? null;
 }
 
+function claudeConfigFile(env) {
+  const base =
+    typeof env?.CLAUDE_CONFIG_DIR === "string" && env.CLAUDE_CONFIG_DIR.trim() !== ""
+      ? env.CLAUDE_CONFIG_DIR.trim()
+      : os.homedir();
+  return path.join(base, ".claude.json");
+}
+
+// Pre-accept the workspace-trust dialog for a project so `claude` launches to
+// a ready prompt instead of "do you trust this folder?". Isolating
+// CLAUDE_CONFIG_DIR logs claude out, so this edits the real ~/.claude.json:
+// additively, skip-once-trusted, and atomically (claude keeps its own
+// backups/). Gated by the same PAI_AGENT_BYPASS switch as the launch flags.
+async function ensureClaudeTrust(projectDir, env = process.env) {
+  let abs;
+  try { abs = await fsp.realpath(projectDir); }
+  catch { abs = path.resolve(projectDir); }
+
+  const file = claudeConfigFile(env);
+  let cfg = {};
+  try {
+    const parsed = JSON.parse(await fsp.readFile(file, "utf8"));
+    if (parsed && typeof parsed === "object") cfg = parsed;
+  } catch (e) {
+    if (e.code !== "ENOENT") throw e;
+  }
+
+  const projects = cfg.projects && typeof cfg.projects === "object" ? cfg.projects : {};
+  const entry = projects[abs] && typeof projects[abs] === "object" ? projects[abs] : {};
+  if (entry.hasTrustDialogAccepted === true && entry.hasCompletedProjectOnboarding === true) {
+    return; // already trusted — don't rewrite the shared file
+  }
+
+  projects[abs] = { ...entry, hasTrustDialogAccepted: true, hasCompletedProjectOnboarding: true };
+  cfg.projects = projects;
+
+  await fsp.mkdir(path.dirname(file), { recursive: true });
+  const tmp = `${file}.pai-${process.pid}.tmp`;
+  await fsp.writeFile(tmp, JSON.stringify(cfg, null, 2) + "\n");
+  await fsp.rename(tmp, file);
+}
+
 export const claudeProvider = {
   id: "claude",
   label: "Claude",
 
-  buildLaunchCommand({ meta } = {}) {
-    return `claude ${flagsSuffix(meta)}\r`;
+  buildLaunchCommand({ meta, env } = {}) {
+    return `claude ${flagsSuffix(meta, env)}\r`;
   },
 
-  buildResumeCommand({ meta } = {}) {
-    return `claude --continue ${flagsSuffix(meta)}\r`;
+  buildResumeCommand({ meta, env } = {}) {
+    return `claude --continue ${flagsSuffix(meta, env)}\r`;
   },
 
   filterEnv(env) {
@@ -89,6 +133,8 @@ export const claudeProvider = {
   },
 
   findLatestSession,
+
+  ensureTrust: ensureClaudeTrust,
 
   healthCheck() {
     return binaryOk("claude");

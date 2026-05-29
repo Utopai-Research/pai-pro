@@ -342,10 +342,11 @@ start_viewer() {
     echo "Starting viewer (port $VIEWER_PORT) in tmux…"
     # tmux strips most parent env vars; inline what the viewer needs that
     # isn't already in .env (WEB_ORIGIN is derived from WEB_PORT here).
-    # PAI_DEFAULT_AGENT_ID may come from a one-shot prefix such as
-    # `PAI_DEFAULT_AGENT_ID=codex ./scripts/start.sh`, so pass it explicitly too.
+    # PAI_DEFAULT_AGENT_ID / PAI_AGENT_BYPASS may come from a one-shot prefix
+    # (e.g. `PAI_AGENT_BYPASS=0 ./scripts/start.sh`) or .env, so pass them
+    # explicitly too.
     tmux_ensure_session "$VIEWER_SESSION" \
-        "cd ${PAI_REPO_ROOT} && WEB_ORIGIN='${WEB_ORIGIN}' VIEWER_PORT='${VIEWER_PORT}' PAI_DEFAULT_AGENT_ID='${PAI_DEFAULT_AGENT_ID}' node --watch server/local_viewer.js"
+        "cd ${PAI_REPO_ROOT} && WEB_ORIGIN='${WEB_ORIGIN}' VIEWER_PORT='${VIEWER_PORT}' PAI_DEFAULT_AGENT_ID='${PAI_DEFAULT_AGENT_ID}' PAI_AGENT_BYPASS='${PAI_AGENT_BYPASS:-}' node --watch server/local_viewer.js"
 }
 
 start_web() {

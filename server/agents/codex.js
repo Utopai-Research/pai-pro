@@ -5,6 +5,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 
 import { projectDir } from "../lib/paths.js";
+import { resolveAgentBypass } from "./bypass.js";
 
 const execAsync = promisify(exec);
 const CODEX_SESSION_ORIGINATOR = "codex-tui";
@@ -24,26 +25,35 @@ function safeSetValue(value, allowed) {
   return typeof value === "string" && allowed.has(value);
 }
 
-function codexSessionsRoot(env = process.env) {
-  const codexHome =
-    typeof env.CODEX_HOME === "string" && env.CODEX_HOME.trim() !== ""
-      ? env.CODEX_HOME.trim()
-      : path.join(os.homedir(), ".codex");
-  return path.join(codexHome, "sessions");
+function codexHomeDir(env = process.env) {
+  return typeof env.CODEX_HOME === "string" && env.CODEX_HOME.trim() !== ""
+    ? env.CODEX_HOME.trim()
+    : path.join(os.homedir(), ".codex");
 }
 
-function optionSuffix(meta = {}) {
+function codexSessionsRoot(env = process.env) {
+  return path.join(codexHomeDir(env), "sessions");
+}
+
+function optionSuffix(meta = {}, env) {
+  const bypass = resolveAgentBypass(env);
   const parts = ["--no-alt-screen"];
+  if (bypass) {
+    parts.push("--dangerously-bypass-approvals-and-sandbox");
+  }
   if (safeModelValue(meta.agent_model)) {
     parts.push("--model", meta.agent_model);
   }
   if (safeSetValue(meta.agent_effort, EFFORT_VALUES)) {
     parts.push("-c", `model_reasoning_effort="${meta.agent_effort}"`);
   }
-  if (safeSetValue(meta.agent_sandbox, SANDBOX_VALUES)) {
+  // The bypass flag subsumes sandbox + approval, and codex refuses to start
+  // when either is passed alongside it. Only emit the explicit policies when
+  // the bypass is off.
+  if (!bypass && safeSetValue(meta.agent_sandbox, SANDBOX_VALUES)) {
     parts.push("--sandbox", meta.agent_sandbox);
   }
-  if (safeSetValue(meta.agent_approval_mode, APPROVAL_VALUES)) {
+  if (!bypass && safeSetValue(meta.agent_approval_mode, APPROVAL_VALUES)) {
     parts.push("--ask-for-approval", meta.agent_approval_mode);
   }
   return parts.join(" ");
@@ -175,16 +185,38 @@ export async function findLatestCodexSession(
   return null;
 }
 
+// Mark a project directory trusted so `codex` launches without its "Do you
+// trust the contents of this directory?" prompt. Appends to config.toml only
+// when absent, so it respects an existing decision; auth lives in a separate
+// auth.json, so login is untouched. Gated by the same PAI_AGENT_BYPASS switch
+// as the launch flags.
+async function ensureCodexTrust(projectDir, env = process.env) {
+  let abs;
+  try { abs = await fsp.realpath(projectDir); }
+  catch { abs = path.resolve(projectDir); }
+  if (abs.includes('"')) return; // a quote would make a malformed TOML key
+
+  const file = path.join(codexHomeDir(env), "config.toml");
+  let toml = "";
+  try { toml = await fsp.readFile(file, "utf8"); }
+  catch (e) { if (e.code !== "ENOENT") throw e; }
+  if (toml.includes(`[projects."${abs}"]`)) return;
+
+  const sep = toml === "" ? "" : toml.endsWith("\n") ? "\n" : "\n\n";
+  await fsp.mkdir(path.dirname(file), { recursive: true });
+  await fsp.appendFile(file, `${sep}[projects."${abs}"]\ntrust_level = "trusted"\n`);
+}
+
 export const codexProvider = {
   id: "codex",
   label: "Codex",
 
-  buildLaunchCommand({ meta } = {}) {
-    return `codex ${optionSuffix(meta)}\r`;
+  buildLaunchCommand({ meta, env } = {}) {
+    return `codex ${optionSuffix(meta, env)}\r`;
   },
 
-  buildResumeCommand({ meta } = {}) {
-    return `codex resume --last ${optionSuffix(meta)}\r`;
+  buildResumeCommand({ meta, env } = {}) {
+    return `codex resume --last ${optionSuffix(meta, env)}\r`;
   },
 
   filterEnv(env) {
@@ -194,6 +226,8 @@ export const codexProvider = {
   findLatestSession(projectId) {
     return findLatestCodexSession(projectId);
   },
+
+  ensureTrust: ensureCodexTrust,
 
   healthCheck() {
     return binaryOk("codex");
