@@ -33,7 +33,7 @@ PAI-Pro is a local-first AI filmmaking workspace built around four things:
 
 Use Claude Code or Codex to install PAI-Pro for you. Paste this into your agent:
 
-> Clone [`https://github.com/Utopai-Research/pai-pro`](https://github.com/Utopai-Research/pai-pro), read the setup docs in [README.md](README.md), [docs/docker.md](docs/docker.md), [docs/development.md](docs/development.md), and [docs/agents.md](docs/agents.md), then install PAI-Pro for my current agent. Ask me for my `PAI_KEY`, use Docker unless I ask for local development, and start the app when setup is complete.
+> Clone [`https://github.com/Utopai-Research/pai-pro`](https://github.com/Utopai-Research/pai-pro), read the setup docs in [README.md](README.md) and [docs/setup.md](docs/setup.md), then install PAI-Pro for my current agent. Ask me for my `PAI_KEY`, use Docker unless I ask for local development, and start the app when setup is complete.
 
 | Choose | Commands |
 | --- | --- |
@@ -55,16 +55,15 @@ Open Docker at <http://localhost:7588> or local at <http://localhost:7443>.
 
 ## Resources
 
-- 📚 [Documentation](docs/) — Docker setup, development, architecture, API service, agents, skills, FAQ
-- 🎬 [Skills reference](skills/) — the `SKILL.md` files that drive the agent
-- 🔑 <a href="https://pai-pro.utopaistudios.com/keys" target="_blank" rel="noopener noreferrer">PAI developer platform</a> — get keys, watch balance
-- 💬 [Discussions](https://github.com/Utopai-Research/pai-pro/discussions) — questions, ideas, show & tell
+- 💬 [Discord][discord-url] — questions, ideas, support, and show & tell
+- ⚙️ [API service](docs/api_service.md) — generation quality, pricing, and <a href="https://pai-pro.utopaistudios.com/keys" target="_blank" rel="noopener noreferrer">PAI developer platform</a> keys and balance
+- 🎬 [Skills reference](docs/skills.md) — how filmmaking skills route agent requests
+- 🚀 [Setup and agents](docs/setup.md) — choose Docker or host mode, configure Claude/Codex, and understand ports, auth, and permissions
+- 🏗 [Architecture](docs/architecture.md) — viewer, CLI, canvas, and project-file layout
+- ❓ [FAQ](docs/faq.md) — common setup and generation issues
 - 🐛 [Issues](https://github.com/Utopai-Research/pai-pro/issues) — bug reports only
+- 🤝 [Contributing](CONTRIBUTING.md) — contribution guide, proprietary-skills carve-out, and CLA flow
 
 ## License
 
 PAI-Pro is released under the [PAI PRO Sustainable Use License](LICENSE.md), which permits personal use, non-commercial research, and internal business use. Commercial use of PAI-Pro Skills or enterprise-designated source code/Skills requires an explicit agreement; [enterprise licenses](mailto:enterprise@utopaistudios.com) are available.
-
-## Contributing
-
-Found a bug 🐛 or have a feature idea ✨? See [CONTRIBUTING.md](CONTRIBUTING.md) for the contribution guide, the proprietary-skills carve-out, and the CLA flow.

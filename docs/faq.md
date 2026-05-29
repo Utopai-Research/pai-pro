@@ -36,11 +36,11 @@ Per call: image ~$0.07–0.15 / voice $0.01 per 500 chars / asset upload $0.01 p
 
 ## Docker vs host mode — which do I want?
 
-[docs/development.md](development.md) has the full comparison. Short answer: Docker for trying it / daily filmmaking; host mode for hacking on pai-pro source itself.
+[docs/setup.md](setup.md) has the full comparison. Short answer: Docker for trying it / daily filmmaking; host mode for hacking on pai-pro source itself.
 
 ## Can I use a different AI coding agent?
 
-Claude Code and Codex CLI are wired with the embedded terminal. New projects default to Claude; start host mode with `PAI_DEFAULT_AGENT_ID=codex ./scripts/start.sh` or Docker with `PAI_DEFAULT_AGENT_ID=codex docker compose up --build` to create Codex-owned projects. Cursor and Gemini can use the skills from their own shells, but they do not have embedded terminal providers yet — see [docs/agents.md](agents.md).
+Claude Code and Codex CLI are wired with the embedded terminal. New projects default to Claude; start host mode with `PAI_DEFAULT_AGENT_ID=codex ./scripts/start.sh` or Docker with `PAI_DEFAULT_AGENT_ID=codex docker compose up --build` to create Codex-owned projects. See [docs/setup.md](setup.md#agent-support).
 
 ## Why does `/healthz` not require both agents?
 
