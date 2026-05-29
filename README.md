@@ -37,7 +37,7 @@ Use Claude Code or Codex to install PAI-Pro for you. Paste this into your agent:
 
 | Choice | Use this when | Notes |
 | --- | --- | --- |
-| <img src="https://cdn.jsdelivr.net/npm/simple-icons/icons/anthropic.svg" alt="Anthropic" width="16" height="16" /> **[Claude Code][claude-code-url]** | You want the default agent | `./scripts/setup --agent claude` |
+| <img src="https://cdn.jsdelivr.net/npm/simple-icons/icons/anthropic.svg" alt="Anthropic" width="16" height="16" /> **[Claude Code][claude-code-url]** | You want Claude Code | `./scripts/setup --agent claude` |
 | <img src="https://cdn.jsdelivr.net/gh/glincker/thesvg@main/public/icons/openai/light.svg" alt="OpenAI" width="16" height="16" /> **[Codex][codex-url]** | You want OpenAI Codex | `./scripts/setup --agent codex` and `PAI_DEFAULT_AGENT_ID=codex` |
 | **Docker** | You want the simplest install | `docker compose up --build`, then open <http://localhost:7588> |
 | **Local** | You want development / HMR | `./scripts/start.sh`, then open <http://localhost:7443> |
