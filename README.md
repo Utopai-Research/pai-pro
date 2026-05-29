@@ -33,7 +33,7 @@ PAI-Pro is a local-first AI filmmaking workspace built around four things:
 
 Use Claude Code or Codex to install PAI-Pro for you. Paste this into your agent:
 
-> Clone `https://github.com/Utopai-Research/pai-pro`, set it up for my current agent, ask me for my `PAI_KEY`, then start PAI-Pro. Use Docker unless I ask for local development.
+> Clone `https://github.com/Utopai-Research/pai-pro`, read the setup docs in `README.md`, `docs/docker.md`, `docs/development.md`, and `docs/agents.md`, then install PAI-Pro for my current agent. Ask me for my `PAI_KEY`, use Docker unless I ask for local development, and start the app when setup is complete.
 
 | Choice | Use this when | Notes |
 | --- | --- | --- |
