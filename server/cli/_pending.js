@@ -22,7 +22,7 @@ import {
   normalizeResultForWrite,
 } from "../lib/generation_result_normalize.js";
 import {
-  AGENT_RESULT_CONSUMER_HEADER,
+  GENERATION_RESULT_CONSUMER_HEADER,
   WAITING_CLI_RESULT_CONSUMER,
 } from "../lib/continuation_events.js";
 
@@ -160,7 +160,7 @@ export async function fireAndWait({ projectId, jobId, kind, timeoutMs } = {}) {
     response = await fetch(url, {
       method: "POST",
       headers: {
-        [AGENT_RESULT_CONSUMER_HEADER]: WAITING_CLI_RESULT_CONSUMER,
+        [GENERATION_RESULT_CONSUMER_HEADER]: WAITING_CLI_RESULT_CONSUMER,
       },
     });
   } catch (e) {

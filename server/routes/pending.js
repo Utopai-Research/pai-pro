@@ -16,7 +16,7 @@ import path from "node:path";
 
 import { getCost } from "../model_registry.js";
 import {
-  AGENT_RESULT_CONSUMER_HEADER,
+  GENERATION_RESULT_CONSUMER_HEADER,
   WAITING_CLI_RESULT_CONSUMER,
 } from "../lib/continuation_events.js";
 import { enqueueGenerationContinuation } from "../lib/generation_continuations.js";
@@ -54,7 +54,7 @@ function pendingPath(id, jobId) {
 }
 
 function hasWaitingCliConsumer(req) {
-  return String(req.get(AGENT_RESULT_CONSUMER_HEADER) || "").toLowerCase()
+  return String(req.get(GENERATION_RESULT_CONSUMER_HEADER) || "").toLowerCase()
     === WAITING_CLI_RESULT_CONSUMER;
 }
 

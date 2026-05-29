@@ -331,7 +331,7 @@ test("POST /generate with waiting-cli consumer header suppresses continuation ev
   });
   const r = await fetch(`${baseUrl}/projects/${TEST_PROJECT_ID}/pending/${jobId}/generate`, {
     method: "POST",
-    headers: { "X-PAI-Agent-Result-Consumer": "waiting-cli" },
+    headers: { "X-PAI-Generation-Result-Consumer": "waiting-cli" },
   });
   assert.equal(r.status, 202);
 

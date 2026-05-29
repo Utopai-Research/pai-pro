@@ -208,52 +208,6 @@ test("resolveAgentBypass defaults on and only falsy strings disable it", () => {
   }
 });
 
-test("providers submit notifications as text followed by a separate enter", async () => {
-  for (const id of ["claude", "codex"]) {
-    const provider = getProvider(id);
-    const writes = [];
-    const result = await provider.submitAgentNotification({
-      text: "manual follow-up\nhello",
-      phaseGapMs: 0,
-      write: (data) => writes.push(data),
-    });
-    assert.equal(result.ok, true, id);
-    assert.deepEqual(writes, [
-      "manual follow-up\nhello",
-      "\r",
-    ], id);
-  }
-});
-
-test("providers reject empty notification text before writing", async () => {
-  for (const id of ["claude", "codex"]) {
-    const provider = getProvider(id);
-    const writes = [];
-    const result = await provider.submitAgentNotification({
-      text: "",
-      phaseGapMs: 0,
-      write: (data) => writes.push(data),
-    });
-    assert.equal(result.ok, false, id);
-    assert.equal(result.reason, "empty_input", id);
-    assert.deepEqual(writes, [], id);
-  }
-});
-
-test("providers report unconfirmed submit when output confirmation is required", async () => {
-  for (const id of ["claude", "codex"]) {
-    const provider = getProvider(id);
-    const result = await provider.submitAgentNotification({
-      text: "manual follow-up\nhello",
-      phaseGapMs: 0,
-      write: () => {},
-      waitForOutput: async () => false,
-    });
-    assert.equal(result.ok, false, id);
-    assert.equal(result.reason, "unconfirmed_submit", id);
-  }
-});
-
 test("claude continuation command is non-interactive and capped", () => {
   const schema = { type: "object" };
   const built = buildClaudeContinuationCommand({

@@ -122,7 +122,7 @@ test("fireAndWait maps viewer 404 to existing bad_args taxonomy", async () => {
   const { fireAndWait } = await import(`../cli/_pending.js?fire=${Date.now()}`);
   let seenConsumer = null;
   const server = createServer((req, res) => {
-    seenConsumer = req.headers["x-pai-agent-result-consumer"] ?? null;
+    seenConsumer = req.headers["x-pai-generation-result-consumer"] ?? null;
     res.writeHead(404, { "content-type": "application/json" });
     res.end(JSON.stringify({ error: "draft not found" }));
   });

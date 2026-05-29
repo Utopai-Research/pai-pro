@@ -3,7 +3,7 @@ import path from "node:path";
 
 import { continuationEventsDir } from "./paths.js";
 
-export const AGENT_RESULT_CONSUMER_HEADER = "x-pai-agent-result-consumer";
+export const GENERATION_RESULT_CONSUMER_HEADER = "x-pai-generation-result-consumer";
 export const WAITING_CLI_RESULT_CONSUMER = "waiting-cli";
 
 const KIND = "generation_result";
@@ -178,9 +178,4 @@ export async function markContinuationEventsFailed(
       },
     });
   }));
-}
-
-export function resetContinuationEventStateForTests() {
-  // Kept for symmetry with the old notification module. This module has no
-  // process-local timers.
 }

@@ -9,8 +9,6 @@ import {
   readContinuationEvents,
 } from "./continuation_events.js";
 import {
-  AGENT_CONTINUATIONS_BUNDLE_LIMIT,
-  compareContinuations,
   readAgentContinuation,
   writeAgentContinuation,
 } from "./agent_continuations.js";
@@ -480,10 +478,4 @@ export function resetGenerationContinuationStateForTests() {
   config.retryDelayMs = DEFAULT_RETRY_DELAY_MS;
   config.batchLimit = DEFAULT_BATCH_LIMIT;
   config.workerRunner = null;
-}
-
-export function continuationStateForProject(project) {
-  return Array.from(project?.agentContinuations?.values() ?? [])
-    .sort(compareContinuations)
-    .slice(0, AGENT_CONTINUATIONS_BUNDLE_LIMIT);
 }

@@ -55,30 +55,11 @@ import { writeMeta } from "../lib/writers.js";
 const ptys = new Map();
 const socketAttach = new Map();           // socket.id -> projectId
 const PTY_BUFFER_CAP = 256 * 1024;        // 256 KB rolling tail; xterm scrollback handles the rest
-let registeredProjects = null;
 let registeredIo = null;
-let registeredNodePty = null;
 
 function writePtyInput(entry, data) {
   entry.lastInputAt = Date.now();
   entry.pty.write(data);
-}
-
-function waitForPtyData(entry, { timeoutMs = 2000 } = {}) {
-  return new Promise((resolve) => {
-    const waiter = () => {
-      clearTimeout(timer);
-      entry.dataWaiters?.delete(waiter);
-      resolve(true);
-    };
-    const timer = setTimeout(() => {
-      entry.dataWaiters?.delete(waiter);
-      resolve(false);
-    }, Math.max(1, Number(timeoutMs) || 2000));
-    timer.unref?.();
-    if (!entry.dataWaiters) entry.dataWaiters = new Set();
-    entry.dataWaiters.add(waiter);
-  });
 }
 
 function detachSocket(socketId) {
@@ -121,55 +102,6 @@ export async function persistDiscoveredAgentSession(projectId, project, session)
     if (priorSessionId === undefined) delete project.meta.agent_session_id;
     else project.meta.agent_session_id = priorSessionId;
     throw e;
-  }
-}
-
-export async function submitAgentNotification(projectId, text, { requireIdleMs = 1500 } = {}) {
-  let entry = ptys.get(projectId);
-  if (!entry) {
-    const spawned = await ensureProjectPty(projectId);
-    if (!spawned.ok) return { ok: false, reason: spawned.reason || "no_pty" };
-    return { ok: false, reason: "busy", idleForMs: 0 };
-  }
-  if (typeof text !== "string" || text.length === 0) {
-    return { ok: false, reason: "empty_input" };
-  }
-
-  const now = Date.now();
-  const lastActivityAt = Math.max(
-    entry.createdAt || 0,
-    entry.lastDataAt || 0,
-    entry.lastInputAt || 0,
-  );
-  const idleForMs = Math.max(0, now - lastActivityAt);
-  const required = Math.max(0, Number(requireIdleMs) || 0);
-  if (idleForMs < required) {
-    return { ok: false, reason: "busy", idleForMs };
-  }
-
-  const project = registeredProjects?.get(projectId) ?? null;
-  const provider = entry.provider || getProvider(resolveAgentIdForMeta(project?.meta));
-  if (!provider || typeof provider.submitAgentNotification !== "function") {
-    return { ok: false, reason: "unsupported_provider" };
-  }
-
-  try {
-    const submit = await provider.submitAgentNotification({
-      projectId,
-      meta: project?.meta,
-      text,
-      write: (data) => writePtyInput(entry, data),
-      waitForOutput: (opts) => waitForPtyData(entry, opts),
-    });
-    if (submit?.ok) return { ok: true, idleForMs };
-    return {
-      ok: false,
-      reason: submit?.reason || "write_failed",
-      ...(submit?.message ? { message: submit.message } : {}),
-      idleForMs,
-    };
-  } catch (e) {
-    return { ok: false, reason: "write_failed", message: e.message, idleForMs };
   }
 }
 
@@ -234,15 +166,15 @@ function launchAgentWhenReady({ projectId, project, entry, provider }) {
   }, 500);
 }
 
-function createPtyEntry({ projectId, project, cols = 80, rows = 24, subscribers = new Set() }) {
-  if (!registeredNodePty) return { ok: false, reason: "no_pty" };
+function createPtyEntry({ projectId, project, nodePty, cols = 80, rows = 24, subscribers = new Set() }) {
+  if (!nodePty) return { ok: false, reason: "no_pty" };
   const agentId = resolveAgentIdForMeta(project?.meta);
   const provider = getProvider(agentId);
   if (!provider) return { ok: false, reason: "unsupported_provider" };
 
   let pty;
   try {
-    pty = registeredNodePty.spawn(process.env.SHELL || "/bin/zsh", ["-l"], {
+    pty = nodePty.spawn(process.env.SHELL || "/bin/zsh", ["-l"], {
       name: "xterm-256color",
       cols,
       rows,
@@ -260,14 +192,12 @@ function createPtyEntry({ projectId, project, cols = 80, rows = 24, subscribers 
     createdAt: Date.now(),
     lastDataAt: 0,
     lastInputAt: Date.now(),
-    dataWaiters: new Set(),
     provider,
   };
   ptys.set(projectId, entry);
 
   pty.onData((data) => {
     entry.lastDataAt = Date.now();
-    for (const waiter of Array.from(entry.dataWaiters)) waiter();
     entry.buffer += data;
     if (entry.buffer.length > PTY_BUFFER_CAP) {
       entry.buffer = entry.buffer.slice(-PTY_BUFFER_CAP);
@@ -286,14 +216,6 @@ function createPtyEntry({ projectId, project, cols = 80, rows = 24, subscribers 
 
   launchAgentWhenReady({ projectId, project, entry, provider });
   return { ok: true, entry, pid: pty.pid };
-}
-
-async function ensureProjectPty(projectId) {
-  const existing = ptys.get(projectId);
-  if (existing) return { ok: true, entry: existing, attached: true };
-  const project = registeredProjects?.get(projectId);
-  if (!projectId || !project) return { ok: false, reason: "no_project" };
-  return createPtyEntry({ projectId, project });
 }
 
 // Wire the pty:* handlers onto a single socket. The fresh-spawn vs.
@@ -334,6 +256,7 @@ function registerSocketPtyHandlers({ socket, io, projects, nodePty }) {
     const created = createPtyEntry({
       projectId,
       project,
+      nodePty,
       cols,
       rows,
       subscribers: new Set([socket.id]),
@@ -378,9 +301,7 @@ function registerSocketPtyHandlers({ socket, io, projects, nodePty }) {
 // Single entry point: wire the io-level asset-event listener once, then
 // register the per-socket subscribe + pty handlers on every connect.
 export function registerSocketHandlers({ io, projects, nodePty }) {
-  registeredProjects = projects;
   registeredIo = io;
-  registeredNodePty = nodePty;
   // Forward asset-preupload status updates to the project's room.
   // Terminal-state persistence (active / rejected) is handled separately
   // by services/asset_sync.js, which dispatches a mutator updateNode
