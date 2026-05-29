@@ -22,12 +22,12 @@
 
 ## What's PAI-Pro?
 
-PAI-Pro is a local-first AI filmmaking workspace: project-aware `SKILL.md` skills, a React Flow production canvas, a timeline, and an embedded coding-agent terminal in one app. From Claude Code or Codex, you can write scenes, design characters and locations, generate image / video / voice assets, arrange shots, and keep every project's `workflow.json` plus generated media on disk. Nothing leaves your machine except the actual generation calls. Built by [Utopai Studios](https://www.utopaistudios.com/).
+PAI-Pro is a local-first AI filmmaking workspace built to run with your own Claude Code or Codex session: project-aware `SKILL.md` skills, a React Flow production canvas, a timeline, and an embedded coding-agent terminal in one app. From your agent, you can write scenes, design characters and locations, generate image / video / voice assets, arrange shots, and keep every project's `workflow.json` plus generated media on disk. Nothing leaves your machine except the actual generation calls. Built by [Utopai Studios](https://www.utopaistudios.com/).
 
 - **Create** with filmmaking skills for scripts, images, videos, voice, groups, notes, and summaries. ([Reference →](docs/skills.md))
 - **Organize** character, location, image, video, and note nodes on a grouped React Flow canvas.
 - **Cut** clips on the Timeline tab with drag-to-reel sequencing, reordering, scrubbing, and playback.
-- **Work from your agent** with Claude Code or Codex in a real PTY terminal that resumes project context. ([Compatibility →](docs/agents.md))
+- **Work from your own agent** with Claude Code or Codex in a real PTY terminal that resumes project context. ([Compatibility →](docs/agents.md))
 
 ## Agent support
 
