@@ -5,6 +5,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 
 import { projectDir } from "../lib/paths.js";
+import { resolveAgentBypass } from "./bypass.js";
 
 const execAsync = promisify(exec);
 const CODEX_SESSION_ORIGINATOR = "codex-tui";
@@ -32,18 +33,25 @@ function codexSessionsRoot(env = process.env) {
   return path.join(codexHome, "sessions");
 }
 
-function optionSuffix(meta = {}) {
+function optionSuffix(meta = {}, env) {
+  const bypass = resolveAgentBypass(env);
   const parts = ["--no-alt-screen"];
+  if (bypass) {
+    parts.push("--dangerously-bypass-approvals-and-sandbox");
+  }
   if (safeModelValue(meta.agent_model)) {
     parts.push("--model", meta.agent_model);
   }
   if (safeSetValue(meta.agent_effort, EFFORT_VALUES)) {
     parts.push("-c", `model_reasoning_effort="${meta.agent_effort}"`);
   }
-  if (safeSetValue(meta.agent_sandbox, SANDBOX_VALUES)) {
+  // The bypass flag subsumes sandbox + approval, and codex refuses to start
+  // when either is passed alongside it. Only emit the explicit policies when
+  // the bypass is off.
+  if (!bypass && safeSetValue(meta.agent_sandbox, SANDBOX_VALUES)) {
     parts.push("--sandbox", meta.agent_sandbox);
   }
-  if (safeSetValue(meta.agent_approval_mode, APPROVAL_VALUES)) {
+  if (!bypass && safeSetValue(meta.agent_approval_mode, APPROVAL_VALUES)) {
     parts.push("--ask-for-approval", meta.agent_approval_mode);
   }
   return parts.join(" ");
@@ -179,12 +187,12 @@ export const codexProvider = {
   id: "codex",
   label: "Codex",
 
-  buildLaunchCommand({ meta } = {}) {
-    return `codex ${optionSuffix(meta)}\r`;
+  buildLaunchCommand({ meta, env } = {}) {
+    return `codex ${optionSuffix(meta, env)}\r`;
   },
 
-  buildResumeCommand({ meta } = {}) {
-    return `codex resume --last ${optionSuffix(meta)}\r`;
+  buildResumeCommand({ meta, env } = {}) {
+    return `codex resume --last ${optionSuffix(meta, env)}\r`;
   },
 
   filterEnv(env) {

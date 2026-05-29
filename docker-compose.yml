@@ -33,6 +33,10 @@ services:
       # Controls only the default owner for newly-created projects.
       # Existing projects keep their saved meta.json agent_id.
       PAI_DEFAULT_AGENT_ID: "${PAI_DEFAULT_AGENT_ID:-}"
+      # Per-project agents bypass their permission/sandbox guardrails by
+      # default (safe inside this container). Set PAI_AGENT_BYPASS=0 to
+      # restore prompts. Empty = on, matching the in-code default.
+      PAI_AGENT_BYPASS: "${PAI_AGENT_BYPASS:-}"
       # Re-read for the viewer's boot banner so users see the URL they
       # should actually open, not the container-internal port.
       HOST_VIEWER_PORT: "${HOST_VIEWER_PORT:-7588}"

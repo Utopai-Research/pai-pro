@@ -62,6 +62,18 @@ Host-to-container Codex session resume is intentionally not supported because Co
 
 For non-interactive enterprise access-token workflows, pipe the token into `codex login --with-access-token` inside the container as documented by Codex. Do not set `CODEX_ACCESS_TOKEN` as a passive compose environment variable; Codex does not use it that way.
 
+## Agent permissions
+
+Each project's agent launches with its permission/sandbox guardrails bypassed by default — `claude --dangerously-skip-permissions` for Claude, `codex --dangerously-bypass-approvals-and-sandbox` for Codex — so it can edit project files and run the media CLIs without stopping to ask. The agent only ever runs in its project's own cwd, and the container is the "externally sandboxed environment" Codex's flag is intended for (non-root `node` user, isolated `pai_projects` volume).
+
+To restore the normal permission prompts, set `PAI_AGENT_BYPASS=0`:
+
+```bash
+PAI_AGENT_BYPASS=0 docker compose up --build
+```
+
+This matters most for **host mode** (`./scripts/start.sh`), where there is no container boundary — a bypassed agent can touch anything the viewer's user can. Turn the bypass off there if you ever feed the agent untrusted prompts. Any value other than `0`/`false`/`no`/`off` (or leaving it unset) keeps the bypass on.
+
 ## Ports
 
 Container port `:7488` maps to host `:7588`. This is intentional so a parallel `./scripts/start.sh` host-mode setup on `:7488` keeps working alongside Docker. Set `HOST_VIEWER_PORT=7488` in `.env` if you don't run host mode and want the canonical port.

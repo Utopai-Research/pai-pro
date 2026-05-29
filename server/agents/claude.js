@@ -5,6 +5,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 
 import { projectDir } from "../lib/paths.js";
+import { resolveAgentBypass } from "./bypass.js";
 
 const execAsync = promisify(exec);
 const CLAUDE_PROJECTS_ROOT = path.join(os.homedir(), ".claude", "projects");
@@ -17,7 +18,7 @@ function claudeSessionDir(projectId) {
   return path.join(CLAUDE_PROJECTS_ROOT, projectDir(projectId).replace(/[/_.]/g, "-"));
 }
 
-function flagsSuffix(meta = {}) {
+function flagsSuffix(meta = {}, env) {
   const model =
     safeCliValue(meta.agent_model) ? meta.agent_model
     : safeCliValue(meta.claude_model) ? meta.claude_model
@@ -26,7 +27,8 @@ function flagsSuffix(meta = {}) {
     safeCliValue(meta.agent_effort) ? meta.agent_effort
     : safeCliValue(meta.claude_effort) ? meta.claude_effort
     : "max";
-  return `--model ${model} --effort ${effort}`;
+  const bypass = resolveAgentBypass(env) ? "--dangerously-skip-permissions " : "";
+  return `${bypass}--model ${model} --effort ${effort}`;
 }
 
 async function binaryOk(name) {
@@ -70,12 +72,12 @@ export const claudeProvider = {
   id: "claude",
   label: "Claude",
 
-  buildLaunchCommand({ meta } = {}) {
-    return `claude ${flagsSuffix(meta)}\r`;
+  buildLaunchCommand({ meta, env } = {}) {
+    return `claude ${flagsSuffix(meta, env)}\r`;
   },
 
-  buildResumeCommand({ meta } = {}) {
-    return `claude --continue ${flagsSuffix(meta)}\r`;
+  buildResumeCommand({ meta, env } = {}) {
+    return `claude --continue ${flagsSuffix(meta, env)}\r`;
   },
 
   filterEnv(env) {
