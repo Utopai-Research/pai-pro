@@ -22,12 +22,14 @@
 
 ## What's PAI-Pro?
 
-PAI-Pro is a local-first AI filmmaking workspace built to run with **your own Claude Code or Codex session**: project-aware filmmaking tools, a visual production canvas, a timeline, and an embedded coding-agent terminal in one app. From your agent, you can write scenes, design characters and locations, generate image / video / voice assets, arrange shots, and keep every project's files and generated media organized on disk. Nothing leaves your machine except the actual generation calls.
+PAI-Pro is a local-first AI filmmaking workspace built around four things:
 
-- **Create** with filmmaking skills for scripts, images, videos, voice, groups, notes, and summaries. ([Reference →](docs/skills.md))
-- **Organize** character, location, image, video, and note nodes on a grouped React Flow canvas.
-- **Cut** clips on the Timeline tab with drag-to-reel sequencing, reordering, scrubbing, and playback.
-- **Work from your own agent** with Claude Code or Codex in a real PTY terminal that resumes project context. ([Compatibility →](docs/agents.md))
+1. **Your own [Claude Code][claude-code-url] or [Codex][codex-url]**, capable agents connected to local project files, persistent context, and customized filmmaking workflows.
+2. **End-to-end filmmaking skills** for scripts, images, videos, and voice. ([More skill details](docs/skills.md))
+3. **A visual canvas and timeline** for designing scenes, managing assets, arranging shots, and keeping larger productions organized.
+4. **One API service for story media** across image, video, and voice, so productions do not need separate providers for each step.
+
+Nothing leaves your machine except the actual generation calls.
 
 ## Agent support
 
