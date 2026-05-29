@@ -42,21 +42,21 @@ Use Claude Code or Codex to install PAI-Pro for you. Paste this into your agent:
 
 Open Docker at <http://localhost:7588> or local at <http://localhost:7443>.
 
-## API service
+## API Service
 
 `PAI_KEY` gives each production one API service for story media across image, video, and voice, so you do not have to wire separate providers for every step. Get a key and monitor your balance at <a href="https://pai-pro.utopaistudios.com/keys" target="_blank" rel="noopener noreferrer">https://pai-pro.utopaistudios.com/keys</a>. Paid generations are staged first and only run when you explicitly fire a draft.
 
-| Capability | Generation quality | Estimated price |
+| Capability | Time | Estimated price |
 |---|---|---|
-| [`generate_image`](server/cli/generate_image.js) | Nano Banana 2 | $0.07 at 1K, $0.10 at 2K, $0.15 at 4K |
-| [`generate_image_pro`](server/cli/generate_image_pro.js) | GPT Image 2 | $0.26 at 1K, $0.45 at 2K, $0.77 at 4K |
-| [`generate_video`](server/cli/generate_video.js) | Seedance 2 | $0.08/sec at 480p, $0.20/sec at 720p, $0.44/sec at 1080p |
-| [`generate_voice`](server/cli/generate_voice.js) | Qwen TTS | $0.01 per 500 input characters, rounded up |
+| [`generate_image`](server/cli/generate_image.js) | ~10-30s | $0.07 at 1K, $0.10 at 2K, $0.15 at 4K |
+| [`generate_image_pro`](server/cli/generate_image_pro.js) | ~3-6 min | $0.26 at 1K, $0.45 at 2K, $0.77 at 4K |
+| [`generate_video`](server/cli/generate_video.js) | ~2-4 min | $0.08/sec at 480p, $0.20/sec at 720p, $0.44/sec at 1080p |
+| [`generate_voice`](server/cli/generate_voice.js) | ~5-15s | $0.01 per 500 input characters, rounded up |
 
 ## Resources
 
 - 💬 [Discord][discord-url] — questions, ideas, support, and show & tell
-- ⚙️ [API service](docs/api_service.md) — generation quality, pricing, and <a href="https://pai-pro.utopaistudios.com/keys" target="_blank" rel="noopener noreferrer">PAI developer platform</a> keys and balance
+- ⚙️ [API Service](docs/api_service.md) — generation time, pricing, and <a href="https://pai-pro.utopaistudios.com/keys" target="_blank" rel="noopener noreferrer">PAI developer platform</a> keys and balance
 - 🎬 [Skills reference](docs/skills.md) — how filmmaking skills route agent requests
 - 🚀 [Setup and agents](docs/setup.md) — choose Docker or host mode, configure Claude/Codex, and understand ports, auth, and permissions
 - 🏗 [Architecture](docs/architecture.md) — viewer, CLI, canvas, and project-file layout
