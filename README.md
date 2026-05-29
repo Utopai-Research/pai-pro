@@ -63,13 +63,7 @@ Open Docker at <http://localhost:7588> or local at <http://localhost:7443>.
 
 ## License
 
-Released under the [PAI PRO Sustainable Use License](LICENSE.md) by [Utopai Studios](https://www.utopaistudios.com/).
-
-- **Source available** — visible source code
-- **Self-hostable** — runs entirely on your machine
-- **Skill-extensible** — write your own filmmaking skills
-
-[Enterprise licenses](mailto:enterprise@utopaistudios.com) available for commercial use beyond the personal-and-internal-business scope.
+PAI-Pro is released under the [PAI PRO Sustainable Use License](LICENSE.md), which permits personal use, non-commercial research, and internal business use. Commercial use of PAI-Pro Skills or enterprise-designated source code/Skills requires an explicit agreement; [enterprise licenses](mailto:enterprise@utopaistudios.com) are available.
 
 ## Contributing
 
