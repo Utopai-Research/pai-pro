@@ -29,8 +29,6 @@ PAI-Pro is a local-first AI filmmaking workspace built around four things:
 - **A visual canvas and timeline** for designing scenes, managing assets, arranging shots, and keeping larger productions organized.
 - **One API service for story media** across image, video, and voice, so productions do not need separate providers for each step.
 
-Nothing leaves your machine except the actual generation calls.
-
 ## Agent support
 
 | Agent | How to start |
