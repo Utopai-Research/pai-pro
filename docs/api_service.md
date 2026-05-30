@@ -8,9 +8,10 @@ from `PAI_KEY` and sends media requests through the API contract below.
 
 Use PAI-Pro's API service when you want:
 
-- One `PAI_KEY` for image, image pro, video, voice, and video reference uploads.
-- Less restrictive video-generation moderation than many other vendors, while
-  still keeping provider safety failures in one consistent error model.
+- One `PAI_KEY` for image, image pro, video, and voice generation. You do not
+  need separate keys from different providers for each step.
+- **Less restrictive video-generation moderation** via asset preupload, with a
+  significantly higher pass rate than many other vendors.
 
 ## API Contract and JSON Payloads
 
