@@ -27,7 +27,7 @@ PAI-Pro is a local-first AI filmmaking workspace built around four things:
 - **Your own [Claude Code][claude-code-url] or [Codex][codex-url]**, capable agents connected to local project files, persistent context, and customized filmmaking workflows.
 - **End-to-end filmmaking skills** for scripts, images, videos, and voice. ([More skill details](docs/skills.md))
 - **A visual canvas and timeline** for designing scenes, managing assets, arranging shots, and keeping larger productions organized.
-- **One API service for story media** across image, video, and voice, so productions do not need separate providers for each step.
+- **One API service for story media** across image, video, and voice, so productions do not need separate providers for each step. ([API service details](docs/api_service.md))
 
 ## Quick start
 
