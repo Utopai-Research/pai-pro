@@ -28,9 +28,8 @@ Closest public performance counterparts for BYOK experiments:
 | `video-generation` | [Replicate API](https://replicate.com/bytedance/seedance-2.0/api) |
 | `voice-design` | [Replicate API](https://replicate.com/qwen/qwen3-tts) |
 
-These links are only the closest public counterparts for custom integrations;
-they are not a statement about what PAI uses internally. For the full intended
-PAI-Pro behavior and 100% performance, use `PAI_KEY`.
+These links are only the closest public counterparts for custom integrations.
+For the full intended PAI-Pro behavior and 100% performance, use `PAI_KEY`.
 
 The detailed JSON payloads are below. If you want BYOK, ask your coding agent to
 replace the PAI media calls with your own API provider while preserving the local
