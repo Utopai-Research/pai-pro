@@ -68,6 +68,30 @@ async function binaryOk(name) {
   }
 }
 
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function submitAgentNotification({ text, write, waitForOutput, phaseGapMs = 500 } = {}) {
+  if (typeof write !== "function") return { ok: false, reason: "write_failed" };
+  const body = typeof text === "string" ? text.replace(/\r+$/g, "") : "";
+  if (body.length === 0) return { ok: false, reason: "empty_input" };
+  try {
+    write(body);
+    await sleep(Math.max(0, Number(phaseGapMs) || 0));
+    write("\r");
+    if (typeof waitForOutput === "function") {
+      const confirmed = await waitForOutput({ timeoutMs: 2000 });
+      if (!confirmed) {
+        return { ok: false, reason: "unconfirmed_submit", message: "no agent output after submit" };
+      }
+    }
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, reason: "write_failed", message: e.message };
+  }
+}
+
 async function normalizePathForCompare(rawPath) {
   if (typeof rawPath !== "string" || rawPath.trim() === "") return null;
   const resolved = path.resolve(rawPath);
@@ -228,6 +252,8 @@ export const codexProvider = {
   },
 
   ensureTrust: ensureCodexTrust,
+
+  submitAgentNotification,
 
   healthCheck() {
     return binaryOk("codex");

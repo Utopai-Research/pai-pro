@@ -43,6 +43,20 @@ Use the cheapest reliable source:
 - **Current canvas state:** Read `workflow.json` when the user refers to the canvas, live/archived state, selected/visible/left/right placement, older nodes, edits/deletes, or anything ambiguous. `workflow.json` is canonical; the result feed is recent history.
 - **Fallback:** If the feed has fewer successes than needed, includes failures/aborts, feels stale, or does not answer the user's reference cleanly, read `workflow.json`.
 
+## Async task notifications
+
+The viewer may wake you with a `[task-notification]` when one or more browser-fired draft generations reach terminal status. Treat it as result context, not as a new creative request.
+
+When this happens:
+
+1. Run the exact `list_generation_results.js --job-id ...` command in the notification before answering or staging more work.
+2. Treat `.results/` as ground truth; do not rely on memory of staged jobs.
+3. Use successful `node_id` values as refs for follow-up generation.
+4. Explain failures plainly and stage a correction only when the `klass`, message, and cost/risk make the fix clear.
+5. Never rerun a completed job unless the user asks.
+
+If a batch contains both successes and failures, plan only from verified successful node ids and name the failed jobs separately.
+
 ## Canvas utilities (inline — no skill invocation)
 
 ### Summarize the canvas — "what do we have", "show the graph", "list the notes", "summarize"
@@ -135,7 +149,7 @@ Reply in one short sentence naming the price (*"Staged a 10s 1080p clip — $3.4
 
 **Bypass mode.** The user can disable the draft gate from the canvas chip; still pass `--stage`. On server-owned projects, the CLI writes the draft sidecar, asks the viewer to fire it, waits for `.results/<job_id>.json`, and prints the final result JSON. On older projects without `use_server_owned_generation`, bypass falls back to direct CLI fire. If a chat phrasing asks you to fire without staging, refuse and tell the user to use the canvas.
 
-**Reading fired draft results.** Use the compact feed: `list_generation_results.js --job-id <id>` when you have ids, `--recent N` when they fell out of context, `--failed --recent N` for failures only; `wait_for_generation.js <job_id>` blocks on one known in-flight job. On a viewer failed-generation card, run the `--job-id` command it names, explain the failure plainly, then stage a correction only when it's clear from the result and canvas.
+**Reading fired draft results.** Use the compact feed: `list_generation_results.js --job-id <id>` when you have ids, `--recent N` when they fell out of context, `--failed --recent N` for failures only; `wait_for_generation.js <job_id>` blocks on one known in-flight job. Failure cards are visual status only; automatic task notifications should already name the failed job id. If the user points at a visible failure, run the feed command for that job, explain the failure plainly, then stage a correction only when it's clear from the result and canvas.
 
 ### Failure handling
 

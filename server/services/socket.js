@@ -25,6 +25,9 @@
 //   pty,                      // node-pty handle (carries its own cols/rows)
 //   buffer,                   // rolling stdout (last PTY_BUFFER_CAP bytes) for replay
 //   subscribers,              // Set<socket.id> currently attached
+//   createdAt, lastDataAt, lastInputAt,
+//   userInputDirty, notificationSubmitInProgress,
+//   provider,                  // owning provider shim for stdin protocol
 // }
 
 import {
@@ -40,6 +43,11 @@ import {
   projectIdFromCanvasUrl,
 } from "../lib/paths.js";
 import {
+  agentResultNotificationStatus,
+  configureAgentResultNotifications,
+  scheduleFlush,
+} from "../lib/agent_result_notifications.js";
+import {
   compareResultSummaries,
   GENERATION_RESULTS_BUNDLE_LIMIT,
 } from "../lib/readers.js";
@@ -48,6 +56,70 @@ import { writeMeta } from "../lib/writers.js";
 const ptys = new Map();
 const socketAttach = new Map();           // socket.id -> projectId
 const PTY_BUFFER_CAP = 256 * 1024;        // 256 KB rolling tail; xterm scrollback handles the rest
+let registeredProjects = null;
+let registeredIo = null;
+let registeredNodePty = null;
+
+function writePtyInput(entry, data, { source = "user" } = {}) {
+  entry.lastInputAt = Date.now();
+  if (source === "user") entry.lastUserInputAt = entry.lastInputAt;
+  entry.pty.write(data);
+}
+
+function stripAnsiControlSequences(data) {
+  return String(data || "")
+    .replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, "")
+    .replace(/\x1b\][\s\S]*?(?:\x07|\x1b\\)/g, "")
+    .replace(/\x1b./g, "");
+}
+
+function inputHasPrintableText(data) {
+  const stripped = stripAnsiControlSequences(data);
+  for (const ch of stripped) {
+    const code = ch.codePointAt(0);
+    if (code === undefined) continue;
+    if (code >= 0x20 && code !== 0x7f) return true;
+  }
+  return false;
+}
+
+function inputClearsDraft(data) {
+  const text = String(data || "");
+  return text.includes("\r")
+    || text.includes("\n")
+    || text.includes("\x03")
+    || text.includes("\x15");
+}
+
+function trackUserInput(entry, data) {
+  if (inputHasPrintableText(data)) entry.userInputDirty = true;
+  if (inputClearsDraft(data)) entry.userInputDirty = false;
+}
+
+function emitAgentNotificationStatus(projectId, payload) {
+  if (!projectId || !registeredIo) return;
+  registeredIo.to(projectId).emit("agent-notification-status", {
+    projectId,
+    ...payload,
+  });
+}
+
+function waitForPtyData(entry, { timeoutMs = 2000 } = {}) {
+  return new Promise((resolve) => {
+    const waiter = () => {
+      clearTimeout(timer);
+      entry.dataWaiters?.delete(waiter);
+      resolve(true);
+    };
+    const timer = setTimeout(() => {
+      entry.dataWaiters?.delete(waiter);
+      resolve(false);
+    }, Math.max(1, Number(timeoutMs) || 2000));
+    timer.unref?.();
+    if (!entry.dataWaiters) entry.dataWaiters = new Set();
+    entry.dataWaiters.add(waiter);
+  });
+}
 
 function detachSocket(socketId) {
   const projectId = socketAttach.get(socketId);
@@ -92,6 +164,65 @@ export async function persistDiscoveredAgentSession(projectId, project, session)
   }
 }
 
+export async function submitAgentNotification(projectId, text, { requireIdleMs = 1500 } = {}) {
+  const entry = ptys.get(projectId);
+  if (!entry) {
+    return { ok: false, reason: "no_pty" };
+  }
+  if (typeof text !== "string" || text.length === 0) {
+    return { ok: false, reason: "empty_input" };
+  }
+  if (entry.subscribers.size === 0) {
+    return { ok: false, reason: "no_subscriber" };
+  }
+  if (entry.notificationSubmitInProgress) {
+    return { ok: false, reason: "submit_in_progress" };
+  }
+  if (entry.userInputDirty) {
+    return { ok: false, reason: "unsafe_input" };
+  }
+
+  const now = Date.now();
+  const lastActivityAt = Math.max(
+    entry.createdAt || 0,
+    entry.lastDataAt || 0,
+    entry.lastInputAt || 0,
+  );
+  const idleForMs = Math.max(0, now - lastActivityAt);
+  const required = Math.max(0, Number(requireIdleMs) || 0);
+  if (idleForMs < required) {
+    return { ok: false, reason: "busy", idleForMs };
+  }
+
+  const project = registeredProjects?.get(projectId) ?? null;
+  const provider = entry.provider || getProvider(resolveAgentIdForMeta(project?.meta));
+  if (!provider || typeof provider.submitAgentNotification !== "function") {
+    return { ok: false, reason: "unsupported_provider" };
+  }
+
+  entry.notificationSubmitInProgress = true;
+  try {
+    const submit = await provider.submitAgentNotification({
+      projectId,
+      meta: project?.meta,
+      text,
+      write: (data) => writePtyInput(entry, data, { source: "notification" }),
+      waitForOutput: (opts) => waitForPtyData(entry, opts),
+    });
+    if (submit?.ok) return { ok: true, idleForMs };
+    return {
+      ok: false,
+      reason: submit?.reason || "write_failed",
+      ...(submit?.message ? { message: submit.message } : {}),
+      idleForMs,
+    };
+  } catch (e) {
+    return { ok: false, reason: "write_failed", message: e.message, idleForMs };
+  } finally {
+    entry.notificationSubmitInProgress = false;
+  }
+}
+
 // Walk a project's image_result nodes and pre-upload any whose canvas
 // URL isn't already in the cache. Used by subscribe to recover chip
 // state for projects re-opened across viewer restarts or asset
@@ -105,6 +236,110 @@ function backfillProjectAssets(p) {
     if (typeof localPath !== "string" || !localPath) continue;
     preuploadCanvasUrl({ projectId, localPath });
   }
+}
+
+function ptyEnv(provider) {
+  const passthroughEnv = provider.filterEnv(process.env);
+  return {
+    ...passthroughEnv,
+    TERM: "xterm-256color",
+    // Absolute path to the repo root, so the agent can invoke media CLIs
+    // as `"$PAI_REPO_ROOT/server/cli/<x>.js"` regardless of the
+    // per-project cwd. See the per-project PROJECT_AGENT.md media CLI table.
+    PAI_REPO_ROOT,
+    // Pad PATH so agent binaries resolve under whatever shell launched us.
+    PATH: [
+      "/opt/homebrew/bin",
+      "/usr/local/bin",
+      process.env.PATH || "",
+      `${process.env.HOME || ""}/.npm-global/bin`,
+      `${process.env.HOME || ""}/.local/bin`,
+    ].filter(Boolean).join(":"),
+  };
+}
+
+function launchAgentWhenReady({ projectId, project, entry, provider }) {
+  setTimeout(async () => {
+    let latest = null;
+    try { latest = await provider.findLatestSession(projectId); }
+    catch { /* fall back to fresh launch */ }
+    if (latest) {
+      persistDiscoveredAgentSession(projectId, project, latest).catch((e) => {
+        console.warn(`[viewer] failed to persist agent session for ${projectId}: ${e.message}`);
+      });
+    }
+    // When the permission bypass is on, also pre-trust the project folder so
+    // the agent's one-time workspace-trust prompt doesn't block the launch.
+    // Best-effort: a failure here just means the trust prompt appears once.
+    const cwd = projectDir(projectId);
+    if (resolveAgentBypass() && typeof provider.ensureTrust === "function") {
+      try { await provider.ensureTrust(cwd); }
+      catch (e) { console.warn(`[viewer] ensureTrust failed for ${projectId}: ${e.message}`); }
+    }
+    const input = { projectId, meta: project.meta, session: latest, env: process.env };
+    const cmd = latest
+      ? provider.buildResumeCommand(input)
+      : provider.buildLaunchCommand(input);
+    try { writePtyInput(entry, cmd, { source: "system" }); } catch {}
+    scheduleFlush(projectId, { delayMs: 3000 });
+  }, 500);
+}
+
+function createPtyEntry({ projectId, project, cols = 80, rows = 24, subscribers = new Set() }) {
+  if (!registeredNodePty) return { ok: false, reason: "no_pty" };
+  const agentId = resolveAgentIdForMeta(project?.meta);
+  const provider = getProvider(agentId);
+  if (!provider) return { ok: false, reason: "unsupported_provider" };
+
+  let pty;
+  try {
+    pty = registeredNodePty.spawn(process.env.SHELL || "/bin/zsh", ["-l"], {
+      name: "xterm-256color",
+      cols,
+      rows,
+      cwd: projectDir(projectId),
+      env: ptyEnv(provider),
+    });
+  } catch (e) {
+    return { ok: false, reason: "spawn_failed", message: e.message };
+  }
+
+  const entry = {
+    pty,
+    buffer: "",
+    subscribers,
+    createdAt: Date.now(),
+    lastDataAt: 0,
+    lastInputAt: Date.now(),
+    lastUserInputAt: 0,
+    userInputDirty: false,
+    notificationSubmitInProgress: false,
+    dataWaiters: new Set(),
+    provider,
+  };
+  ptys.set(projectId, entry);
+
+  pty.onData((data) => {
+    entry.lastDataAt = Date.now();
+    for (const waiter of Array.from(entry.dataWaiters)) waiter();
+    entry.buffer += data;
+    if (entry.buffer.length > PTY_BUFFER_CAP) {
+      entry.buffer = entry.buffer.slice(-PTY_BUFFER_CAP);
+    }
+    for (const sid of entry.subscribers) {
+      registeredIo?.sockets.sockets.get(sid)?.emit("pty:output", data);
+    }
+  });
+  pty.onExit((evt) => {
+    for (const sid of entry.subscribers) {
+      registeredIo?.sockets.sockets.get(sid)?.emit("pty:exit", evt);
+      socketAttach.delete(sid);
+    }
+    ptys.delete(projectId);
+  });
+
+  launchAgentWhenReady({ projectId, project, entry, provider });
+  return { ok: true, entry, pid: pty.pid };
 }
 
 // Wire the pty:* handlers onto a single socket. The fresh-spawn vs.
@@ -139,94 +374,23 @@ function registerSocketPtyHandlers({ socket, io, projects, nodePty }) {
       try { existing.pty.resize(cols, rows); } catch {}
       socket.emit("pty:spawned", { pid: existing.pty.pid, attached: true });
       if (existing.buffer) socket.emit("pty:output", existing.buffer);
+      scheduleFlush(projectId);
       return;
     }
 
-    const agentId = resolveAgentIdForMeta(project.meta);
-    const provider = getProvider(agentId);
-    if (!provider) {
-      socket.emit("pty:error", `no provider available for agent '${agentId}'`);
-      return;
-    }
-
-    // Fresh-spawn path.
-    const cwd = projectDir(projectId);
-    const passthroughEnv = provider.filterEnv(process.env);
-    const env = {
-      ...passthroughEnv,
-      TERM: "xterm-256color",
-      // Absolute path to the repo root, so the agent can invoke media CLIs
-      // as `"$PAI_REPO_ROOT/server/cli/<x>.js"` regardless of the
-      // per-project cwd. See the per-project PROJECT_AGENT.md media CLI table.
-      PAI_REPO_ROOT,
-      // Pad PATH so agent binaries resolve under whatever shell launched us.
-      PATH: [
-        "/opt/homebrew/bin",
-        "/usr/local/bin",
-        process.env.PATH || "",
-        `${process.env.HOME || ""}/.npm-global/bin`,
-        `${process.env.HOME || ""}/.local/bin`,
-      ].filter(Boolean).join(":"),
-    };
-    let pty;
-    try {
-      pty = nodePty.spawn(process.env.SHELL || "/bin/zsh", ["-l"], {
-        name: "xterm-256color",
-        cols, rows, cwd, env,
-      });
-    } catch (e) {
-      socket.emit("pty:error", `spawn failed: ${e.message}`);
-      return;
-    }
-    const entry = {
-      pty,
-      buffer: "",
+    const created = createPtyEntry({
+      projectId,
+      project,
+      cols,
+      rows,
       subscribers: new Set([socket.id]),
-    };
-    ptys.set(projectId, entry);
+    });
+    if (!created.ok) {
+      socket.emit("pty:error", created.message || `spawn failed: ${created.reason}`);
+      return;
+    }
     socketAttach.set(socket.id, projectId);
-
-    pty.onData((data) => {
-      entry.buffer += data;
-      if (entry.buffer.length > PTY_BUFFER_CAP) {
-        entry.buffer = entry.buffer.slice(-PTY_BUFFER_CAP);
-      }
-      for (const sid of entry.subscribers) {
-        io.sockets.sockets.get(sid)?.emit("pty:output", data);
-      }
-    });
-    pty.onExit((evt) => {
-      for (const sid of entry.subscribers) {
-        io.sockets.sockets.get(sid)?.emit("pty:exit", evt);
-        socketAttach.delete(sid);
-      }
-      ptys.delete(projectId);
-    });
-    socket.emit("pty:spawned", { pid: pty.pid, attached: false });
-    // Auto-launch the owning agent after the shell settles. Resume the most
-    // recent session in the project's cwd if the provider can find one.
-    setTimeout(async () => {
-      let latest = null;
-      try { latest = await provider.findLatestSession(projectId); }
-      catch { /* fall back to fresh launch */ }
-      if (latest) {
-        persistDiscoveredAgentSession(projectId, project, latest).catch((e) => {
-          console.warn(`[viewer] failed to persist agent session for ${projectId}: ${e.message}`);
-        });
-      }
-      // When the permission bypass is on, also pre-trust the project folder so
-      // the agent's one-time workspace-trust prompt doesn't block the launch.
-      // Best-effort: a failure here just means the trust prompt appears once.
-      if (resolveAgentBypass() && typeof provider.ensureTrust === "function") {
-        try { await provider.ensureTrust(cwd); }
-        catch (e) { console.warn(`[viewer] ensureTrust failed for ${projectId}: ${e.message}`); }
-      }
-      const input = { projectId, meta: project.meta, session: latest };
-      const cmd = latest
-        ? provider.buildResumeCommand(input)
-        : provider.buildLaunchCommand(input);
-      try { pty.write(cmd); } catch {}
-    }, 500);
+    socket.emit("pty:spawned", { pid: created.pid, attached: false });
   });
 
   socket.on("pty:input", (data) => {
@@ -234,7 +398,10 @@ function registerSocketPtyHandlers({ socket, io, projects, nodePty }) {
     if (!projectId) return;
     const entry = ptys.get(projectId);
     if (entry && typeof data === "string") {
-      try { entry.pty.write(data); } catch {}
+      if (entry.notificationSubmitInProgress) return;
+      trackUserInput(entry, data);
+      try { writePtyInput(entry, data, { source: "user" }); } catch {}
+      if (!entry.userInputDirty) scheduleFlush(projectId, { delayMs: 500 });
     }
   });
 
@@ -261,6 +428,13 @@ function registerSocketPtyHandlers({ socket, io, projects, nodePty }) {
 // Single entry point: wire the io-level asset-event listener once, then
 // register the per-socket subscribe + pty handlers on every connect.
 export function registerSocketHandlers({ io, projects, nodePty }) {
+  registeredProjects = projects;
+  registeredIo = io;
+  registeredNodePty = nodePty;
+  configureAgentResultNotifications({
+    submitAgentNotification,
+    publishStatus: emitAgentNotificationStatus,
+  });
   // Forward asset-preupload status updates to the project's room.
   // Terminal-state persistence (active / rejected) is handled separately
   // by services/asset_sync.js, which dispatches a mutator updateNode
@@ -297,6 +471,9 @@ export function registerSocketHandlers({ io, projects, nodePty }) {
         if (projectIdFromCanvasUrl(url) === projectId) projectEntries[url] = entry;
       }
       socket.emit("pai-assets-snapshot", { projectId, state: projectEntries });
+      agentResultNotificationStatus(projectId)
+        .then((status) => socket.emit("agent-notification-status", status))
+        .catch(() => {});
 
       // Backfill: re-pre-upload any image_result whose canvas URL isn't in the
       // cache yet. Lights up chips on projects re-opened across viewer restarts

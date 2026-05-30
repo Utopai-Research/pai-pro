@@ -38,6 +38,20 @@ import { getSocket, VIEWER_URL } from '@/lib/socket'
 import { ModelsProvider } from '@/lib/useModels'
 
 type CanvasTab = 'canvas' | 'timeline'
+type AgentNotificationStatusKind =
+  | 'idle'
+  | 'queued'
+  | 'waiting_for_input'
+  | 'sending'
+  | 'error'
+
+interface AgentNotificationStatus {
+  projectId: string
+  status: AgentNotificationStatusKind
+  pending: number
+  reason?: string
+  message?: string
+}
 
 const LS_RAIL_HIDDEN = 'pai-pro:asset-rail:hidden'
 
@@ -95,6 +109,24 @@ export default function CanvasView(): JSX.Element {
   // Subscribe at the outer layer so the Timeline tab gets workflow
   // updates without remounting CanvasPage's own subscription.
   const { workflow, bundle } = useWorkflow(projectId)
+  const [agentNotificationStatus, setAgentNotificationStatus] =
+    useState<AgentNotificationStatus | null>(null)
+
+  useEffect(() => {
+    if (projectId === null) {
+      setAgentNotificationStatus(null)
+      return undefined
+    }
+    const socket = getSocket()
+    const onStatus = (msg: AgentNotificationStatus): void => {
+      if (msg.projectId !== projectId) return
+      setAgentNotificationStatus(msg.pending > 0 || msg.status === 'sending' ? msg : null)
+    }
+    socket.on('agent-notification-status', onStatus)
+    return () => {
+      socket.off('agent-notification-status', onStatus)
+    }
+  }, [projectId])
 
   // Project title tracked locally so we can show optimistic edits +
   // listen for the server's `title` broadcasts (which fire on meta
@@ -251,11 +283,17 @@ export default function CanvasView(): JSX.Element {
         <Separator className="w-1 bg-border hover:bg-primary/40 transition-colors" />
         <Panel defaultSize={35} minSize={20} className="overflow-hidden">
           <div className="flex h-full w-full flex-col bg-[#0a0a0a]">
-            <AgentHeader agentLabel={bundle?.agent_label ?? null} />
+            <AgentHeader
+              agentLabel={bundle?.agent_label ?? null}
+              notificationStatus={agentNotificationStatus}
+            />
             <div className="relative flex-1 overflow-hidden">
               <div className="absolute inset-0">
                 {activated ? (
-                  <TerminalPanel projectId={projectId} />
+                  <TerminalPanel
+                    projectId={projectId}
+                    inputDisabled={agentNotificationStatus?.status === 'sending'}
+                  />
                 ) : (
                   <div className="h-full w-full bg-[#0a0a0a]" />
                 )}
@@ -447,7 +485,23 @@ function CanvasTabs({
   )
 }
 
-function AgentHeader({ agentLabel }: { agentLabel: string | null }): JSX.Element {
+function notificationStatusLabel(status: AgentNotificationStatus | null): string | null {
+  if (status === null) return null
+  if (status.status === 'sending') return 'Sending results'
+  if (status.status === 'waiting_for_input') return 'Waiting for draft'
+  if (status.status === 'error') return 'Result wake failed'
+  if (status.pending > 1) return `${status.pending} results ready`
+  return '1 result ready'
+}
+
+function AgentHeader({
+  agentLabel,
+  notificationStatus,
+}: {
+  agentLabel: string | null
+  notificationStatus: AgentNotificationStatus | null
+}): JSX.Element {
+  const statusLabel = notificationStatusLabel(notificationStatus)
   return (
     <div className="flex h-12 shrink-0 items-center justify-center gap-2 border-b border-neutral-800 bg-[#0a0a0a] px-2">
       <div className="flex items-center rounded-full border border-border bg-card p-0.5">
@@ -458,6 +512,14 @@ function AgentHeader({ agentLabel }: { agentLabel: string | null }): JSX.Element
       {agentLabel ? (
         <span className="text-[11px] font-medium uppercase tracking-wider text-neutral-500">
           {agentLabel}
+        </span>
+      ) : null}
+      {statusLabel !== null ? (
+        <span
+          className="ml-1 max-w-[12rem] truncate rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-200"
+          title={statusLabel}
+        >
+          {statusLabel}
         </span>
       ) : null}
     </div>
