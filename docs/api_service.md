@@ -12,6 +12,7 @@ Use PAI-Pro's API service when you want:
   need separate keys from different providers for each step.
 - **Less restrictive video-generation moderation** via asset preupload, with a
   significantly higher pass rate than many other vendors.
+- Support this project and the open-source filmmaking community.
 
 ## Bring Your Own Key
 
