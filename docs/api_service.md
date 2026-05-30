@@ -1,5 +1,13 @@
 # API Service
 
+Use PAI-Pro's API service when you want:
+
+- One `PAI_KEY` for image, image pro, video, voice, and video reference uploads.
+- Less restrictive video-generation moderation than many other vendors, while
+  still keeping provider safety failures in one consistent error model.
+
+## API Contract and JSON Payloads
+
 This page documents the API contract PAI-Pro expects from the media service.
 The README keeps the product overview and pricing summary; this file is for
 request payloads, return shapes, and bring-your-own-key guidance.
@@ -28,8 +36,6 @@ Synchronous calls use:
 `query_params` is only used by `video-generation-assets`. The service returns
 the upstream model response body; PAI-Pro's CLIs then decode the media, mirror it
 into `projects/<id>/assets/`, and print their own one-line CLI result.
-
-## JSON Payloads
 
 ### Standard Image
 
