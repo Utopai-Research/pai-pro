@@ -122,6 +122,7 @@ export async function readPendingEntry(id, jobId) {
     if (typeof parsed.source_node_id === "string" && parsed.source_node_id !== "") {
       out.source_node_id = parsed.source_node_id;
     }
+    if (parsed.origin && typeof parsed.origin === "object") out.origin = parsed.origin;
     return out;
   } catch (e) {
     if (e.code !== "ENOENT" && e.code !== "ENOTDIR") {
@@ -234,6 +235,7 @@ export function normalizeResultEntry(jobId, raw, { mtimeMs = 0 } = {}) {
   if (typeof raw.source_node_id === "string" && raw.source_node_id !== "") {
     out.source_node_id = raw.source_node_id;
   }
+  if (raw.origin && typeof raw.origin === "object") out.origin = raw.origin;
   if (raw.sent && typeof raw.sent === "object") out.sent = raw.sent;
   if (raw.limits && typeof raw.limits === "object") out.limits = raw.limits;
   return out;

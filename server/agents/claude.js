@@ -6,6 +6,12 @@ import { promisify } from "node:util";
 
 import { projectDir } from "../lib/paths.js";
 import { resolveAgentBypass } from "./bypass.js";
+import {
+  continuationBudgetUsd,
+  continuationTimeoutMs,
+  extractJsonObjectFromText,
+  runCommandWithStdin,
+} from "./continuation.js";
 
 const execAsync = promisify(exec);
 const CLAUDE_PROJECTS_ROOT = path.join(os.homedir(), ".claude", "projects");
@@ -29,6 +35,20 @@ function flagsSuffix(meta = {}, env) {
     : "max";
   const bypass = resolveAgentBypass(env) ? "--dangerously-skip-permissions " : "";
   return `${bypass}--model ${model} --effort ${effort}`;
+}
+
+function continuationModel(meta = {}) {
+  return safeCliValue(meta.agent_continuation_model) ? meta.agent_continuation_model
+    : safeCliValue(meta.agent_model) ? meta.agent_model
+    : safeCliValue(meta.claude_model) ? meta.claude_model
+    : "sonnet";
+}
+
+function continuationEffort(meta = {}) {
+  return safeCliValue(meta.agent_continuation_effort) ? meta.agent_continuation_effort
+    : safeCliValue(meta.agent_effort) ? meta.agent_effort
+    : safeCliValue(meta.claude_effort) ? meta.claude_effort
+    : "max";
 }
 
 async function binaryOk(name) {
@@ -66,6 +86,62 @@ async function findLatestSession(projectId) {
   }
   candidates.sort((a, b) => b.mtime - a.mtime);
   return candidates[0] ?? null;
+}
+
+export function buildClaudeContinuationCommand({ meta = {}, schema, env = process.env } = {}) {
+  const args = [
+    "-p",
+    "--output-format", "json",
+    "--json-schema", JSON.stringify(schema),
+    "--allowedTools", "",
+    "--no-session-persistence",
+    "--max-budget-usd", String(continuationBudgetUsd(meta, env)),
+    "--model", continuationModel(meta),
+    "--effort", continuationEffort(meta),
+  ];
+  return { command: "claude", args };
+}
+
+export function parseClaudeContinuationOutput(stdout) {
+  const parsed = extractJsonObjectFromText(stdout);
+  const output =
+    parsed && typeof parsed === "object" && parsed.structured_output !== undefined
+      ? parsed.structured_output
+      : parsed;
+  const structured = typeof output === "string" ? extractJsonObjectFromText(output) : output;
+  return {
+    output: structured,
+    usage: parsed?.usage && typeof parsed.usage === "object" ? parsed.usage : undefined,
+    raw_provider: {
+      cli: "claude",
+      ...(typeof parsed?.total_cost_usd === "number" ? { total_cost_usd: parsed.total_cost_usd } : {}),
+      ...(typeof parsed?.duration_ms === "number" ? { duration_ms: parsed.duration_ms } : {}),
+    },
+  };
+}
+
+async function runGenerationContinuation({ projectId, meta, prompt, schema } = {}) {
+  const workdir = await fsp.mkdtemp(path.join(os.tmpdir(), `pai-claude-cont-${projectId || "project"}-`));
+  try {
+    const { command, args } = buildClaudeContinuationCommand({ meta, schema });
+    const result = await runCommandWithStdin(command, args, {
+      cwd: workdir,
+      stdin: prompt,
+      timeoutMs: continuationTimeoutMs(meta),
+    });
+    if (!result.ok) {
+      const err = new Error(
+        result.timedOut
+          ? "Claude continuation timed out"
+          : (result.stderr || result.stdout || result.error?.message || `Claude exited with code ${result.code}`).trim(),
+      );
+      err.reason = result.timedOut ? "timeout" : "worker_failed";
+      throw err;
+    }
+    return parseClaudeContinuationOutput(result.stdout);
+  } finally {
+    await fsp.rm(workdir, { recursive: true, force: true }).catch(() => {});
+  }
 }
 
 function claudeConfigFile(env) {
@@ -135,6 +211,8 @@ export const claudeProvider = {
   findLatestSession,
 
   ensureTrust: ensureClaudeTrust,
+
+  runGenerationContinuation,
 
   healthCheck() {
     return binaryOk("claude");

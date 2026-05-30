@@ -19,6 +19,10 @@ import {
 } from "../lib/paths.js";
 import { readActive, writeActive, writeMeta } from "../lib/writers.js";
 import {
+  AGENT_CONTINUATIONS_BUNDLE_LIMIT,
+  compareContinuations,
+} from "../lib/agent_continuations.js";
+import {
   compareResultSummaries,
   GENERATION_RESULTS_BUNDLE_LIMIT,
 } from "../lib/readers.js";
@@ -88,6 +92,9 @@ export function registerProjectsRoutes({ app, io, projects, mutatorHooks }) {
       generation_results: Array.from(p.generationResults?.values() ?? [])
         .sort(compareResultSummaries)
         .slice(0, GENERATION_RESULTS_BUNDLE_LIMIT),
+      agent_continuations: Array.from(p.agentContinuations?.values() ?? [])
+        .sort(compareContinuations)
+        .slice(0, AGENT_CONTINUATIONS_BUNDLE_LIMIT),
     });
   });
 

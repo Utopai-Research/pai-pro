@@ -278,6 +278,8 @@ export interface PendingGeneration {
    * end up with. Deduped against `reference_source_ids` upstream so
    * the same node never produces two dashed edges. */
   source_node_id?: string
+  /** Optional skill/workflow provenance captured when the draft was staged. */
+  origin?: unknown
 }
 
 export interface GenerationResult {
@@ -303,8 +305,48 @@ export interface GenerationResult {
   position?: { x: number; y: number }
   reference_source_ids?: string[]
   source_node_id?: string
+  origin?: unknown
   sent?: unknown
   limits?: unknown
+}
+
+export interface AgentContinuationDiagnostic {
+  job_id?: string
+  severity?: 'info' | 'warning' | 'error'
+  message: string
+}
+
+export interface AgentContinuationStep {
+  kind: 'none' | 'stage_image' | 'stage_video' | 'stage_voice' | 'note'
+  label?: string
+  prompt?: string
+  text?: string
+  ref_source_ids?: string[]
+  source_node_id?: string | null
+  rationale?: string
+}
+
+export interface AgentContinuation {
+  id: string
+  project_id?: string | null
+  provider?: string | null
+  source?: string
+  job_ids: string[]
+  created_at: string
+  updated_at: string
+  status: 'pending' | 'running' | 'applied' | 'failed'
+  summary: string
+  diagnostics: AgentContinuationDiagnostic[]
+  suggested_next_steps: AgentContinuationStep[]
+  applied?: {
+    staged_job_ids?: string[]
+    note_ids?: string[]
+  }
+  error?: {
+    message?: string
+    reason?: string
+  }
+  usage?: unknown
 }
 
 /** Bundle the viewer returns for `GET /projects/:id`. */
@@ -330,6 +372,8 @@ export interface ProjectBundle {
   pending_generations?: PendingGeneration[]
   /** Durable summaries from `.results/<jobId>.json`, newest first. */
   generation_results?: GenerationResult[]
+  /** Non-chat agent continuation records from `.agent_continuations/`. */
+  agent_continuations?: AgentContinuation[]
   /** True iff the user has opted out of the draft gate for this project. */
   dangerously_skip_draft_gate?: boolean
 }

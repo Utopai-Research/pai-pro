@@ -5,7 +5,8 @@
 // Connection lifecycle:
 //   client connects → `subscribe { projectId }` joins the room, seeds
 //   state events (title, canvas-state, canvas-positions,
-//   pending-generations, generation-results, pai-assets-snapshot), and
+//   pending-generations, generation-results, agent-continuations,
+//   pai-assets-snapshot), and
 //   re-pre-uploads any image_result whose asset-cache entry has expired. Same socket can
 //   then issue pty:* messages to drive the embedded terminal.
 //
@@ -25,6 +26,8 @@
 //   pty,                      // node-pty handle (carries its own cols/rows)
 //   buffer,                   // rolling stdout (last PTY_BUFFER_CAP bytes) for replay
 //   subscribers,              // Set<socket.id> currently attached
+//   createdAt, lastDataAt, lastInputAt,
+//   provider,                  // owning provider shim for stdin protocol
 // }
 
 import {
@@ -40,6 +43,10 @@ import {
   projectIdFromCanvasUrl,
 } from "../lib/paths.js";
 import {
+  AGENT_CONTINUATIONS_BUNDLE_LIMIT,
+  compareContinuations,
+} from "../lib/agent_continuations.js";
+import {
   compareResultSummaries,
   GENERATION_RESULTS_BUNDLE_LIMIT,
 } from "../lib/readers.js";
@@ -48,6 +55,12 @@ import { writeMeta } from "../lib/writers.js";
 const ptys = new Map();
 const socketAttach = new Map();           // socket.id -> projectId
 const PTY_BUFFER_CAP = 256 * 1024;        // 256 KB rolling tail; xterm scrollback handles the rest
+let registeredIo = null;
+
+function writePtyInput(entry, data) {
+  entry.lastInputAt = Date.now();
+  entry.pty.write(data);
+}
 
 function detachSocket(socketId) {
   const projectId = socketAttach.get(socketId);
@@ -107,6 +120,104 @@ function backfillProjectAssets(p) {
   }
 }
 
+function ptyEnv(provider) {
+  const passthroughEnv = provider.filterEnv(process.env);
+  return {
+    ...passthroughEnv,
+    TERM: "xterm-256color",
+    // Absolute path to the repo root, so the agent can invoke media CLIs
+    // as `"$PAI_REPO_ROOT/server/cli/<x>.js"` regardless of the
+    // per-project cwd. See the per-project PROJECT_AGENT.md media CLI table.
+    PAI_REPO_ROOT,
+    // Pad PATH so agent binaries resolve under whatever shell launched us.
+    PATH: [
+      "/opt/homebrew/bin",
+      "/usr/local/bin",
+      process.env.PATH || "",
+      `${process.env.HOME || ""}/.npm-global/bin`,
+      `${process.env.HOME || ""}/.local/bin`,
+    ].filter(Boolean).join(":"),
+  };
+}
+
+function launchAgentWhenReady({ projectId, project, entry, provider }) {
+  setTimeout(async () => {
+    let latest = null;
+    try { latest = await provider.findLatestSession(projectId); }
+    catch { /* fall back to fresh launch */ }
+    if (latest) {
+      persistDiscoveredAgentSession(projectId, project, latest).catch((e) => {
+        console.warn(`[viewer] failed to persist agent session for ${projectId}: ${e.message}`);
+      });
+    }
+    // When the permission bypass is on, also pre-trust the project folder so
+    // the agent's one-time workspace-trust prompt doesn't block the launch.
+    // Best-effort: a failure here just means the trust prompt appears once.
+    const cwd = projectDir(projectId);
+    if (resolveAgentBypass() && typeof provider.ensureTrust === "function") {
+      try { await provider.ensureTrust(cwd); }
+      catch (e) { console.warn(`[viewer] ensureTrust failed for ${projectId}: ${e.message}`); }
+    }
+    const input = { projectId, meta: project.meta, session: latest, env: process.env };
+    const cmd = latest
+      ? provider.buildResumeCommand(input)
+      : provider.buildLaunchCommand(input);
+    try { writePtyInput(entry, cmd); } catch {}
+  }, 500);
+}
+
+function createPtyEntry({ projectId, project, nodePty, cols = 80, rows = 24, subscribers = new Set() }) {
+  if (!nodePty) return { ok: false, reason: "no_pty" };
+  const agentId = resolveAgentIdForMeta(project?.meta);
+  const provider = getProvider(agentId);
+  if (!provider) return { ok: false, reason: "unsupported_provider" };
+
+  let pty;
+  try {
+    pty = nodePty.spawn(process.env.SHELL || "/bin/zsh", ["-l"], {
+      name: "xterm-256color",
+      cols,
+      rows,
+      cwd: projectDir(projectId),
+      env: ptyEnv(provider),
+    });
+  } catch (e) {
+    return { ok: false, reason: "spawn_failed", message: e.message };
+  }
+
+  const entry = {
+    pty,
+    buffer: "",
+    subscribers,
+    createdAt: Date.now(),
+    lastDataAt: 0,
+    lastInputAt: Date.now(),
+    provider,
+  };
+  ptys.set(projectId, entry);
+
+  pty.onData((data) => {
+    entry.lastDataAt = Date.now();
+    entry.buffer += data;
+    if (entry.buffer.length > PTY_BUFFER_CAP) {
+      entry.buffer = entry.buffer.slice(-PTY_BUFFER_CAP);
+    }
+    for (const sid of entry.subscribers) {
+      registeredIo?.sockets.sockets.get(sid)?.emit("pty:output", data);
+    }
+  });
+  pty.onExit((evt) => {
+    for (const sid of entry.subscribers) {
+      registeredIo?.sockets.sockets.get(sid)?.emit("pty:exit", evt);
+      socketAttach.delete(sid);
+    }
+    ptys.delete(projectId);
+  });
+
+  launchAgentWhenReady({ projectId, project, entry, provider });
+  return { ok: true, entry, pid: pty.pid };
+}
+
 // Wire the pty:* handlers onto a single socket. The fresh-spawn vs.
 // re-attach branch is the heart of tmux-style persistence.
 function registerSocketPtyHandlers({ socket, io, projects, nodePty }) {
@@ -142,91 +253,20 @@ function registerSocketPtyHandlers({ socket, io, projects, nodePty }) {
       return;
     }
 
-    const agentId = resolveAgentIdForMeta(project.meta);
-    const provider = getProvider(agentId);
-    if (!provider) {
-      socket.emit("pty:error", `no provider available for agent '${agentId}'`);
-      return;
-    }
-
-    // Fresh-spawn path.
-    const cwd = projectDir(projectId);
-    const passthroughEnv = provider.filterEnv(process.env);
-    const env = {
-      ...passthroughEnv,
-      TERM: "xterm-256color",
-      // Absolute path to the repo root, so the agent can invoke media CLIs
-      // as `"$PAI_REPO_ROOT/server/cli/<x>.js"` regardless of the
-      // per-project cwd. See the per-project PROJECT_AGENT.md media CLI table.
-      PAI_REPO_ROOT,
-      // Pad PATH so agent binaries resolve under whatever shell launched us.
-      PATH: [
-        "/opt/homebrew/bin",
-        "/usr/local/bin",
-        process.env.PATH || "",
-        `${process.env.HOME || ""}/.npm-global/bin`,
-        `${process.env.HOME || ""}/.local/bin`,
-      ].filter(Boolean).join(":"),
-    };
-    let pty;
-    try {
-      pty = nodePty.spawn(process.env.SHELL || "/bin/zsh", ["-l"], {
-        name: "xterm-256color",
-        cols, rows, cwd, env,
-      });
-    } catch (e) {
-      socket.emit("pty:error", `spawn failed: ${e.message}`);
-      return;
-    }
-    const entry = {
-      pty,
-      buffer: "",
+    const created = createPtyEntry({
+      projectId,
+      project,
+      nodePty,
+      cols,
+      rows,
       subscribers: new Set([socket.id]),
-    };
-    ptys.set(projectId, entry);
+    });
+    if (!created.ok) {
+      socket.emit("pty:error", created.message || `spawn failed: ${created.reason}`);
+      return;
+    }
     socketAttach.set(socket.id, projectId);
-
-    pty.onData((data) => {
-      entry.buffer += data;
-      if (entry.buffer.length > PTY_BUFFER_CAP) {
-        entry.buffer = entry.buffer.slice(-PTY_BUFFER_CAP);
-      }
-      for (const sid of entry.subscribers) {
-        io.sockets.sockets.get(sid)?.emit("pty:output", data);
-      }
-    });
-    pty.onExit((evt) => {
-      for (const sid of entry.subscribers) {
-        io.sockets.sockets.get(sid)?.emit("pty:exit", evt);
-        socketAttach.delete(sid);
-      }
-      ptys.delete(projectId);
-    });
-    socket.emit("pty:spawned", { pid: pty.pid, attached: false });
-    // Auto-launch the owning agent after the shell settles. Resume the most
-    // recent session in the project's cwd if the provider can find one.
-    setTimeout(async () => {
-      let latest = null;
-      try { latest = await provider.findLatestSession(projectId); }
-      catch { /* fall back to fresh launch */ }
-      if (latest) {
-        persistDiscoveredAgentSession(projectId, project, latest).catch((e) => {
-          console.warn(`[viewer] failed to persist agent session for ${projectId}: ${e.message}`);
-        });
-      }
-      // When the permission bypass is on, also pre-trust the project folder so
-      // the agent's one-time workspace-trust prompt doesn't block the launch.
-      // Best-effort: a failure here just means the trust prompt appears once.
-      if (resolveAgentBypass() && typeof provider.ensureTrust === "function") {
-        try { await provider.ensureTrust(cwd); }
-        catch (e) { console.warn(`[viewer] ensureTrust failed for ${projectId}: ${e.message}`); }
-      }
-      const input = { projectId, meta: project.meta, session: latest };
-      const cmd = latest
-        ? provider.buildResumeCommand(input)
-        : provider.buildLaunchCommand(input);
-      try { pty.write(cmd); } catch {}
-    }, 500);
+    socket.emit("pty:spawned", { pid: created.pid, attached: false });
   });
 
   socket.on("pty:input", (data) => {
@@ -234,7 +274,7 @@ function registerSocketPtyHandlers({ socket, io, projects, nodePty }) {
     if (!projectId) return;
     const entry = ptys.get(projectId);
     if (entry && typeof data === "string") {
-      try { entry.pty.write(data); } catch {}
+      try { writePtyInput(entry, data); } catch {}
     }
   });
 
@@ -261,6 +301,7 @@ function registerSocketPtyHandlers({ socket, io, projects, nodePty }) {
 // Single entry point: wire the io-level asset-event listener once, then
 // register the per-socket subscribe + pty handlers on every connect.
 export function registerSocketHandlers({ io, projects, nodePty }) {
+  registeredIo = io;
   // Forward asset-preupload status updates to the project's room.
   // Terminal-state persistence (active / rejected) is handled separately
   // by services/asset_sync.js, which dispatches a mutator updateNode
@@ -290,6 +331,12 @@ export function registerSocketHandlers({ io, projects, nodePty }) {
         state: Array.from(p.generationResults?.values() ?? [])
           .sort(compareResultSummaries)
           .slice(0, GENERATION_RESULTS_BUNDLE_LIMIT),
+      });
+      socket.emit("agent-continuations", {
+        projectId,
+        state: Array.from(p.agentContinuations?.values() ?? [])
+          .sort(compareContinuations)
+          .slice(0, AGENT_CONTINUATIONS_BUNDLE_LIMIT),
       });
       // Replay cached asset statuses so chips render on load, not on the next flip.
       const projectEntries = {};

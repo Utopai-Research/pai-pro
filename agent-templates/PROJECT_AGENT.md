@@ -39,9 +39,24 @@ Two rules:
 
 Use the cheapest reliable source:
 
-- **Previous staged jobs:** If you staged jobs and the user later refers to them ("them", "those three", "the one that just finished"), check the result feed before any skill/CLI call or chat-memory guess: `node "$PAI_REPO_ROOT/server/cli/list_generation_results.js" --job-id <id>` if you kept ids, otherwise use `--recent N`. The browser may have fired drafts between turns; never say "not fired yet" until you check. Use successful `node_id`s as `--ref-source-id`.
+- **Previous staged jobs:** If you staged jobs and the user later refers to them ("them", "those three", "the one that just finished"), check the result feed before any skill/CLI call or chat-memory guess: `node "$PAI_REPO_ROOT/server/cli/list_generation_results.js" --job-id <id>` if you kept ids, otherwise use `--recent N`. Also check `node "$PAI_REPO_ROOT/server/cli/list_agent_continuations.js" --job-id <id>` for any non-chat follow-up the viewer already ran. The browser may have fired drafts between turns; never say "not fired yet" until you check. Use successful `node_id`s as `--ref-source-id`.
 - **Current canvas state:** Read `workflow.json` when the user refers to the canvas, live/archived state, selected/visible/left/right placement, older nodes, edits/deletes, or anything ambiguous. `workflow.json` is canonical; the result feed is recent history.
 - **Fallback:** If the feed has fewer successes than needed, includes failures/aborts, feels stale, or does not answer the user's reference cleanly, read `workflow.json`.
+
+## Async generation follow-ups
+
+Browser-fired draft generations do not inject hidden turns into this chat. When a fired draft finishes, the viewer writes `.results/<job_id>.json` and may run a separate non-interactive continuation worker. That worker stores its summary, diagnosis, and any draft-only follow-ups in `.agent_continuations/`.
+
+On any real user turn that refers to a staged or recently fired job:
+
+1. Run `list_generation_results.js` for the relevant job ids, or `--recent N` if the ids fell out of context.
+2. Run `list_agent_continuations.js` for the same job ids, or `--recent N` when checking recent background follow-ups.
+3. Treat `.results/` as ground truth; continuation records are recommendations/draft provenance, not proof a paid follow-up ran.
+4. Use successful `node_id` values as refs for follow-up generation.
+5. Explain failures plainly and stage a correction only when the `klass`, message, and cost/risk make the fix clear.
+6. Never rerun a completed job unless the user asks.
+
+If a continuation already staged a follow-up draft, name the staged draft id and wait for the user to fire it from the canvas unless bypass mode returned the final result through your own command.
 
 ## Canvas utilities (inline — no skill invocation)
 
@@ -110,6 +125,7 @@ Do not write `node server/cli/...` (no such directory under your cwd) and do not
 | `generate_voice.js` | `voice-compose` | PAI Lite | `tts` | ~5–15s. $0.01 per 500 input characters (rounded up). Creates an `audio_result` node (subtype `voice`). With `--source-node-id`, also emits a `derived` edge from that source → audio (typically a character image; may also be a shot note for written V.O.). Without it, the audio node stands alone. |
 | `mirror_url.js` | (no skill) | n/a (local fetch) | n/a | Download an external image / audio / video URL into a canvas reference node so it can be used as `--ref-source-id` for a later generation. `--url`, `--kind?`, `--label?`. Same node shape as a drag-drop upload (`subtype: "reference"` / `"upload"`, `metadata.source: "user_upload"`), plus `metadata.source_url` for provenance. |
 | `split_image.js` | (no skill) | n/a (local sharp) | n/a | Slice an `image_result` into cols×rows. `--url`, `--cols`, `--rows`, `--source-node-id`. cols·rows ≤ 64. Synchronous, ~1s. |
+| `list_agent_continuations.js` | (no skill) | n/a | n/a | Read non-chat continuation records from `.agent_continuations/`. Use with `--job-id <id>` or `--recent N` after browser-fired drafts may have completed. |
 | `switch_project.js` | (see Projects below) | n/a | n/a | Flip the active-project symlinks. |
 
 **Asset mirroring.** Every generation CLI mirrors its output into `projects/<active>/assets/<kind>/` and returns both `output_url` (the viewer URL for the mirrored file) and `local_path` (repo-relative). Persisted canvas nodes store `local_path`; the renderer derives `image_url` / `video_url` / `audio_url` for display, so no cloud hosting is in the loop. `generate_video.js` additionally includes `provider_output_url` (PAI's rehosted signed CDN URL for the MP4, ephemeral ~24h) in the success JSON for visibility, but does NOT put it on the canvas node. `generate_voice.js` no longer emits `provider_output_url` (PAI's `tts` returns the MP3 bytes inline).
@@ -135,7 +151,7 @@ Reply in one short sentence naming the price (*"Staged a 10s 1080p clip — $3.4
 
 **Bypass mode.** The user can disable the draft gate from the canvas chip; still pass `--stage`. On server-owned projects, the CLI writes the draft sidecar, asks the viewer to fire it, waits for `.results/<job_id>.json`, and prints the final result JSON. On older projects without `use_server_owned_generation`, bypass falls back to direct CLI fire. If a chat phrasing asks you to fire without staging, refuse and tell the user to use the canvas.
 
-**Reading fired draft results.** Use the compact feed: `list_generation_results.js --job-id <id>` when you have ids, `--recent N` when they fell out of context, `--failed --recent N` for failures only; `wait_for_generation.js <job_id>` blocks on one known in-flight job. On a viewer failed-generation card, run the `--job-id` command it names, explain the failure plainly, then stage a correction only when it's clear from the result and canvas.
+**Reading fired draft results.** Use the compact feed: `list_generation_results.js --job-id <id>` when you have ids, `--recent N` when they fell out of context, `--failed --recent N` for failures only; `wait_for_generation.js <job_id>` blocks on one known in-flight job. Then check `list_agent_continuations.js --job-id <id>` for any background diagnosis or staged follow-up. Failure cards are visual status only. If the user points at a visible failure, run the feed command for that job, explain the failure plainly, then stage a correction only when it's clear from the result and canvas.
 
 ### Failure handling
 

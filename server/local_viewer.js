@@ -18,7 +18,7 @@
 //   GET    /                                              health
 //   GET    /projects                                      list
 //   POST   /projects                                      create
-//   GET    /projects/:id                                  bundle: { row, canvas_state, canvas_positions, pending_generations, generation_results }
+//   GET    /projects/:id                                  bundle: { row, canvas_state, canvas_positions, pending_generations, generation_results, agent_continuations }
 //   GET    /projects/:id/reel.mp4                          stitch every shot-id'd clip and stream as a download
 //   PATCH  /projects/:id                                   update meta (title)
 //   DELETE /projects/:id                                   soft delete (move to projects/.archive/)
@@ -33,6 +33,7 @@
 //   canvas-state              — workflow.json on every disk change
 //   canvas-positions          — sidecar on every disk change
 //   generation-results        — completed .results sidecars
+//   agent-continuations       — non-chat continuation worker records
 //   title                     — project meta slice on meta change
 //
 //   pty:spawn { projectId?, cols?, rows? }  — start a new agent pty
@@ -56,6 +57,7 @@ import express from "express";
 import { Server as SocketServer } from "socket.io";
 
 import { createBroadcasters } from "./lib/broadcasters.js";
+import { configureGenerationContinuations } from "./lib/generation_continuations.js";
 import { PORT, PROJECTS_DIR, WEB_ORIGIN } from "./lib/paths.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -121,6 +123,11 @@ const io = new SocketServer(httpServer, corsOptions ? { cors: corsOptions } : un
 
 const broadcasters = createBroadcasters({ io, projects });
 const { mutatorHooks } = broadcasters;
+configureGenerationContinuations({
+  projects,
+  broadcasters,
+  enabled: process.env.PAI_CONTINUATION_WORKERS !== "0",
+});
 
 registerSystemRoutes({ app, projects, nodePty });
 registerProjectsRoutes({ app, io, projects, mutatorHooks });

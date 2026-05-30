@@ -6,6 +6,11 @@ import { promisify } from "node:util";
 
 import { projectDir } from "../lib/paths.js";
 import { resolveAgentBypass } from "./bypass.js";
+import {
+  continuationTimeoutMs,
+  extractJsonObjectFromText,
+  runCommandWithStdin,
+} from "./continuation.js";
 
 const execAsync = promisify(exec);
 const CODEX_SESSION_ORIGINATOR = "codex-tui";
@@ -57,6 +62,21 @@ function optionSuffix(meta = {}, env) {
     parts.push("--ask-for-approval", meta.agent_approval_mode);
   }
   return parts.join(" ");
+}
+
+function codexContinuationConfigArgs(meta = {}) {
+  const args = [];
+  if (safeModelValue(meta.agent_continuation_model)) {
+    args.push("--model", meta.agent_continuation_model);
+  } else if (safeModelValue(meta.agent_model)) {
+    args.push("--model", meta.agent_model);
+  }
+  if (safeSetValue(meta.agent_continuation_effort, EFFORT_VALUES)) {
+    args.push("-c", `model_reasoning_effort="${meta.agent_continuation_effort}"`);
+  } else if (safeSetValue(meta.agent_effort, EFFORT_VALUES)) {
+    args.push("-c", `model_reasoning_effort="${meta.agent_effort}"`);
+  }
+  return args;
 }
 
 async function binaryOk(name) {
@@ -185,6 +205,97 @@ export async function findLatestCodexSession(
   return null;
 }
 
+export function buildCodexContinuationCommand({
+  meta = {},
+  schemaPath,
+  lastMessagePath,
+  workdir,
+} = {}) {
+  return {
+    command: "codex",
+    args: [
+      "exec",
+      "--json",
+      "--output-schema", schemaPath,
+      "--output-last-message", lastMessagePath,
+      "--cd", workdir,
+      "--sandbox", "read-only",
+      "--ephemeral",
+      "--ignore-rules",
+      "--skip-git-repo-check",
+      ...codexContinuationConfigArgs(meta),
+      "-",
+    ],
+  };
+}
+
+export function parseCodexContinuationOutput({ stdout, lastMessage }) {
+  if (typeof lastMessage === "string" && lastMessage.trim() !== "") {
+    return {
+      output: extractJsonObjectFromText(lastMessage),
+      raw_provider: { cli: "codex", source: "output-last-message" },
+    };
+  }
+  const lines = String(stdout || "").split(/\r?\n/).filter((line) => line.trim() !== "");
+  for (let i = lines.length - 1; i >= 0; i -= 1) {
+    let evt;
+    try { evt = JSON.parse(lines[i]); } catch { continue; }
+    const candidates = [
+      evt?.message,
+      evt?.text,
+      evt?.content,
+      evt?.payload?.message,
+      evt?.payload?.text,
+      evt?.payload?.content,
+    ].filter((v) => typeof v === "string" && v.trim() !== "");
+    for (const candidate of candidates) {
+      try {
+        return {
+          output: extractJsonObjectFromText(candidate),
+          raw_provider: { cli: "codex", source: "jsonl" },
+        };
+      } catch {
+        // Keep walking backwards.
+      }
+    }
+  }
+  throw new Error("Codex continuation output did not contain JSON");
+}
+
+async function runGenerationContinuation({ projectId, meta, prompt, schema } = {}) {
+  const workdir = await fsp.mkdtemp(path.join(os.tmpdir(), `pai-codex-cont-${projectId || "project"}-`));
+  const schemaPath = path.join(workdir, "schema.json");
+  const lastMessagePath = path.join(workdir, "last-message.json");
+  try {
+    await fsp.writeFile(schemaPath, JSON.stringify(schema, null, 2) + "\n");
+    const { command, args } = buildCodexContinuationCommand({
+      meta,
+      schemaPath,
+      lastMessagePath,
+      workdir,
+    });
+    const result = await runCommandWithStdin(command, args, {
+      cwd: workdir,
+      stdin: prompt,
+      timeoutMs: continuationTimeoutMs(meta),
+    });
+    if (!result.ok) {
+      const err = new Error(
+        result.timedOut
+          ? "Codex continuation timed out"
+          : (result.stderr || result.stdout || result.error?.message || `Codex exited with code ${result.code}`).trim(),
+      );
+      err.reason = result.timedOut ? "timeout" : "worker_failed";
+      throw err;
+    }
+    let lastMessage = "";
+    try { lastMessage = await fsp.readFile(lastMessagePath, "utf8"); } catch {}
+    return parseCodexContinuationOutput({ stdout: result.stdout, lastMessage });
+  } finally {
+    await fsp.rm(workdir, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
 // Mark a project directory trusted so `codex` launches without its "Do you
 // trust the contents of this directory?" prompt. Appends to config.toml only
 // when absent, so it respects an existing decision; auth lives in a separate
@@ -228,6 +339,8 @@ export const codexProvider = {
   },
 
   ensureTrust: ensureCodexTrust,
+
+  runGenerationContinuation,
 
   healthCheck() {
     return binaryOk("codex");

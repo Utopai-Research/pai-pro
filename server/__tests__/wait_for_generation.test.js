@@ -120,7 +120,9 @@ test("wait_for_generation times out with structured failure", async (t) => {
 
 test("fireAndWait maps viewer 404 to existing bad_args taxonomy", async () => {
   const { fireAndWait } = await import(`../cli/_pending.js?fire=${Date.now()}`);
-  const server = createServer((_req, res) => {
+  let seenConsumer = null;
+  const server = createServer((req, res) => {
+    seenConsumer = req.headers["x-pai-generation-result-consumer"] ?? null;
     res.writeHead(404, { "content-type": "application/json" });
     res.end(JSON.stringify({ error: "draft not found" }));
   });
@@ -139,6 +141,7 @@ test("fireAndWait maps viewer 404 to existing bad_args taxonomy", async () => {
     assert.equal(result.ok, false);
     assert.equal(result.klass, "bad_args");
     assert.equal(result.message, "draft not found");
+    assert.equal(seenConsumer, "waiting-cli");
   } finally {
     await new Promise((resolve) => server.close(resolve));
     if (priorHost === undefined) delete process.env.VIEWER_HOST;
