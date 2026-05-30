@@ -28,39 +28,12 @@ Closest public performance counterparts for BYOK experiments:
 | `video-generation` | [Replicate ByteDance Seedance 2.0](https://replicate.com/bytedance/seedance-2.0/api) |
 | `voice-design` | [Qwen3-TTS](https://github.com/QwenLM/Qwen3-TTS) |
 
-These links are only the closest public counterparts for custom integrations;
-they are not a statement about what PAI uses internally. For the full intended
-PAI-Pro behavior and 100% performance, use `PAI_KEY`.
+These links are only the closest public counterparts for custom integrations.
+For the full intended PAI-Pro behavior and 100% performance, use `PAI_KEY`.
 
-The cleanest BYOK boundary is a PAI-compatible gateway. Keep provider-specific
-keys and translations in that gateway, then expose the same three media API
-routes that PAI-Pro already calls:
-
-```text
-POST /api/v1/generate
-POST /api/v1/submit
-GET  /api/v1/task/status/<job-id>
-```
-
-Then configure PAI-Pro with:
-
-```env
-PAI_API_BASE=https://your-compatible-gateway.example.com
-PAI_KEY=<token accepted by your gateway>
-```
-
-This keeps the local app simple:
-
-- The browser never receives provider credentials.
-- Project files and generated `AGENTS.md` files never store provider keys.
-- The CLIs keep one error model, one draft gate, and one cost-preview path.
-- Alternative providers can be tested without changing canvas, node, or CLI
-  contracts.
-
-Direct provider-key support inside PAI-Pro should only be added if a provider
-cannot be adapted behind the compatible gateway contract. If that happens, keep
-the provider-specific code behind the existing `pai_client.js` boundary so the
-rest of the app still sees the same request and response shapes.
+The detailed JSON payloads are below. If you want BYOK, ask your coding agent to
+replace the PAI media calls with your own API provider while preserving the local
+canvas and asset-writing flow.
 
 ## API Contract and JSON Payloads
 
