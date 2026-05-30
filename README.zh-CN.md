@@ -4,7 +4,7 @@
 
 **由代码 Agent 驱动的本地 AI 电影制作工作室。**
 
-[English](README.md)
+[简体中文](README.zh-CN.md) · [English](README.md)
 
 <img src="docs/assets/canvas_view.webp" alt="PAI-Pro canvas view" width="100%" />
 
