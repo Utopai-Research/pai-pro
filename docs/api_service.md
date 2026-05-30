@@ -13,6 +13,55 @@ Use PAI-Pro's API service when you want:
 - **Less restrictive video-generation moderation** via asset preupload, with a
   significantly higher pass rate than many other vendors.
 
+## Bring Your Own Key
+
+You are welcome to bring your own key and even wire customized models into the
+framework. PAI-Pro runs on your local machine, so you can adapt the media layer
+for your own provider accounts, private endpoints, or model experiments.
+
+Closest public performance counterparts for BYOK experiments:
+
+| PAI-Pro capability | Closest public counterpart |
+|---|---|
+| `image-generation` | [Gemini 3.1 Flash Image](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/gemini/3-1-flash-image) |
+| `image-generation-pro` | [OpenRouter OpenAI GPT-5.4 Image 2](https://openrouter.ai/openai/gpt-5.4-image-2/api) |
+| `video-generation` | [Replicate ByteDance Seedance 2.0](https://replicate.com/bytedance/seedance-2.0/api) |
+| `voice-design` | [Qwen3-TTS](https://github.com/QwenLM/Qwen3-TTS) |
+
+These links are only the closest public counterparts for custom integrations;
+they are not a statement about what PAI uses internally. For the full intended
+PAI-Pro behavior and 100% performance, use `PAI_KEY`.
+
+The cleanest BYOK boundary is a PAI-compatible gateway. Keep provider-specific
+keys and translations in that gateway, then expose the same three media API
+routes that PAI-Pro already calls:
+
+```text
+POST /api/v1/generate
+POST /api/v1/submit
+GET  /api/v1/task/status/<job-id>
+```
+
+Then configure PAI-Pro with:
+
+```env
+PAI_API_BASE=https://your-compatible-gateway.example.com
+PAI_KEY=<token accepted by your gateway>
+```
+
+This keeps the local app simple:
+
+- The browser never receives provider credentials.
+- Project files and generated `AGENTS.md` files never store provider keys.
+- The CLIs keep one error model, one draft gate, and one cost-preview path.
+- Alternative providers can be tested without changing canvas, node, or CLI
+  contracts.
+
+Direct provider-key support inside PAI-Pro should only be added if a provider
+cannot be adapted behind the compatible gateway contract. If that happens, keep
+the provider-specific code behind the existing `pai_client.js` boundary so the
+rest of the app still sees the same request and response shapes.
+
 ## API Contract and JSON Payloads
 
 This page documents the API contract PAI-Pro expects from the media service.
@@ -439,44 +488,3 @@ HTTP failures usually use one of these shapes:
 
 PAI-Pro classifies errors before returning CLI output: `bad_args`, `infra`,
 `content_filtered`, `rate_limited`, `transient`, or `transient_exhausted`.
-
-## Bring Your Own Key
-
-The best BYOK boundary is a PAI-compatible gateway, not provider-specific keys
-inside PAI-Pro.
-
-PAI-Pro's media code is intentionally built around one server-side service:
-`PAI_KEY`, `PAI_API_BASE`, and the envelope shown above. If a user wants to use
-their own upstream provider accounts, keep that complexity in a small gateway
-that implements the same three media API routes:
-
-```text
-POST /api/v1/generate
-POST /api/v1/submit
-GET  /api/v1/task/status/<job-id>
-```
-
-Then configure PAI-Pro with:
-
-```env
-PAI_API_BASE=https://your-compatible-gateway.example.com
-PAI_KEY=<token accepted by your gateway>
-```
-
-The gateway can hold provider credentials such as image, video, voice, or asset
-upload keys in its own server environment and translate the PAI-Pro payloads to
-those providers. PAI-Pro should not need to know about `OPENAI_API_KEY`,
-`GOOGLE_API_KEY`, or any other media-provider key directly.
-
-This choice keeps the local app simple:
-
-- The browser never receives provider credentials.
-- Project files and generated `AGENTS.md` files never store provider keys.
-- The CLIs keep one error model, one draft gate, and one cost-preview path.
-- Alternative providers can be tested without changing canvas, node, or CLI
-  contracts.
-
-Direct provider-key support inside PAI-Pro should only be added if a provider
-cannot be adapted behind the compatible gateway contract. If that happens, keep
-the provider-specific code behind the existing `pai_client.js` boundary so the
-rest of the app still sees the same request and response shapes.
