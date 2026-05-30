@@ -23,7 +23,7 @@ Spirit borrowed from [Karpathy's observations](https://x.com/karpathy/status/201
 
 - `server/local_viewer.js` — single Node server. Project CRUD, pty spawn for each project's owning agent (cwd = `projects/<id>/`), canvas file watcher, Socket.IO push to the browser. Routes: `/projects` (list / create), `/projects/:id` (bundle), `/projects/:id/activate`, `/projects/:id/positions`, `/projects/:id/group-frames/...`, `/projects/:id/nodes/...`. Socket events: `canvas-state`, `canvas-positions`, `title`, `pending-generations`, `pty:spawned` / `pty:output` / `pty:exit` / `pty:error`.
 - `server/cli/*.js` — synchronous CLI wrappers (image, video, voice, split, switch_project, reel_stitch). Each prints one `{ ok, ... }` JSON line on stdout; non-zero exit with `{ ok: false, klass, message }` on failure. Shared arg parser + emit helpers in `server/cli/_cli.js`.
-- `server/pai_*.js` — PAI Lite clients imported by the CLIs:
+- `server/pai_*.js` — PAI media API clients imported by the CLIs:
   - **Shared HTTP**: `pai_client.js` (auth, retry policy, classified errors, `callGenerate` / `callSubmit` / `pollStatus`).
   - **Image**: `pai_image_client.js`.
   - **Image Pro**: `pai_image_pro_client.js`.

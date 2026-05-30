@@ -41,7 +41,7 @@ The canvas on the left, the embedded agent terminal on the right, both sharing t
 ```
 
 1. **Skills** are plain markdown read by the agent inside the embedded terminal.
-2. **CLI scripts** call PAI Lite (one key, one base URL — image, image pro, video, voice, asset uploads all route through `/api/v1/generate` or `/api/v1/submit`), write each result into `projects/<slug>/assets/`, and print one JSON line.
+2. **CLI scripts** call the PAI media API (one key, one base URL — image, image pro, video, voice, asset uploads all route through `/api/v1/generate` or `/api/v1/submit`), write each result into `projects/<slug>/assets/`, and print one JSON line.
 3. **Viewer** watches every project's files and pushes deltas to the browser over Socket.IO, bridges xterm.js ↔ the project's owning agent via node-pty, and serves the mirrored assets at `/projects/:id/assets/...`.
 
 ## Directory layout

@@ -5,7 +5,7 @@
 // model auto-flows its label to canvas card chrome and the expand
 // overlay, no separate UI edit.
 //
-// Every capability routes through PAI Lite raw passthrough; the
+// Every capability routes through the PAI media API raw passthrough; the
 // `provider` field is therefore always `"pai"` and is kept only so
 // routes/system.js + web/lib/useModels.tsx don't need a schema change.
 //
@@ -115,7 +115,7 @@ export const MODELS = [
     cost_approx_usd: videoCostByResAndDuration,
     capabilities: ["text-to-video", "image-to-video", "video-to-video", "audio"],
     default_params: { duration: 15, aspect_ratio: "16:9", resolution: "720p", generate_audio: true },
-    notes: "Async video generation via PAI raw passthrough. Refs require public URLs (tunnel). ~2-4 min. Real money.",
+    notes: "Async video generation via PAI raw passthrough. Refs require public URLs (tunnel). ~3-6 min. Real money.",
   },
 
   // ───────────── voice ─────────────
