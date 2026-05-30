@@ -114,7 +114,8 @@ test("flush batches undelivered records and marks them delivered once", async ()
   assert.equal(flushed.delivered, 2);
   assert.equal(calls.length, 1);
   assert.equal(calls[0].id, projectId);
-  assert.match(calls[0].text, /--job-id 'pending_ok' --job-id 'pending_bad'/);
+  assert.match(calls[0].text, /--job-id 'pending_ok'/);
+  assert.match(calls[0].text, /--job-id 'pending_bad'/);
   assert.equal(calls[0].opts.requireIdleMs, 1500);
 
   const records = await notifications.readAgentResultNotifications(projectId);

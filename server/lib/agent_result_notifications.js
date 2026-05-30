@@ -12,6 +12,8 @@ const DEFAULT_DEBOUNCE_MS = 350;
 const DEFAULT_REQUIRE_IDLE_MS = 1500;
 const DEFAULT_RETRY_DELAYS_MS = {
   busy: 2500,
+  unsafe_input: 1000,
+  submit_in_progress: 1000,
   unconfirmed_submit: 5000,
   write_failed: 5000,
 };
@@ -20,6 +22,7 @@ const timers = new Map();
 const inFlight = new Map();
 const config = {
   submitAgentNotification: null,
+  publishStatus: null,
   debounceMs: DEFAULT_DEBOUNCE_MS,
   requireIdleMs: DEFAULT_REQUIRE_IDLE_MS,
   retryDelaysMs: { ...DEFAULT_RETRY_DELAYS_MS },
@@ -131,11 +134,47 @@ export async function readAgentResultNotifications(projectId, { undeliveredOnly 
   return records;
 }
 
+async function undeliveredCount(projectId) {
+  return (await readAgentResultNotifications(projectId, { undeliveredOnly: true })).length;
+}
+
+function statusForReason(reason) {
+  if (reason === "unsafe_input") return "waiting_for_input";
+  if (reason === "unconfirmed_submit" || reason === "write_failed") return "error";
+  return "queued";
+}
+
+async function publishStatus(projectId, patch = {}) {
+  if (!projectId || typeof config.publishStatus !== "function") return;
+  const pending = typeof patch.pending === "number" ? patch.pending : await undeliveredCount(projectId);
+  config.publishStatus(projectId, {
+    projectId,
+    status: pending > 0 ? "queued" : "idle",
+    pending,
+    ...patch,
+  });
+}
+
+export async function agentResultNotificationStatus(projectId) {
+  const pending = await undeliveredCount(projectId);
+  return {
+    projectId,
+    status: pending > 0 ? "queued" : "idle",
+    pending,
+  };
+}
+
 export function configureAgentResultNotifications(options = {}) {
   if (Object.prototype.hasOwnProperty.call(options, "submitAgentNotification")) {
     config.submitAgentNotification =
       typeof options.submitAgentNotification === "function"
         ? options.submitAgentNotification
+        : null;
+  }
+  if (Object.prototype.hasOwnProperty.call(options, "publishStatus")) {
+    config.publishStatus =
+      typeof options.publishStatus === "function"
+        ? options.publishStatus
         : null;
   }
   if (typeof options.debounceMs === "number" && Number.isFinite(options.debounceMs) && options.debounceMs >= 0) {
@@ -153,6 +192,7 @@ export async function enqueueGenerationResultNotification(projectId, result) {
   const record = notificationRecord(projectId, result);
   if (!record) return { ok: false, reason: "bad_args" };
   const created = await writeJsonIfAbsent(notificationPath(projectId, record.job_id), record);
+  await publishStatus(projectId);
   scheduleFlush(projectId);
   return { ok: true, created, job_id: record.job_id };
 }
@@ -243,11 +283,13 @@ async function flushProjectNotificationsInner(projectId) {
     projectId,
     deliverable.map((item) => item.summary),
   );
+  await publishStatus(projectId, { status: "sending", pending: records.length });
   const submit = await config.submitAgentNotification(projectId, text, {
     requireIdleMs: config.requireIdleMs,
   });
   if (submit?.ok) {
     await markDelivered(deliverable);
+    await publishStatus(projectId);
     return {
       ok: true,
       delivered: deliverable.length,
@@ -259,6 +301,12 @@ async function flushProjectNotificationsInner(projectId) {
   const reason = submit?.reason || "submit_failed";
   const retryDelay = retryDelayForReason(reason);
   if (retryDelay !== null) scheduleFlush(projectId, { delayMs: retryDelay });
+  await publishStatus(projectId, {
+    status: statusForReason(reason),
+    pending: records.length,
+    reason,
+    ...(submit?.message ? { message: submit.message } : {}),
+  });
   return { ok: false, reason, pending: records.length, submit };
 }
 
@@ -305,6 +353,7 @@ export function resetAgentResultNotificationStateForTests() {
   timers.clear();
   inFlight.clear();
   config.submitAgentNotification = null;
+  config.publishStatus = null;
   config.debounceMs = DEFAULT_DEBOUNCE_MS;
   config.requireIdleMs = DEFAULT_REQUIRE_IDLE_MS;
   config.retryDelaysMs = { ...DEFAULT_RETRY_DELAYS_MS };

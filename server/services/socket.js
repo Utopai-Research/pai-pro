@@ -26,6 +26,7 @@
 //   buffer,                   // rolling stdout (last PTY_BUFFER_CAP bytes) for replay
 //   subscribers,              // Set<socket.id> currently attached
 //   createdAt, lastDataAt, lastInputAt,
+//   userInputDirty, notificationSubmitInProgress,
 //   provider,                  // owning provider shim for stdin protocol
 // }
 
@@ -42,6 +43,7 @@ import {
   projectIdFromCanvasUrl,
 } from "../lib/paths.js";
 import {
+  agentResultNotificationStatus,
   configureAgentResultNotifications,
   scheduleFlush,
 } from "../lib/agent_result_notifications.js";
@@ -58,9 +60,48 @@ let registeredProjects = null;
 let registeredIo = null;
 let registeredNodePty = null;
 
-function writePtyInput(entry, data) {
+function writePtyInput(entry, data, { source = "user" } = {}) {
   entry.lastInputAt = Date.now();
+  if (source === "user") entry.lastUserInputAt = entry.lastInputAt;
   entry.pty.write(data);
+}
+
+function stripAnsiControlSequences(data) {
+  return String(data || "")
+    .replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, "")
+    .replace(/\x1b\][\s\S]*?(?:\x07|\x1b\\)/g, "")
+    .replace(/\x1b./g, "");
+}
+
+function inputHasPrintableText(data) {
+  const stripped = stripAnsiControlSequences(data);
+  for (const ch of stripped) {
+    const code = ch.codePointAt(0);
+    if (code === undefined) continue;
+    if (code >= 0x20 && code !== 0x7f) return true;
+  }
+  return false;
+}
+
+function inputClearsDraft(data) {
+  const text = String(data || "");
+  return text.includes("\r")
+    || text.includes("\n")
+    || text.includes("\x03")
+    || text.includes("\x15");
+}
+
+function trackUserInput(entry, data) {
+  if (inputHasPrintableText(data)) entry.userInputDirty = true;
+  if (inputClearsDraft(data)) entry.userInputDirty = false;
+}
+
+function emitAgentNotificationStatus(projectId, payload) {
+  if (!projectId || !registeredIo) return;
+  registeredIo.to(projectId).emit("agent-notification-status", {
+    projectId,
+    ...payload,
+  });
 }
 
 function waitForPtyData(entry, { timeoutMs = 2000 } = {}) {
@@ -124,15 +165,21 @@ export async function persistDiscoveredAgentSession(projectId, project, session)
 }
 
 export async function submitAgentNotification(projectId, text, { requireIdleMs = 1500 } = {}) {
-  let entry = ptys.get(projectId);
+  const entry = ptys.get(projectId);
   if (!entry) {
-    const spawned = await ensureProjectPty(projectId);
-    if (!spawned.ok) return { ok: false, reason: spawned.reason || "no_pty" };
-    scheduleFlush(projectId, { delayMs: 3000 });
-    return { ok: false, reason: "busy", idleForMs: 0 };
+    return { ok: false, reason: "no_pty" };
   }
   if (typeof text !== "string" || text.length === 0) {
     return { ok: false, reason: "empty_input" };
+  }
+  if (entry.subscribers.size === 0) {
+    return { ok: false, reason: "no_subscriber" };
+  }
+  if (entry.notificationSubmitInProgress) {
+    return { ok: false, reason: "submit_in_progress" };
+  }
+  if (entry.userInputDirty) {
+    return { ok: false, reason: "unsafe_input" };
   }
 
   const now = Date.now();
@@ -153,12 +200,13 @@ export async function submitAgentNotification(projectId, text, { requireIdleMs =
     return { ok: false, reason: "unsupported_provider" };
   }
 
+  entry.notificationSubmitInProgress = true;
   try {
     const submit = await provider.submitAgentNotification({
       projectId,
       meta: project?.meta,
       text,
-      write: (data) => writePtyInput(entry, data),
+      write: (data) => writePtyInput(entry, data, { source: "notification" }),
       waitForOutput: (opts) => waitForPtyData(entry, opts),
     });
     if (submit?.ok) return { ok: true, idleForMs };
@@ -170,10 +218,10 @@ export async function submitAgentNotification(projectId, text, { requireIdleMs =
     };
   } catch (e) {
     return { ok: false, reason: "write_failed", message: e.message, idleForMs };
+  } finally {
+    entry.notificationSubmitInProgress = false;
   }
 }
-
-configureAgentResultNotifications({ submitAgentNotification });
 
 // Walk a project's image_result nodes and pre-upload any whose canvas
 // URL isn't already in the cache. Used by subscribe to recover chip
@@ -232,7 +280,7 @@ function launchAgentWhenReady({ projectId, project, entry, provider }) {
     const cmd = latest
       ? provider.buildResumeCommand(input)
       : provider.buildLaunchCommand(input);
-    try { writePtyInput(entry, cmd); } catch {}
+    try { writePtyInput(entry, cmd, { source: "system" }); } catch {}
     scheduleFlush(projectId, { delayMs: 3000 });
   }, 500);
 }
@@ -263,6 +311,9 @@ function createPtyEntry({ projectId, project, cols = 80, rows = 24, subscribers 
     createdAt: Date.now(),
     lastDataAt: 0,
     lastInputAt: Date.now(),
+    lastUserInputAt: 0,
+    userInputDirty: false,
+    notificationSubmitInProgress: false,
     dataWaiters: new Set(),
     provider,
   };
@@ -289,14 +340,6 @@ function createPtyEntry({ projectId, project, cols = 80, rows = 24, subscribers 
 
   launchAgentWhenReady({ projectId, project, entry, provider });
   return { ok: true, entry, pid: pty.pid };
-}
-
-async function ensureProjectPty(projectId) {
-  const existing = ptys.get(projectId);
-  if (existing) return { ok: true, entry: existing, attached: true };
-  const project = registeredProjects?.get(projectId);
-  if (!projectId || !project) return { ok: false, reason: "no_project" };
-  return createPtyEntry({ projectId, project });
 }
 
 // Wire the pty:* handlers onto a single socket. The fresh-spawn vs.
@@ -355,7 +398,10 @@ function registerSocketPtyHandlers({ socket, io, projects, nodePty }) {
     if (!projectId) return;
     const entry = ptys.get(projectId);
     if (entry && typeof data === "string") {
-      try { writePtyInput(entry, data); } catch {}
+      if (entry.notificationSubmitInProgress) return;
+      trackUserInput(entry, data);
+      try { writePtyInput(entry, data, { source: "user" }); } catch {}
+      if (!entry.userInputDirty) scheduleFlush(projectId, { delayMs: 500 });
     }
   });
 
@@ -385,6 +431,10 @@ export function registerSocketHandlers({ io, projects, nodePty }) {
   registeredProjects = projects;
   registeredIo = io;
   registeredNodePty = nodePty;
+  configureAgentResultNotifications({
+    submitAgentNotification,
+    publishStatus: emitAgentNotificationStatus,
+  });
   // Forward asset-preupload status updates to the project's room.
   // Terminal-state persistence (active / rejected) is handled separately
   // by services/asset_sync.js, which dispatches a mutator updateNode
@@ -421,6 +471,9 @@ export function registerSocketHandlers({ io, projects, nodePty }) {
         if (projectIdFromCanvasUrl(url) === projectId) projectEntries[url] = entry;
       }
       socket.emit("pai-assets-snapshot", { projectId, state: projectEntries });
+      agentResultNotificationStatus(projectId)
+        .then((status) => socket.emit("agent-notification-status", status))
+        .catch(() => {});
 
       // Backfill: re-pre-upload any image_result whose canvas URL isn't in the
       // cache yet. Lights up chips on projects re-opened across viewer restarts
