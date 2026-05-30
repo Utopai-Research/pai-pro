@@ -104,10 +104,10 @@ Do not write `node server/cli/...` (no such directory under your cwd) and do not
 
 | CLI | Skill | Provider | Model (PAI raw model name) | Notes |
 |---|---|---|---|---|
-| `generate_image.js` | `image-compose` | PAI Lite | `image-generation` | ~10–30s. ~$0.07 @ 1K / $0.10 @ 2K / $0.15 @ 4K. Standard image tier — drafts, illustrative, stylized. |
-| `generate_image_pro.js` | `image-compose` | PAI Lite | `image-generation-pro` | ~3–6 min. ~$0.26 @ 1K / $0.45 @ 2K / $0.77 @ 4K. Pro image tier — exact `--size` only; refs route internally to image edit. |
-| `generate_video.js` | `video-compose` | PAI Lite | `video-generation` | ~2–4 min. ~$0.08/sec @ 480p, ~$0.20/sec @ 720p, ~$0.44/sec @ 1080p + ~$0.01/ref preupload. Real money — only after explicit ask. |
-| `generate_voice.js` | `voice-compose` | PAI Lite | `tts` | ~5–15s. $0.01 per 500 input characters (rounded up). Creates an `audio_result` node (subtype `voice`). With `--source-node-id`, also emits a `derived` edge from that source → audio (typically a character image; may also be a shot note for written V.O.). Without it, the audio node stands alone. |
+| `generate_image.js` | `image-compose` | PAI media API | `image-generation` | ~10–30s. ~$0.07 @ 1K / $0.10 @ 2K / $0.15 @ 4K. Standard image tier — drafts, illustrative, stylized. |
+| `generate_image_pro.js` | `image-compose` | PAI media API | `image-generation-pro` | ~3–6 min. ~$0.26 @ 1K / $0.45 @ 2K / $0.77 @ 4K. Pro image tier — exact `--size` only; refs route internally to image edit. |
+| `generate_video.js` | `video-compose` | PAI media API | `video-generation` | ~3–6 min. ~$0.08/sec @ 480p, ~$0.20/sec @ 720p, ~$0.44/sec @ 1080p + ~$0.01/ref preupload. Real money — only after explicit ask. |
+| `generate_voice.js` | `voice-compose` | PAI media API | `tts` | ~5–15s. $0.01 per 500 input characters (rounded up). Creates an `audio_result` node (subtype `voice`). With `--source-node-id`, also emits a `derived` edge from that source → audio (typically a character image; may also be a shot note for written V.O.). Without it, the audio node stands alone. |
 | `mirror_url.js` | (no skill) | n/a (local fetch) | n/a | Download an external image / audio / video URL into a canvas reference node so it can be used as `--ref-source-id` for a later generation. `--url`, `--kind?`, `--label?`. Same node shape as a drag-drop upload (`subtype: "reference"` / `"upload"`, `metadata.source: "user_upload"`), plus `metadata.source_url` for provenance. |
 | `split_image.js` | (no skill) | n/a (local sharp) | n/a | Slice an `image_result` into cols×rows. `--url`, `--cols`, `--rows`, `--source-node-id`. cols·rows ≤ 64. Synchronous, ~1s. |
 | `switch_project.js` | (see Projects below) | n/a | n/a | Flip the active-project symlinks. |
@@ -139,7 +139,7 @@ Reply in one short sentence naming the price (*"Staged a 10s 1080p clip — $3.4
 
 ### Failure handling
 
-Every CLI prints `{ ok: false, klass, message, limits, sent, ... }` on failure. `limits` ([server/cli/_limits.js](server/cli/_limits.js)) is the provider's hard caps; `sent` is what was submitted — compare to localize.
+Every CLI prints `{ ok: false, klass, message, limits, sent, ... }` on failure. `limits` (`server/cli/_limits.js`, repo-root relative) is the provider's hard caps; `sent` is what was submitted — compare to localize.
 
 - `rate_limited` — wait `retryAfterSec`; ask before retry.
 - `content_filtered` — reword the prompt.
@@ -176,7 +176,7 @@ Three ways into the mutator, all equivalent:
 
 **Asset-bearing nodes (`addNode` with `tmp_path`).** Image/video/audio nodes are minted via a temp-then-rename hand-off: the CLI (or the browser upload route) writes the provider's bytes to `projects/<id>/assets/.tmp/<random>.<ext>`, then passes that absolute path as `tmp_path` alongside the node payload — `{ type, data, tmp_path }`. The mutator mints the node id, renames the file to `assets/<bucket>/<node-id>.<ext>` (bucket = `images` / `videos` / `audios`), fills `data.local_path`, and persists workflow.json — all atomic under the mutationQueue lock with rollback on either failure. CLIs leave `local_path` blank when supplying `tmp_path`. `local_mirror.js` exposes `writeBytesToTmp` and `mirrorToTmp` for the staging step.
 
-The full op surface, reducer table, idempotency rules, and failure-class taxonomy live in [server/canvas_mutator.js](server/canvas_mutator.js). The JSON schema is [server/canvas_schema.js](server/canvas_schema.js); it is hand-mirrored from [web/src/types/canvas.ts](web/src/types/canvas.ts) (the renderer's source of truth).
+The full op surface, reducer table, idempotency rules, and failure-class taxonomy live in `server/canvas_mutator.js` (repo-root relative). The JSON schema is `server/canvas_schema.js`; it is hand-mirrored from `web/src/types/canvas.ts` (the renderer's source of truth).
 
 ### Node grammar (what to put in payloads)
 

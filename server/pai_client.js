@@ -1,6 +1,6 @@
-// Shared HTTP plumbing for the PAI Lite developer platform.
+// Shared HTTP plumbing for the PAI media API.
 //
-// PAI Lite exposes three relevant endpoints, all gated by a single
+// The PAI media API exposes three relevant endpoints, all gated by a single
 // Authorization: Bearer PAI_<key> header:
 //
 //   POST /api/v1/generate            sync raw passthrough
