@@ -1,5 +1,11 @@
 # API Service
 
+[PAI Pro Developer Platform](https://pai-pro.utopaistudios.com/) is the account
+console for the media API used by PAI-Pro. Sign in there to create and manage
+API keys, view submitted tasks and generated outputs, monitor balance and usage,
+top up credits, and review billing history. The local PAI-Pro app reads the key
+from `PAI_KEY` and sends media requests through the API contract below.
+
 Use PAI-Pro's API service when you want:
 
 - One `PAI_KEY` for image, image pro, video, voice, and video reference uploads.
