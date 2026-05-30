@@ -14,6 +14,34 @@ import {
 } from "./agent_continuations.js";
 import { stageDraftFromSpec } from "./stage_draft_from_spec.js";
 
+function nullable(schema) {
+  return { anyOf: [schema, { type: "null" }] };
+}
+
+const DIAGNOSTIC_PROPERTIES = {
+  job_id: nullable({ type: "string" }),
+  severity: nullable({ enum: ["info", "warning", "error"] }),
+  message: { type: "string", maxLength: 1200 },
+};
+
+const STEP_PROPERTIES = {
+  kind: { enum: ["none", "stage_image", "stage_video", "stage_voice", "note"] },
+  label: nullable({ type: "string", maxLength: 160 }),
+  prompt: nullable({ type: "string", maxLength: 4000 }),
+  text: nullable({ type: "string", maxLength: 4000 }),
+  ref_source_ids: nullable({
+    type: "array",
+    maxItems: 8,
+    items: { type: "string" },
+  }),
+  source_node_id: nullable({ type: "string" }),
+  rationale: nullable({ type: "string", maxLength: 1200 }),
+  aspect_ratio: nullable({ type: "string", maxLength: 20 }),
+  image_size: nullable({ type: "string", maxLength: 20 }),
+  resolution: nullable({ type: "string", maxLength: 20 }),
+  duration: nullable({ type: "number" }),
+};
+
 export const CONTINUATION_SCHEMA = {
   type: "object",
   additionalProperties: false,
@@ -26,12 +54,8 @@ export const CONTINUATION_SCHEMA = {
       items: {
         type: "object",
         additionalProperties: false,
-        required: ["message"],
-        properties: {
-          job_id: { type: "string" },
-          severity: { enum: ["info", "warning", "error"] },
-          message: { type: "string", maxLength: 1200 },
-        },
+        required: Object.keys(DIAGNOSTIC_PROPERTIES),
+        properties: DIAGNOSTIC_PROPERTIES,
       },
     },
     suggested_next_steps: {
@@ -40,24 +64,8 @@ export const CONTINUATION_SCHEMA = {
       items: {
         type: "object",
         additionalProperties: false,
-        required: ["kind"],
-        properties: {
-          kind: { enum: ["none", "stage_image", "stage_video", "stage_voice", "note"] },
-          label: { type: "string", maxLength: 160 },
-          prompt: { type: "string", maxLength: 4000 },
-          text: { type: "string", maxLength: 4000 },
-          ref_source_ids: {
-            type: "array",
-            maxItems: 8,
-            items: { type: "string" },
-          },
-          source_node_id: { anyOf: [{ type: "string" }, { type: "null" }] },
-          rationale: { type: "string", maxLength: 1200 },
-          aspect_ratio: { type: "string", maxLength: 20 },
-          image_size: { type: "string", maxLength: 20 },
-          resolution: { type: "string", maxLength: 20 },
-          duration: { type: "number" },
-        },
+        required: Object.keys(STEP_PROPERTIES),
+        properties: STEP_PROPERTIES,
       },
     },
   },

@@ -74,6 +74,29 @@ async function readEvent(projectId, eventId) {
   );
 }
 
+function assertStrictObjectRequired(schema, path = "schema") {
+  if (!schema || typeof schema !== "object") return;
+  if (schema.type === "object" && schema.properties && typeof schema.properties === "object") {
+    assert.deepEqual(
+      [...(schema.required ?? [])].sort(),
+      Object.keys(schema.properties).sort(),
+      `${path}.required must include every property for Codex structured output`,
+    );
+  }
+  if (schema.type === "array") assertStrictObjectRequired(schema.items, `${path}.items`);
+  for (const key of ["anyOf", "oneOf", "allOf"]) {
+    if (!Array.isArray(schema[key])) continue;
+    schema[key].forEach((entry, idx) => assertStrictObjectRequired(entry, `${path}.${key}[${idx}]`));
+  }
+  for (const [key, value] of Object.entries(schema.properties ?? {})) {
+    assertStrictObjectRequired(value, `${path}.properties.${key}`);
+  }
+}
+
+test("continuation schema satisfies Codex strict object required rules", () => {
+  assertStrictObjectRequired(continuations.CONTINUATION_SCHEMA);
+});
+
 test("continuation event enqueue is write-once by job id", async () => {
   const projectId = "project_enqueue";
   await setupProject(projectId);
