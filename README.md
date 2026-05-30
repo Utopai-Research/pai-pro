@@ -44,7 +44,7 @@ Open Docker at <http://localhost:7588> or local at <http://localhost:7443>.
 
 ## API Service
 
-`PAI_KEY` gives each production one API service for image, image pro, video, and voice, so you do not have to wire separate provider keys for every step. Use the <a href="https://pai-pro.utopaistudios.com/keys" target="_blank" rel="noopener noreferrer">PAI Pro Developer Platform</a> to create keys, view tasks and outputs, monitor balance and usage, and top up credits. The service also supports less restrictive video-generation moderation via asset preupload, and helps support this project and the open-source filmmaking community. Paid generations are staged first and only run when you explicitly fire a draft. For BYOK and exact JSON payloads, see [API Service](docs/api_service.md).
+`PAI_KEY` gives each production one service for image, image pro, video, and voice, without separate provider keys for each step. Use the <a href="https://pai-pro.utopaistudios.com/keys" target="_blank" rel="noopener noreferrer">PAI Pro Developer Platform</a> to manage keys, tasks, balance, and credits. It also supports less restrictive video moderation via asset preupload and helps support this project. Paid generations are staged first; for BYOK and exact payloads, see [API Service](docs/api_service.md).
 
 | Capability | Quality | Time | # of references | Estimated price |
 |---|---|---|---|---|
