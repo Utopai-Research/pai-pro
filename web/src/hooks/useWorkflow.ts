@@ -4,7 +4,7 @@
  * On mount we GET /projects/:id once for the initial state, then
  * subscribe to the project's Socket.IO room. Server pushes
  * `canvas-state`, `canvas-positions`, `pending-generations`, and
- * `generation-results` / `agent-continuations` on
+ * `generation-results` on
  * every disk change (chokidar watcher + our HTTP write endpoints both
  * cause these to fire). Failed generation results are folded into the
  * pending-generation list so the canvas has one placeholder surface.
@@ -14,7 +14,6 @@ import { getSocket, VIEWER_URL } from '@/lib/socket'
 import { mergeWorkflow, synthesizeAssetUrls } from '@/lib/workflowMerge'
 import type {
   GenerationResult,
-  AgentContinuation,
   PendingGeneration,
   ProjectBundle,
   Workflow,
@@ -26,7 +25,6 @@ interface UseWorkflowResult {
   workflow: Workflow | null
   canvasPositions: CanvasPositionsState
   pendingGenerations: PendingGeneration[]
-  agentContinuations: AgentContinuation[]
   assetStatuses: ReadonlyMap<string, AssetStatusEntry>
   bundle: ProjectBundle | null
   loading: boolean
@@ -36,7 +34,6 @@ interface UseWorkflowResult {
 const EMPTY_POSITIONS: CanvasPositionsState = { positions: {}, groupFrames: {} }
 const EMPTY_PENDING: PendingGeneration[] = []
 const EMPTY_RESULTS: GenerationResult[] = []
-const EMPTY_CONTINUATIONS: AgentContinuation[] = []
 const EMPTY_ASSET_STATUSES: ReadonlyMap<string, AssetStatusEntry> = new Map()
 
 function failedResultToPending(result: GenerationResult): PendingGeneration | null {
@@ -84,8 +81,6 @@ export function useWorkflow(projectId: string | null): UseWorkflowResult {
     useState<PendingGeneration[]>(EMPTY_PENDING)
   const [generationResults, setGenerationResults] =
     useState<GenerationResult[]>(EMPTY_RESULTS)
-  const [agentContinuations, setAgentContinuations] =
-    useState<AgentContinuation[]>(EMPTY_CONTINUATIONS)
   const [assetStatuses, setAssetStatuses] =
     useState<ReadonlyMap<string, AssetStatusEntry>>(EMPTY_ASSET_STATUSES)
   const [bundle, setBundle] = useState<ProjectBundle | null>(null)
@@ -98,7 +93,6 @@ export function useWorkflow(projectId: string | null): UseWorkflowResult {
       setCanvasPositions(EMPTY_POSITIONS)
       setPendingGenerations(EMPTY_PENDING)
       setGenerationResults(EMPTY_RESULTS)
-      setAgentContinuations(EMPTY_CONTINUATIONS)
       setAssetStatuses(EMPTY_ASSET_STATUSES)
       setBundle(null)
       setLoading(false)
@@ -123,7 +117,6 @@ export function useWorkflow(projectId: string | null): UseWorkflowResult {
         setCanvasPositions(b.canvas_positions ?? EMPTY_POSITIONS)
         setPendingGenerations(b.pending_generations ?? EMPTY_PENDING)
         setGenerationResults(b.generation_results ?? EMPTY_RESULTS)
-        setAgentContinuations(b.agent_continuations ?? EMPTY_CONTINUATIONS)
         setLoading(false)
       })
       .catch((err: unknown) => {
@@ -167,14 +160,6 @@ export function useWorkflow(projectId: string | null): UseWorkflowResult {
       const incoming = Array.isArray(msg.state) ? msg.state : []
       setGenerationResults(incoming.length > 0 ? incoming : EMPTY_RESULTS)
     }
-    const onAgentContinuations = (msg: {
-      projectId: string
-      state: AgentContinuation[]
-    }) => {
-      if (msg.projectId !== projectId) return
-      const incoming = Array.isArray(msg.state) ? msg.state : []
-      setAgentContinuations(incoming.length > 0 ? incoming : EMPTY_CONTINUATIONS)
-    }
     const onAssetStatusSnapshot = (msg: {
       projectId: string
       state: Record<string, AssetStatusEntry>
@@ -201,7 +186,6 @@ export function useWorkflow(projectId: string | null): UseWorkflowResult {
     socket.on('canvas-positions', onCanvasPositions)
     socket.on('pending-generations', onPendingGenerations)
     socket.on('generation-results', onGenerationResults)
-    socket.on('agent-continuations', onAgentContinuations)
     socket.on('pai-assets-snapshot', onAssetStatusSnapshot)
     socket.on('pai-assets', onAssetStatusUpdate)
     socket.emit('subscribe', { projectId })
@@ -212,7 +196,6 @@ export function useWorkflow(projectId: string | null): UseWorkflowResult {
       socket.off('canvas-positions', onCanvasPositions)
       socket.off('pending-generations', onPendingGenerations)
       socket.off('generation-results', onGenerationResults)
-      socket.off('agent-continuations', onAgentContinuations)
       socket.off('pai-assets-snapshot', onAssetStatusSnapshot)
       socket.off('pai-assets', onAssetStatusUpdate)
     }
@@ -227,7 +210,6 @@ export function useWorkflow(projectId: string | null): UseWorkflowResult {
     workflow,
     canvasPositions,
     pendingGenerations: visiblePendingGenerations,
-    agentContinuations,
     assetStatuses,
     bundle,
     loading,

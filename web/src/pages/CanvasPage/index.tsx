@@ -43,7 +43,6 @@ import { useMediaExpandRegistration } from '@/contexts/MediaExpandContext'
 import { ProjectProvider } from '@/contexts/ProjectContext'
 import { useWorkflow } from '@/hooks/useWorkflow'
 import { FireConfirmProvider } from './FireConfirmProvider'
-import { ContinuationPanel } from './ContinuationPanel'
 import { GroupCreateModal } from './GroupCreateModal'
 import { HighlightEdge } from './HighlightEdge'
 import {
@@ -165,7 +164,6 @@ function CanvasPageInner(): JSX.Element | null {
   const {
     workflow,
     pendingGenerations,
-    agentContinuations,
     assetStatuses,
     loading,
     error,
@@ -911,7 +909,6 @@ function CanvasPageInner(): JSX.Element | null {
             <ZoomBar onTidy={onTidy} />
             <SelectionToolbar onGroup={openCreateModal} onArchive={archiveNodes} />
           </ReactFlow>
-          <ContinuationPanel continuations={agentContinuations} />
           {/* Inside NodeActionsProvider so the overlay's useNodeActions() resolves.
               Inside FireConfirmProvider so the overlay's Generate button can
               raise the first-fire modal the same way the card does. */}
