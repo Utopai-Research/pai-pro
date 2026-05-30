@@ -46,17 +46,17 @@ Open Docker at <http://localhost:7588> or local at <http://localhost:7443>.
 
 `PAI_KEY` gives each production one API service for story media across image, video, and voice, so you do not have to wire separate providers for every step. Get a key and monitor your balance at <a href="https://pai-pro.utopaistudios.com/keys" target="_blank" rel="noopener noreferrer">https://pai-pro.utopaistudios.com/keys</a>. Paid generations are staged first and only run when you explicitly fire a draft.
 
-| Capability | Quality | Time | Estimated price |
-|---|---|---|---|
-| [`generate_image`](server/cli/generate_image.js) | Great | ~10-30s | $0.07 at 1K, $0.10 at 2K, $0.15 at 4K |
-| [`generate_image_pro`](server/cli/generate_image_pro.js) | Best | ~3-6 min | $0.26 at 1K, $0.45 at 2K, $0.77 at 4K |
-| [`generate_video`](server/cli/generate_video.js) | Best | ~2-4 min | $0.08/sec at 480p, $0.20/sec at 720p, $0.44/sec at 1080p |
-| [`generate_voice`](server/cli/generate_voice.js) | Good | ~5-15s | $0.01 per 500 input characters, rounded up |
+| Capability | Quality | Time | # of references | Estimated price |
+|---|---|---|---|---|
+| [`generate_image`](server/cli/generate_image.js) | Great | ~10-30s | 16 imgs | $0.07 / $0.10 / $0.15 for 1K / 2K / 4K |
+| [`generate_image_pro`](server/cli/generate_image_pro.js) | Best | ~3-6 min | 32 imgs | $0.26 / $0.45 / $0.77 for 1K / 2K / 4K |
+| [`generate_video`](server/cli/generate_video.js) | Best | ~3-6 min | 9 imgs / 3 vids / 3 auds | $0.08/s / $0.20/s / $0.44/s for 480p / 720p / 1080p |
+| [`generate_voice`](server/cli/generate_voice.js) | Good | ~5-15s | N/A | $0.01 per 500 input characters, rounded up |
 
 ## Resources
 
 - 💬 [Discord][discord-url] — questions, ideas, support, and show & tell
-- ⚙️ [API Service](docs/api_service.md) — generation time, pricing, and <a href="https://pai-pro.utopaistudios.com/keys" target="_blank" rel="noopener noreferrer">PAI developer platform</a> keys and balance
+- ⚙️ [API Service](docs/api_service.md) — media request/response payloads, PAI-compatible routes, and bring-your-own-key guidance
 - 🎬 [Skills reference](docs/skills.md) — how filmmaking skills route agent requests
 - 🚀 [Setup and agents](docs/setup.md) — choose Docker or host mode, configure Claude/Codex, and understand ports, auth, and permissions
 - 🏗 [Architecture](docs/architecture.md) — viewer, CLI, canvas, and project-file layout
