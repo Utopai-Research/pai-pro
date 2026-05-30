@@ -24,10 +24,10 @@ Closest public performance counterparts for BYOK experiments:
 
 | PAI-Pro capability | Closest public counterpart |
 |---|---|
-| `image-generation` | [Google Cloud API](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/gemini/3-1-flash-image) |
-| `image-generation-pro` | [OpenRouter API](https://openrouter.ai/openai/gpt-5.4-image-2/api) |
-| `video-generation` | [Replicate API](https://replicate.com/bytedance/seedance-2.0/api) |
-| `voice-design` | [Replicate API](https://replicate.com/qwen/qwen3-tts) |
+| [`generate_image`](../server/cli/generate_image.js) | [Google Cloud API](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/gemini/3-1-flash-image) |
+| [`generate_image_pro`](../server/cli/generate_image_pro.js) | [OpenRouter API](https://openrouter.ai/openai/gpt-5.4-image-2/api) |
+| [`generate_video`](../server/cli/generate_video.js) | [Replicate API](https://replicate.com/bytedance/seedance-2.0/api) |
+| [`generate_voice`](../server/cli/generate_voice.js) | [Replicate API](https://replicate.com/qwen/qwen3-tts) |
 
 These links are only the closest public counterparts for custom integrations.
 For the full intended PAI-Pro behavior and 100% performance, use `PAI_KEY`.
