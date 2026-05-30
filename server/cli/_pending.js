@@ -27,6 +27,8 @@ const RESULTS_DIR_NAME = ".results";
 const DEFAULT_WAIT_TIMEOUT_MS = 10 * 60 * 1000;
 const VIDEO_WAIT_TIMEOUT_MS = 35 * 60 * 1000;
 const DEFAULT_WAIT_INTERVAL_MS = 1000;
+export const REVIEW_WAIT_TIMEOUT_MS = 24 * 60 * 60 * 1000;
+const REVIEW_WAIT_INTERVAL_MS = 250;
 
 function pendingDir() {
   return path.join(process.cwd(), PENDING_DIR_NAME);
@@ -73,6 +75,14 @@ export async function isServerOwnedGenerationEnabled(cwd = process.cwd()) {
 
 export function defaultWaitTimeoutMsForKind(kind) {
   return kind === "video" ? VIDEO_WAIT_TIMEOUT_MS : DEFAULT_WAIT_TIMEOUT_MS;
+}
+
+export async function waitForReviewResult(jobId, { kind } = {}) {
+  return waitForResult(jobId, {
+    kind,
+    timeoutMs: REVIEW_WAIT_TIMEOUT_MS,
+    intervalMs: REVIEW_WAIT_INTERVAL_MS,
+  });
 }
 
 function parseWaitTimeout(timeoutMs, kind) {

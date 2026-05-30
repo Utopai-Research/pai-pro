@@ -16,6 +16,7 @@ import { mkdtemp, rm, writeFile, readFile, mkdir, stat } from "node:fs/promises"
 import { tmpdir } from "node:os";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { writePending } from "../cli/_pending.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const VIEWER_PATH = resolve(__dirname, "..", "local_viewer.js");
@@ -331,12 +332,19 @@ test("new-project bypass mode fires through viewer and waits on result sidecar",
   await assert.rejects(stat(sidecarPath(reply.job_id)), /ENOENT/);
 });
 
-test("DELETE unlinks the sidecar; second DELETE is idempotent", async () => {
+test("DELETE writes cancelled result, unlinks sidecar, and is idempotent", async () => {
   const { jobId } = await seedDraft();
   const r1 = await fetch(`${baseUrl}/projects/${TEST_PROJECT_ID}/pending/${jobId}`, {
     method: "DELETE",
   });
   assert.equal(r1.status, 200);
+  const result = await waitForResult(jobId);
+  assert.equal(result.ok, false);
+  assert.equal(result.job_id, jobId);
+  assert.equal(result.kind, "image");
+  assert.equal(result.klass, "cancelled");
+  assert.equal(result.message, "cancelled by user");
+  assert.equal(result.prompt, "a test cat");
   await assert.rejects(stat(sidecarPath(jobId)));
   const r2 = await fetch(`${baseUrl}/projects/${TEST_PROJECT_ID}/pending/${jobId}`, {
     method: "DELETE",
@@ -380,24 +388,23 @@ test("writePending preserves position across stage transitions", async () => {
   const { jobId } = await seedDraft({
     overrides: { position: { x: 50, y: 60 } },
   });
-  // Re-run generate_image.js --stage --existing-job-id <jobId>.
-  // writePending overwrites the sidecar but should read the prior
-  // file and copy `position` forward (sticky field semantics).
-  await new Promise((resolve) => {
-    const child = spawn(process.execPath, [
-      join(__dirname, "..", "cli", "generate_image.js"),
-      "--stage",
-      "--existing-job-id", jobId,
-      "--prompt", "still the same cat",
-      "--aspect-ratio", "1:1",
-      "--image-size", "1K",
-    ], {
-      cwd: join(projectsDir, TEST_PROJECT_ID),
-      env: process.env,
-      stdio: "ignore",
+  // The route-owned replay path calls writePending against the existing
+  // job id. It overwrites the sidecar but should copy `position` forward
+  // from the draft sidecar (sticky field semantics).
+  const originalCwd = process.cwd();
+  process.chdir(projectPath());
+  try {
+    await writePending({
+      jobId,
+      kind: "image",
+      prompt: "still the same cat",
+      aspectRatio: "1:1",
+      model: "image-generation",
+      imageSize: "1K",
     });
-    child.on("exit", resolve);
-  });
+  } finally {
+    process.chdir(originalCwd);
+  }
   const after = await readSidecar(jobId);
   assert.deepEqual(after.position, { x: 50, y: 60 }, "position must survive writePending");
 });

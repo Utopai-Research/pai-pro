@@ -33,7 +33,7 @@ Two more recipes — "take a note" and "summarize the canvas" — are handled in
 Two rules:
 
 - **Use the skill, don't re-invent.** Skills encode the canonical node grammar (subtypes, edges, metadata, mirroring) — duplicating that logic in chat drifts. If a skill matches, use it.
-- **Stage generation by default.** Every `generate_*` call passes `--stage`. The CLI exits quickly with a draft job for user review. Use `wait_for_generation.js <job_id>` only when you need the fired job's final structured result.
+- **Stage generation by default.** Every `generate_*` call passes `--stage`. The CLI writes a draft job for user review, then waits for the user to Generate or Cancel it on the canvas. Read the final JSON from the command's last JSON line.
 
 ## Choosing context
 
@@ -122,20 +122,20 @@ Do not write `node server/cli/...` (no such directory under your cwd) and do not
 
 ### Draft gate (default)
 
-Every `generate_*` call passes `--stage`. The CLI writes a draft sidecar capturing the call + price and exits without contacting the provider; the user reviews and fires it from the canvas.
+Every `generate_*` call passes `--stage`. The CLI writes a draft sidecar capturing the call + price, prints a staged JSON line, and then waits. The user reviews and either fires or cancels the draft from the canvas; the command's final JSON line is the terminal result.
 
 ```
 $ node "$PAI_REPO_ROOT/server/cli/generate_video.js" --stage --prompt "..." --duration 10 --resolution 1080p
 { "ok": true, "stage": "draft", "job_id": "pending_xyz", "cost_usd": 3.41 }
 ```
 
-Reply in one short sentence naming the price (*"Staged a 10s 1080p clip — $3.41."*). Don't paste the JSON; don't repeat the prompt; don't promise a result.
+When the command is still waiting for review, reply in one short sentence naming the price (*"Staged a 10s 1080p clip — $3.41."*). Don't paste the JSON; don't repeat the prompt; don't promise a result until the final JSON line arrives.
 
-**Chained calls (B references A).** Stage A. Wait silently for the user to come back; don't stage B in the same turn. When they do, resolve A via **Choosing context** above: result feed first for just-fired staged jobs, `workflow.json` only when needed.
+**Chained calls (B references A).** Stage A and wait for its terminal result. Only stage B after A returns `ok:true` and gives you the final node id. If the command output fell out of context, resolve A via **Choosing context** above: result feed first for just-fired staged jobs, `workflow.json` only when needed.
 
-**Bypass mode.** The user can disable the draft gate from the canvas chip; still pass `--stage`. On server-owned projects, the CLI writes the draft sidecar, asks the viewer to fire it, waits for `.results/<job_id>.json`, and prints the final result JSON. On older projects without `use_server_owned_generation`, bypass falls back to direct CLI fire. If a chat phrasing asks you to fire without staging, refuse and tell the user to use the canvas.
+**Bypass mode.** The user can disable the draft gate from the canvas chip; still pass `--stage`. The CLI writes the draft sidecar, asks the viewer to fire it, waits for `.results/<job_id>.json`, and prints the final result JSON. If a chat phrasing asks you to fire without staging, refuse and tell the user to use the canvas.
 
-**Reading fired draft results.** Use the compact feed: `list_generation_results.js --job-id <id>` when you have ids, `--recent N` when they fell out of context, `--failed --recent N` for failures only; `wait_for_generation.js <job_id>` blocks on one known in-flight job. On a viewer failed-generation card, run the `--job-id` command it names, explain the failure plainly, then stage a correction only when it's clear from the result and canvas.
+**Reading fired draft results.** The staged command should usually print the terminal result itself. Use the compact feed for recovery: `list_generation_results.js --job-id <id>` when you have ids, `--recent N` when they fell out of context, `--failed --recent N` for failures only; `wait_for_generation.js <job_id>` blocks on one known in-flight job. On a viewer failed-generation card, first check the result by job id, explain the failure plainly, then stage a correction only when it's clear from the result and canvas.
 
 ### Failure handling
 

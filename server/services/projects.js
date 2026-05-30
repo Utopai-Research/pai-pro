@@ -39,8 +39,8 @@ You are invoked as \`claude\` in this project's PTY. The \`@./PROJECT_AGENT.md\`
 
 Claude-specific notes:
 - Skill invocation syntax is \`/<skill-name>\` (slash-prefixed). The skills referenced in PROJECT_AGENT.md (\`image-compose\`, \`video-compose\`, etc.) live at \`~/.claude/skills/\` and auto-discover by description.
-- Every \`generate_image.js\`, \`generate_video.js\`, and \`generate_voice.js\` Bash call needs both the CLI flag \`--stage\` and the Bash tool option \`run_in_background: true\`. This applies to every call in a parallel batch.
-- To wait on a backgrounded Bash call, use the \`BashOutput\` tool against the bash id you got back. Never \`cat\`/\`grep\` \`/tmp/claude-*/.../tasks/<id>.output\`.
+- Every \`generate_image.js\`, \`generate_video.js\`, and \`generate_voice.js\` Bash call needs both the CLI flag \`--stage\` and the Bash tool option \`run_in_background: true\`; staged commands wait for the user's canvas Generate/Cancel decision before printing final JSON. This applies to every call in a parallel batch.
+- To wait on a backgrounded Bash call's final JSON, use the \`BashOutput\` tool against the bash id you got back. Never \`cat\`/\`grep\` \`/tmp/claude-*/.../tasks/<id>.output\`.
 `;
 
 const PER_PROJECT_CODEX_AGENTS_MD = `# Per-project filmmaking agent -- Codex
@@ -51,8 +51,8 @@ You are invoked as \`codex\` in this project's PTY.
 
 Codex-specific notes:
 - Repo-local skills live in \`.agents/skills/\` and are discoverable by Codex.
-- Use staged media generation and \`wait_for_generation.js\` for final results.
-- Use Codex's normal command execution; do not rely on Claude-specific background tool behavior.
+- Use staged media generation. Staged commands are long-running because they wait for the user's canvas Generate/Cancel decision before printing final JSON.
+- For multiple independent staged generations, use Codex's background-capable command execution and inspect background terminals with \`/ps\` when needed. Do not wait for staged jobs serially unless the user asked for a dependency chain.
 `;
 
 const AGENT_TEMPLATE_PATH = path.join(PAI_REPO_ROOT, "agent-templates", "PROJECT_AGENT.md");
