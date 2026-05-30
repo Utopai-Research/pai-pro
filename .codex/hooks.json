@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$(git rev-parse --show-toplevel)/.codex/hooks/block_workflow_writes.js\"",
+            "statusMessage": "Checking canvas writes"
+          }
+        ]
+      }
+    ]
+  }
+}
