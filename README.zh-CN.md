@@ -12,12 +12,12 @@
 
 ## PAI-Pro 是什么？
 
-PAI-Pro 是一个本地优先的 AI 电影制作工作区，围绕四件事构建：
+PAI-Pro 是一个本地部署的 AI 电影制作工作区，围绕四件事构建：
 
-- **你自己的 [Claude Code][claude-code-url] 或 [Codex][codex-url]**：连接本地项目文件、持久上下文和可定制电影制作技能的代码 Agent。([安装与 Agent 设置](docs/setup.md))
-- **端到端电影制作技能**：覆盖剧本、图像、视频和声音。([技能参考](docs/skills.md))
+- **你自己的 [Claude Code][claude-code-url] 或 [Codex][codex-url]**：本地项目管理、持久上下文管理，可自我定制的skills和workflows。([安装与Agent](docs/setup.md))
+- **端到端电影制作技能**：覆盖剧本的设计、图像/视频的生成与修改、以及声音的生成，支持灵活的自我skill定义。([skills](docs/skills.md))
 - **可视化画布和时间线**：用于设计场景、管理素材、安排镜头，并组织更大的制作项目。
-- **一个故事媒体 API 服务**：统一处理图像、视频和声音，因此制作流程不需要为每一步分别接入不同供应商。([API 服务详情](docs/api_service.md))
+- **一个故事媒体 API 服务**：统一处理图像、视频和声音，因此制作流程不需要为每一个模型分别接入不同供应商。([API 服务详情](docs/api_service.md))
 
 ## 快速开始
 
@@ -34,7 +34,7 @@ Docker 模式打开 <http://localhost:7588>，本地模式打开 <http://localho
 
 ## API 服务
 
-`PAI_KEY` 为每个制作项目提供一个统一服务，覆盖 image、image pro、video 和 voice，不需要为每一步分别配置不同供应商的 key。使用 <a href="https://pai-pro.utopaistudios.com/keys" target="_blank" rel="noopener noreferrer">PAI Pro Developer Platform</a> 管理 keys、tasks、balance 和 credits。它也通过 asset preupload 支持更宽松的视频审核，并帮助支持这个项目。付费生成会先进入草稿阶段；BYOK 和精确 JSON payload 请见 [API Service](docs/api_service.md)。
+`PAI_KEY` 为每个制作项目提供一个统一服务，覆盖 image、image pro、video 和 voice，不需要为每一步分别配置不同供应商的 key。使用 <a href="https://pai-pro.utopaistudios.com/keys" target="_blank" rel="noopener noreferrer">PAI Pro Developer Platform</a> 管理 keys、tasks、balance 和 credits。它也通过 asset preupload 支持更宽松的视频审核。付费生成会先进入草稿阶段；BYOK 和精确 JSON payload 请见 [API Service](docs/api_service.md)。
 
 | 能力 | 质量 | 时间 | 参考素材数量 | 预估价格 |
 |---|---|---|---|---|
