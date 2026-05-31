@@ -7,7 +7,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { mkdtemp, mkdir, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
@@ -19,12 +19,32 @@ function runCli({ script, args, cwd, env }) {
   return new Promise((resolve) => {
     let stdout = "";
     let stderr = "";
+    const resolved = new Set();
     const child = spawn(
       process.execPath,
       [join(CLI_DIR, script), ...args],
       { cwd, env: { ...process.env, ...env }, stdio: ["ignore", "pipe", "pipe"] },
     );
-    child.stdout.on("data", (d) => { stdout += d; });
+    child.stdout.on("data", (d) => {
+      stdout += d;
+      for (const line of stdout.split(/\r?\n/)) {
+        if (!line.trim().startsWith("{")) continue;
+        let parsed;
+        try { parsed = JSON.parse(line); } catch { continue; }
+        if (parsed?.stage !== "draft" || typeof parsed.job_id !== "string") continue;
+        if (resolved.has(parsed.job_id)) continue;
+        resolved.add(parsed.job_id);
+        mkdir(join(cwd, ".results"), { recursive: true })
+          .then(() => writeFile(
+            join(cwd, ".results", `${parsed.job_id}.json`),
+            JSON.stringify({ ok: true, job_id: parsed.job_id, model: parsed.model }) + "\n",
+          ))
+          .catch((e) => {
+            stderr += `\n[test harness result write failed: ${e.message}]`;
+            try { child.kill("SIGTERM"); } catch {}
+          });
+      }
+    });
     child.stderr.on("data", (d) => { stderr += d; });
     child.on("exit", (code) => resolve({ code, stdout, stderr }));
   });
@@ -35,9 +55,15 @@ function parseReply(stdout) {
   return JSON.parse(lines[lines.length - 1]);
 }
 
+function parseStagedReply(stdout) {
+  const lines = stdout.trim().split("\n").filter((l) => l.trim().startsWith("{"));
+  return lines.map((l) => JSON.parse(l)).find((r) => r.stage === "draft");
+}
+
 async function setupCwd() {
   const dir = await mkdtemp(join(tmpdir(), "url-removal-"));
   await mkdir(join(dir, ".pending"), { recursive: true });
+  await mkdir(join(dir, ".results"), { recursive: true });
   return dir;
 }
 
@@ -128,7 +154,8 @@ test("generate_image.js --stage captures --ref-source-id in sidecar", async (t) 
     cwd,
   });
   assert.strictEqual(code, 0);
-  const reply = parseReply(stdout);
+  const reply = parseStagedReply(stdout);
+  assert.ok(reply);
   assert.strictEqual(reply.stage, "draft");
   const sidecar = await readSidecar(cwd, reply.job_id);
   assert.deepEqual(sidecar.reference_source_ids, ["image_42"]);
@@ -145,7 +172,8 @@ test("generate_image_pro.js --stage captures --ref-source-id in sidecar", async 
     cwd,
   });
   assert.strictEqual(code, 0);
-  const reply = parseReply(stdout);
+  const reply = parseStagedReply(stdout);
+  assert.ok(reply);
   assert.strictEqual(reply.stage, "draft");
   const sidecar = await readSidecar(cwd, reply.job_id);
   assert.deepEqual(sidecar.reference_source_ids, ["image_42"]);

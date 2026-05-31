@@ -27,10 +27,11 @@ import {
 } from "../local_mirror.js";
 import { postNodeAddBatch } from "./_mutate_helper.js";
 import {
+  fireDraft,
   fireAndWait,
   isBypassEnabled,
-  isServerOwnedGenerationEnabled,
   newJobId,
+  waitForReviewResult,
   writePending,
   writeResultSidecar,
   removePending,
@@ -53,15 +54,16 @@ const args = parseArgs({
   // canvas-mutate integration
   label:                   { type: "string" },
   "ref-source-id":         { type: "string", multiple: true, default: [] },
-  "source-node-id":        { type: "string" }, // authorship edge — see CLAUDE.md
+  "source-node-id":        { type: "string" }, // authorship edge — see PROJECT_AGENT.md
   // Canvas audio_result refs — resolved to local_path, uploaded via the tunnel.
   "ref-audio-source-id":   { type: "string", multiple: true, default: [] },
   "shot-id":               { type: "string" },
   "project-id":            { type: "string" },
   "request-id":            { type: "string" },
   "no-canvas-write":       { type: "boolean" },
-  // Draft gate — see CLAUDE.md § "Draft gate".
+  // Draft gate — see PROJECT_AGENT.md § "Draft gate".
   stage:                   { type: "boolean" },
+  "draft-only":            { type: "boolean" },
   "existing-job-id":       { type: "string" },
 });
 
@@ -113,48 +115,64 @@ function countUniqueRefs() {
   return sids.size;
 }
 
-if (args.stage) {
-  const bypassEnabled = await isBypassEnabled();
-  const serverOwned = bypassEnabled && await isServerOwnedGenerationEnabled();
-  if (!bypassEnabled || serverOwned) {
-    const videoCost = getCost(plannedModel, {
-      resolution: args.resolution,
-      duration: durationPlanned,
-    });
-    const refCount = countUniqueRefs();
-    const assetCost = refCount * (getCost("video-generation-assets") ?? 0.01);
-    const costUsd = +(Number(videoCost ?? 0) + assetCost).toFixed(3);
-    await writePending({
-      jobId,
-      kind: "video",
-      stage: "draft",
-      prompt: args.prompt,
-      aspectRatio: args["aspect-ratio"],
-      // --ref-source-id (image + video) and --ref-audio-source-id (audio)
-      // both feed the same source-id channel for the projection's dashed
-      // edges — match the edges postNodeAddBatch will emit on the final.
-      sourceNodeId: args["source-node-id"] || null,
-      referenceSourceIds: [...refSourcesArg, ...audSrcIds],
-      model: plannedModel,
-      resolution: args.resolution,
-      duration: durationPlanned,
-      costUsd,
-      script: "generate_video.js",
-      argv: rawArgv.filter((a) => a !== "--stage"),
-    });
-    if (!bypassEnabled) {
-      emitSuccess({ stage: "draft", job_id: jobId, model: plannedModel, cost_usd: costUsd });
-      process.exit(0);
+if (args.stage && !routeOwnedPending) {
+  const videoCost = getCost(plannedModel, {
+    resolution: args.resolution,
+    duration: durationPlanned,
+  });
+  const refCount = countUniqueRefs();
+  const assetCost = refCount * (getCost("video-generation-assets") ?? 0.01);
+  const costUsd = +(Number(videoCost ?? 0) + assetCost).toFixed(3);
+  const replayArgv = rawArgv.filter((a) => a !== "--stage" && a !== "--draft-only");
+  const staged = await writePending({
+    jobId,
+    kind: "video",
+    stage: "draft",
+    prompt: args.prompt,
+    aspectRatio: args["aspect-ratio"],
+    // --ref-source-id (image + video) and --ref-audio-source-id (audio)
+    // both feed the same source-id channel for the projection's dashed
+    // edges — match the edges postNodeAddBatch will emit on the final.
+    sourceNodeId: args["source-node-id"] || null,
+    referenceSourceIds: [...refSourcesArg, ...audSrcIds],
+    model: plannedModel,
+    resolution: args.resolution,
+    duration: durationPlanned,
+    costUsd,
+    script: "generate_video.js",
+    argv: replayArgv,
+  });
+  if (!staged) {
+    fail("infra", "failed to write draft sidecar");
+    process.exit(1);
+  }
+  emitSuccess({ stage: "draft", job_id: jobId, model: plannedModel, cost_usd: costUsd });
+  try {
+    const bypassEnabled = await isBypassEnabled();
+    if (args["draft-only"] && !bypassEnabled) process.exit(0);
+    const projectId = bypassEnabled
+      ? args["project-id"] || (await readActiveProject())
+      : null;
+    if (args["draft-only"]) {
+      const fired = await fireDraft({ projectId, jobId });
+      process.stdout.write(JSON.stringify({
+        ...fired,
+        ...(fired.ok ? { stage: "running", fired: true } : {}),
+      }) + "\n");
+      process.exit(fired.ok ? 0 : 1);
     }
-    try {
-      const projectId = args["project-id"] || (await readActiveProject());
-      const result = await fireAndWait({ projectId, jobId, kind: "video" });
-      process.stdout.write(JSON.stringify(result) + "\n");
-      process.exit(result.ok ? 0 : 1);
-    } catch (e) {
-      fail(classify(e), e.message);
-      process.exit(1);
-    }
+    const result = bypassEnabled
+      ? await fireAndWait({
+          projectId,
+          jobId,
+          kind: "video",
+        })
+      : await waitForReviewResult(jobId, { kind: "video" });
+    process.stdout.write(JSON.stringify(result) + "\n");
+    process.exit(result.ok ? 0 : 1);
+  } catch (e) {
+    fail(classify(e), e.message);
+    process.exit(1);
   }
 }
 

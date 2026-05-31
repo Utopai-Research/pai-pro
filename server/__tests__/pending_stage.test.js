@@ -1,18 +1,18 @@
 // End-to-end tests for the --stage draft gate.
 //
-// Each generate_*.js CLI grew one flag: --stage. When set, the CLI writes
-// a captured-argv `.pending/<jobId>.json` draft with a price snapshot
-// and exits 0 without contacting the provider.
+// With --stage, generate_*.js writes a captured-argv
+// `.pending/<jobId>.json` draft with a price snapshot, then waits for a
+// terminal `.results/<jobId>.json` review result.
 //
 // We spawn the CLI as a subprocess with cwd set to a tmp dir so the
 // sidecar lands under a controlled tree, independent of the user's real
 // .active_project. No API keys are needed — the --stage branch exits
-// before any provider client is invoked.
+// after the test harness writes the result sidecar.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { mkdtemp, mkdir, readdir, readFile, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
@@ -20,16 +20,58 @@ import { fileURLToPath } from "node:url";
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 const CLI_DIR = join(__dirname, "..", "cli");
 
-function runCli({ script, args, cwd }) {
+async function writeTerminalResult(cwd, staged, result = {}) {
+  await mkdir(join(cwd, ".results"), { recursive: true });
+  await writeFile(
+    join(cwd, ".results", `${staged.job_id}.json`),
+    JSON.stringify({
+      ok: true,
+      job_id: staged.job_id,
+      model: staged.model,
+      cost_usd: staged.cost_usd,
+      ...result,
+    }) + "\n",
+  );
+}
+
+function parseJsonLines(stdout) {
+  return stdout
+    .trim()
+    .split("\n")
+    .filter((l) => l.trim().startsWith("{"))
+    .map((l) => JSON.parse(l));
+}
+
+function stagedReply(stdout) {
+  return parseJsonLines(stdout).find((r) => r.stage === "draft");
+}
+
+function runCli({ script, args, cwd, resolveStage = true }) {
   return new Promise((resolve) => {
     let stdout = "";
     let stderr = "";
+    const resolved = new Set();
     const child = spawn(
       process.execPath,
       [join(CLI_DIR, script), ...args],
       { cwd, env: process.env, stdio: ["ignore", "pipe", "pipe"] },
     );
-    child.stdout.on("data", (d) => { stdout += d; });
+    child.stdout.on("data", (d) => {
+      stdout += d;
+      if (!resolveStage) return;
+      for (const line of stdout.split(/\r?\n/)) {
+        if (!line.trim().startsWith("{")) continue;
+        let parsed;
+        try { parsed = JSON.parse(line); } catch { continue; }
+        if (parsed?.stage !== "draft" || typeof parsed.job_id !== "string") continue;
+        if (resolved.has(parsed.job_id)) continue;
+        resolved.add(parsed.job_id);
+        writeTerminalResult(cwd, parsed).catch((e) => {
+          stderr += `\n[test harness result write failed: ${e.message}]`;
+          try { child.kill("SIGTERM"); } catch {}
+        });
+      }
+    });
     child.stderr.on("data", (d) => { stderr += d; });
     child.on("exit", (code) => resolve({ code, stdout, stderr }));
   });
@@ -38,21 +80,22 @@ function runCli({ script, args, cwd }) {
 async function setupCwd() {
   const dir = await mkdtemp(join(tmpdir(), "pending-stage-"));
   await mkdir(join(dir, ".pending"), { recursive: true });
+  await mkdir(join(dir, ".results"), { recursive: true });
   return dir;
 }
 
 // CLIs emit one `{...}` line on stdout; take the last one in case dotenv
 // or a provider client surfaces a warning.
 function parseReply(stdout) {
-  const lines = stdout.trim().split("\n").filter((l) => l.trim().startsWith("{"));
-  return JSON.parse(lines[lines.length - 1]);
+  const replies = parseJsonLines(stdout);
+  return replies[replies.length - 1];
 }
 
 async function readSidecar(cwd, jobId) {
   return JSON.parse(await readFile(join(cwd, ".pending", `${jobId}.json`), "utf8"));
 }
 
-test("generate_image.js --stage writes a draft sidecar and exits 0", async (t) => {
+test("generate_image.js --stage writes a draft sidecar then exits after result", async (t) => {
   const cwd = await setupCwd();
   t.after(() => rm(cwd, { recursive: true, force: true }));
 
@@ -69,7 +112,8 @@ test("generate_image.js --stage writes a draft sidecar and exits 0", async (t) =
 
   assert.strictEqual(code, 0, `expected exit 0; stderr:\n${stderr}`);
 
-  const reply = parseReply(stdout);
+  const reply = stagedReply(stdout);
+  assert.ok(reply);
   assert.strictEqual(reply.ok, true);
   assert.strictEqual(reply.stage, "draft");
   assert.match(reply.job_id, /^pending_/);
@@ -87,7 +131,35 @@ test("generate_image.js --stage writes a draft sidecar and exits 0", async (t) =
   assert.ok(sidecar.argv.includes("a test cat"));
 });
 
-test("generate_image_pro.js --stage writes a draft sidecar and exits 0", async (t) => {
+test("generate_image.js --stage --draft-only exits after writing the draft", async (t) => {
+  const cwd = await setupCwd();
+  t.after(() => rm(cwd, { recursive: true, force: true }));
+
+  const { code, stdout, stderr } = await runCli({
+    script: "generate_image.js",
+    args: [
+      "--stage",
+      "--draft-only",
+      "--prompt", "batch cat",
+      "--aspect-ratio", "1:1",
+      "--image-size", "1K",
+    ],
+    cwd,
+    resolveStage: false,
+  });
+
+  assert.strictEqual(code, 0, `expected exit 0; stderr:\n${stderr}`);
+  const replies = parseJsonLines(stdout);
+  assert.strictEqual(replies.length, 1);
+  const reply = replies[0];
+  assert.strictEqual(reply.stage, "draft");
+  const sidecar = await readSidecar(cwd, reply.job_id);
+  assert.strictEqual(sidecar.prompt, "batch cat");
+  assert.ok(!sidecar.argv.includes("--stage"));
+  assert.ok(!sidecar.argv.includes("--draft-only"));
+});
+
+test("generate_image_pro.js --stage --draft-only writes a draft sidecar", async (t) => {
   const cwd = await setupCwd();
   t.after(() => rm(cwd, { recursive: true, force: true }));
 
@@ -95,16 +167,19 @@ test("generate_image_pro.js --stage writes a draft sidecar and exits 0", async (
     script: "generate_image_pro.js",
     args: [
       "--stage",
+      "--draft-only",
       "--prompt", "a crisp storyboard frame",
       "--size", "1024x1024",
       "--ref-source-id", "image_42",
     ],
     cwd,
+    resolveStage: false,
   });
 
   assert.strictEqual(code, 0, `expected exit 0; stderr:\n${stderr}`);
 
-  const reply = parseReply(stdout);
+  const reply = stagedReply(stdout);
+  assert.ok(reply);
   assert.strictEqual(reply.ok, true);
   assert.strictEqual(reply.stage, "draft");
   assert.strictEqual(reply.model, "image-generation-pro");
@@ -126,7 +201,7 @@ test("generate_image_pro.js --stage writes a draft sidecar and exits 0", async (
   assert.ok(sidecar.argv.includes("1024x1024"));
 });
 
-test("generate_video.js --stage writes a draft sidecar and exits 0", async (t) => {
+test("generate_video.js --stage --draft-only writes a draft sidecar", async (t) => {
   const cwd = await setupCwd();
   t.after(() => rm(cwd, { recursive: true, force: true }));
 
@@ -134,15 +209,18 @@ test("generate_video.js --stage writes a draft sidecar and exits 0", async (t) =
     script: "generate_video.js",
     args: [
       "--stage",
+      "--draft-only",
       "--prompt", "wide-angle desert at golden hour",
       "--duration", "10",
       "--resolution", "1080p",
     ],
     cwd,
+    resolveStage: false,
   });
 
   assert.strictEqual(code, 0, `expected exit 0; stderr:\n${stderr}`);
-  const reply = parseReply(stdout);
+  const reply = stagedReply(stdout);
+  assert.ok(reply);
   assert.strictEqual(reply.stage, "draft");
   assert.ok(reply.cost_usd > 0);
 
@@ -153,7 +231,7 @@ test("generate_video.js --stage writes a draft sidecar and exits 0", async (t) =
   assert.strictEqual(sidecar.duration, 10);
 });
 
-test("generate_voice.js --stage writes a draft sidecar and exits 0", async (t) => {
+test("generate_voice.js --stage --draft-only writes a draft sidecar", async (t) => {
   const cwd = await setupCwd();
   t.after(() => rm(cwd, { recursive: true, force: true }));
 
@@ -161,20 +239,48 @@ test("generate_voice.js --stage writes a draft sidecar and exits 0", async (t) =
     script: "generate_voice.js",
     args: [
       "--stage",
+      "--draft-only",
       "--text", "I've been working this beat for twenty years.",
       "--prompt", "Mid-50s man, gravelly baritone, measured pace.",
     ],
     cwd,
+    resolveStage: false,
   });
 
   assert.strictEqual(code, 0, `expected exit 0; stderr:\n${stderr}`);
-  const reply = parseReply(stdout);
+  const reply = stagedReply(stdout);
+  assert.ok(reply);
   assert.strictEqual(reply.stage, "draft");
 
   const sidecar = await readSidecar(cwd, reply.job_id);
   assert.strictEqual(sidecar.kind, "audio");
   assert.strictEqual(sidecar.script, "generate_voice.js");
   assert.strictEqual(sidecar.text, "I've been working this beat for twenty years.");
+});
+
+test("generate_voice.js --stage fails when draft sidecar cannot be written", async (t) => {
+  const cwd = await setupCwd();
+  t.after(() => rm(cwd, { recursive: true, force: true }));
+  await rm(join(cwd, ".pending"), { recursive: true, force: true });
+  await writeFile(join(cwd, ".pending"), "not a directory");
+
+  const { code, stdout } = await runCli({
+    script: "generate_voice.js",
+    args: [
+      "--stage",
+      "--draft-only",
+      "--text", "This should not stage.",
+      "--prompt", "Neutral voice.",
+    ],
+    cwd,
+    resolveStage: false,
+  });
+
+  assert.strictEqual(code, 1);
+  const reply = parseReply(stdout);
+  assert.strictEqual(reply.ok, false);
+  assert.strictEqual(reply.klass, "infra");
+  assert.match(reply.message, /draft sidecar/);
 });
 
 test("generate_image.js --stage without --prompt fails bad_args", async (t) => {
@@ -231,10 +337,8 @@ test("generate_image_pro.js rejects unsupported exact size", async (t) => {
 import {
   defaultWaitTimeoutMsForKind,
   isBypassEnabled,
-  isServerOwnedGenerationEnabled,
   writePending,
 } from "../cli/_pending.js";
-import { writeFile } from "node:fs/promises";
 
 test("isBypassEnabled true when meta.json has dangerously_skip_draft_gate=true", async (t) => {
   const cwd = await setupCwd();
@@ -262,28 +366,6 @@ test("isBypassEnabled false when flag missing, false, or meta absent", async (t)
   assert.strictEqual(await isBypassEnabled(cwd), false);
 });
 
-test("isServerOwnedGenerationEnabled reads meta flag and honors kill switch", async (t) => {
-  const cwd = await setupCwd();
-  t.after(() => rm(cwd, { recursive: true, force: true }));
-  const prior = process.env.PAI_SERVER_OWNED_GENERATION;
-  t.after(() => {
-    if (prior === undefined) delete process.env.PAI_SERVER_OWNED_GENERATION;
-    else process.env.PAI_SERVER_OWNED_GENERATION = prior;
-  });
-
-  await writeFile(join(cwd, "meta.json"), JSON.stringify({ id: "x", title: "x" }));
-  assert.strictEqual(await isServerOwnedGenerationEnabled(cwd), false);
-
-  await writeFile(
-    join(cwd, "meta.json"),
-    JSON.stringify({ id: "x", title: "x", use_server_owned_generation: true }),
-  );
-  assert.strictEqual(await isServerOwnedGenerationEnabled(cwd), true);
-
-  process.env.PAI_SERVER_OWNED_GENERATION = "0";
-  assert.strictEqual(await isServerOwnedGenerationEnabled(cwd), false);
-});
-
 test("default wait timeout is longer for video", () => {
   assert.equal(defaultWaitTimeoutMsForKind("image"), 10 * 60 * 1000);
   assert.equal(defaultWaitTimeoutMsForKind("audio"), 10 * 60 * 1000);
@@ -303,15 +385,17 @@ test("generate_image.js --stage captures source_node_id + reference_source_ids",
   const { code, stdout } = await runCli({
     script: "generate_image.js",
     args: [
-      "--stage", "--prompt", "x",
+      "--stage", "--draft-only", "--prompt", "x",
       "--source-node-id", "note_5",
       "--ref-source-id", "image_3",
       "--ref-source-id", "image_4",
     ],
     cwd,
+    resolveStage: false,
   });
   assert.strictEqual(code, 0);
-  const reply = parseReply(stdout);
+  const reply = stagedReply(stdout);
+  assert.ok(reply);
   const sidecar = await readSidecar(cwd, reply.job_id);
   assert.strictEqual(sidecar.source_node_id, "note_5");
   assert.deepEqual(sidecar.reference_source_ids, ["image_3", "image_4"]);
@@ -324,14 +408,17 @@ test("generate_video.js --stage captures source_node_id + merged refs (audio inc
     script: "generate_video.js",
     args: [
       "--stage", "--prompt", "x",
+      "--draft-only",
       "--source-node-id", "note_2",
       "--ref-source-id", "image_3",
       "--ref-audio-source-id", "audio_7",
     ],
     cwd,
+    resolveStage: false,
   });
   assert.strictEqual(code, 0);
-  const reply = parseReply(stdout);
+  const reply = stagedReply(stdout);
+  assert.ok(reply);
   const sidecar = await readSidecar(cwd, reply.job_id);
   assert.strictEqual(sidecar.source_node_id, "note_2");
   assert.deepEqual(sidecar.reference_source_ids, ["image_3", "audio_7"]);
@@ -344,14 +431,17 @@ test("generate_voice.js --stage source_node_id lives in its own field", async (t
     script: "generate_voice.js",
     args: [
       "--stage",
+      "--draft-only",
       "--text", "Hello there.",
       "--prompt", "Calm tenor.",
       "--source-node-id", "image_1",
     ],
     cwd,
+    resolveStage: false,
   });
   assert.strictEqual(code, 0);
-  const reply = parseReply(stdout);
+  const reply = stagedReply(stdout);
+  assert.ok(reply);
   const sidecar = await readSidecar(cwd, reply.job_id);
   assert.strictEqual(sidecar.source_node_id, "image_1");
   // Voice's source_node_id lives in its own field — refs is empty
@@ -368,14 +458,14 @@ test("writePending persists source_node_id + reference_source_ids", async (t) =>
   process.chdir(cwd);
   t.after(() => process.chdir(originalCwd));
 
-  await writePending({
+  assert.strictEqual(await writePending({
     jobId: "test_job_1",
     kind: "image",
     prompt: "x",
     sourceNodeId: "note_5",
     referenceSourceIds: ["image_3", "image_4"],
     model: "image-generation",
-  });
+  }), true);
 
   const sidecar = await readSidecar(cwd, "test_job_1");
   assert.strictEqual(sidecar.source_node_id, "note_5");
@@ -390,7 +480,7 @@ test("writePending sticky-preserves source_node_id across draft → running", as
   process.chdir(cwd);
   t.after(() => process.chdir(originalCwd));
 
-  await writePending({
+  assert.strictEqual(await writePending({
     jobId: "test_job_2",
     kind: "image",
     prompt: "x",
@@ -398,16 +488,16 @@ test("writePending sticky-preserves source_node_id across draft → running", as
     sourceNodeId: "note_99",
     referenceSourceIds: ["image_1"],
     model: "image-generation",
-  });
+  }), true);
 
   // Running call re-writes without re-passing sourceNodeId — sticky
   // preservation pulls it from the prior sidecar.
-  await writePending({
+  assert.strictEqual(await writePending({
     jobId: "test_job_2",
     kind: "image",
     prompt: "x",
     model: "image-generation",
-  });
+  }), true);
 
   const sidecar = await readSidecar(cwd, "test_job_2");
   assert.strictEqual(sidecar.source_node_id, "note_99");
@@ -415,24 +505,35 @@ test("writePending sticky-preserves source_node_id across draft → running", as
   assert.strictEqual(sidecar.stage, "running");
 });
 
+test("writePending returns false when the pending path cannot be written", async (t) => {
+  const cwd = await setupCwd();
+  t.after(() => rm(cwd, { recursive: true, force: true }));
+  await rm(join(cwd, ".pending"), { recursive: true, force: true });
+  await writeFile(join(cwd, ".pending"), "not a directory");
+  const originalCwd = process.cwd();
+  process.chdir(cwd);
+  t.after(() => process.chdir(originalCwd));
+
+  const wrote = await writePending({
+    jobId: "test_job_3",
+    kind: "image",
+    prompt: "x",
+    model: "image-generation",
+  });
+
+  assert.strictEqual(wrote, false);
+});
+
 // --- running-flow smoke (regression: catches stray refs in the
 // non-stage branch that --stage tests don't exercise) -----------------
-
-async function enableBypass(cwd) {
-  await writeFile(
-    join(cwd, "meta.json"),
-    JSON.stringify({ id: "x", title: "x", dangerously_skip_draft_gate: true }),
-  );
-}
 
 test("generate_image.js running flow emits structured failure (no stray refs)", async (t) => {
   const cwd = await setupCwd();
   t.after(() => rm(cwd, { recursive: true, force: true }));
-  await enableBypass(cwd);
   const { code, stdout, stderr } = await runCli({
     script: "generate_image.js",
     args: [
-      "--stage", "--prompt", "x",
+      "--prompt", "x",
       "--ref-source-id", "image_nonexistent",
       "--project-id", "nonexistent_project_for_test_image",
     ],
@@ -465,11 +566,10 @@ test("generate_image.js running flow emits structured failure (no stray refs)", 
 test("generate_video.js running flow emits structured failure (no stray refs)", async (t) => {
   const cwd = await setupCwd();
   t.after(() => rm(cwd, { recursive: true, force: true }));
-  await enableBypass(cwd);
   const { code, stdout, stderr } = await runCli({
     script: "generate_video.js",
     args: [
-      "--stage", "--prompt", "x",
+      "--prompt", "x",
       "--ref-source-id", "video_nonexistent",
       "--project-id", "nonexistent_project_for_test_video",
     ],

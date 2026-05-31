@@ -335,7 +335,7 @@ export function projectWorkflowToCanvas(
   }
 
   // shortId == node.id. The canonical id form is already
-  // `image_N` / `note_N` / `video_N` (CLAUDE.md), so the canvas's
+  // `image_N` / `note_N` / `video_N` (PROJECT_AGENT.md), so the canvas's
   // @-mention pills resolve to literal node ids the agent reads
   // straight out of workflow.json.
   for (let i = 0; i < wfNodes.length; i += 1) {

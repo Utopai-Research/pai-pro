@@ -1,13 +1,14 @@
 // Pending-generation sidecar helper.
 //
-// While a long-running generate_* CLI is in flight, the viewer renders a
-// placeholder pad on the canvas so the user sees what's coming. The sidecar
-// is the cheapest possible signal — a single JSON file written at job start
-// and unlinked on settle (success OR failure). The viewer chokidar-watches
-// `projects/<id>/.pending/` and re-broadcasts to every browser tab.
+// The viewer renders draft/running generation pads from these sidecars.
+// A generate_* CLI writes a draft sidecar before review; the fire route
+// rewrites it to running and unlinks it after the durable result lands.
+// The viewer chokidar-watches `projects/<id>/.pending/` and re-broadcasts
+// to every browser tab.
 //
-// Lifetime is exactly the wall-clock of the CLI. The viewer hides stale
-// running sidecars after 15 minutes when a crashed CLI never reaches finally.
+// Draft sidecars can live across a review session. Running sidecars
+// should track an active CLI; the viewer hides stale running sidecars
+// after 15 minutes when a crashed CLI never reaches finally.
 //
 // The CLI's cwd is `projects/<active>/` (set by the agent's pty), so we
 // resolve the sidecar relative to that. If the CLI is run from elsewhere,
@@ -27,6 +28,8 @@ const RESULTS_DIR_NAME = ".results";
 const DEFAULT_WAIT_TIMEOUT_MS = 10 * 60 * 1000;
 const VIDEO_WAIT_TIMEOUT_MS = 35 * 60 * 1000;
 const DEFAULT_WAIT_INTERVAL_MS = 1000;
+export const REVIEW_WAIT_TIMEOUT_MS = 24 * 60 * 60 * 1000;
+const REVIEW_WAIT_INTERVAL_MS = 250;
 
 function pendingDir() {
   return path.join(process.cwd(), PENDING_DIR_NAME);
@@ -59,20 +62,30 @@ export async function isBypassEnabled(cwd = process.cwd()) {
   }
 }
 
-export async function isServerOwnedGenerationEnabled(cwd = process.cwd()) {
-  if (process.env.PAI_SERVER_OWNED_GENERATION === "0") return false;
-  try {
-    const meta = JSON.parse(
-      await fsp.readFile(path.join(cwd, "meta.json"), "utf8"),
-    );
-    return meta.use_server_owned_generation === true;
-  } catch {
-    return false;
-  }
-}
-
 export function defaultWaitTimeoutMsForKind(kind) {
   return kind === "video" ? VIDEO_WAIT_TIMEOUT_MS : DEFAULT_WAIT_TIMEOUT_MS;
+}
+
+export async function waitForReviewResult(jobId, { kind } = {}) {
+  return waitForResult(jobId, {
+    kind,
+    timeoutMs: REVIEW_WAIT_TIMEOUT_MS,
+    intervalMs: REVIEW_WAIT_INTERVAL_MS,
+  });
+}
+
+function normalizeJobIds(jobIds) {
+  const input = Array.isArray(jobIds) ? jobIds : [jobIds];
+  const seen = new Set();
+  const out = [];
+  for (const id of input) {
+    if (typeof id !== "string" || id.trim() === "") continue;
+    const value = id.trim();
+    if (seen.has(value)) continue;
+    seen.add(value);
+    out.push(value);
+  }
+  return out;
 }
 
 function parseWaitTimeout(timeoutMs, kind) {
@@ -87,6 +100,36 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+async function readReadyResult(jobId, cwd) {
+  try {
+    const raw = await fsp.readFile(resultPath(jobId, cwd), "utf8");
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === "object" && typeof parsed.ok === "boolean") {
+      return { ready: true, result: normalizeResultForRead(jobId, parsed) };
+    }
+    return {
+      ready: true,
+      result: {
+        ok: false,
+        job_id: jobId,
+        klass: "infra",
+        message: `result sidecar ${jobId} has invalid shape`,
+      },
+    };
+  } catch (e) {
+    if (e.code === "ENOENT" || e.code === "ENOTDIR") return { ready: false };
+    return {
+      ready: true,
+      result: {
+        ok: false,
+        job_id: jobId,
+        klass: "infra",
+        message: `result sidecar ${jobId} is unreadable: ${e.message}`,
+      },
+    };
+  }
+}
+
 export async function waitForResult(jobId, {
   cwd = process.cwd(),
   kind,
@@ -97,28 +140,8 @@ export async function waitForResult(jobId, {
   const pollMs = Math.max(10, Number(intervalMs) || DEFAULT_WAIT_INTERVAL_MS);
   const deadline = Date.now() + waitMs;
   while (true) {
-    try {
-      const raw = await fsp.readFile(resultPath(jobId, cwd), "utf8");
-      const parsed = JSON.parse(raw);
-      if (parsed && typeof parsed === "object" && typeof parsed.ok === "boolean") {
-        return normalizeResultForRead(jobId, parsed);
-      }
-      return {
-        ok: false,
-        job_id: jobId,
-        klass: "infra",
-        message: `result sidecar ${jobId} has invalid shape`,
-      };
-    } catch (e) {
-      if (e.code !== "ENOENT" && e.code !== "ENOTDIR") {
-        return {
-          ok: false,
-          job_id: jobId,
-          klass: "infra",
-          message: `result sidecar ${jobId} is unreadable: ${e.message}`,
-        };
-      }
-    }
+    const ready = await readReadyResult(jobId, cwd);
+    if (ready.ready) return ready.result;
     const now = Date.now();
     if (now >= deadline) {
       return {
@@ -132,19 +155,89 @@ export async function waitForResult(jobId, {
   }
 }
 
+function batchPayload(jobIds, completed, { timedOut = false, message } = {}) {
+  const results = jobIds
+    .filter((id) => completed.has(id))
+    .map((id) => completed.get(id));
+  const pending = jobIds.filter((id) => !completed.has(id));
+  const succeededCount = results.filter((r) => r?.ok === true).length;
+  const cancelledCount = results.filter((r) => r?.klass === "cancelled").length;
+  const failedCount = results.filter((r) => r?.ok === false && r?.klass !== "cancelled").length;
+  return {
+    ok: pending.length === 0,
+    ...(timedOut ? { klass: "timeout" } : {}),
+    count: results.length,
+    succeeded_count: succeededCount,
+    failed_count: failedCount,
+    cancelled_count: cancelledCount,
+    pending_count: pending.length,
+    batch_complete: pending.length === 0,
+    timed_out: timedOut,
+    ...(message ? { message } : {}),
+    results,
+    pending_job_ids: pending,
+  };
+}
+
+export async function waitForResultBatch(jobIds, {
+  cwd = process.cwd(),
+  timeoutMs = REVIEW_WAIT_TIMEOUT_MS,
+  intervalMs = REVIEW_WAIT_INTERVAL_MS,
+  onResult,
+} = {}) {
+  const ids = normalizeJobIds(jobIds);
+  if (ids.length === 0) {
+    return {
+      ok: false,
+      klass: "bad_args",
+      message: "waitForResultBatch requires at least one job id",
+      results: [],
+      pending_job_ids: [],
+    };
+  }
+
+  const waitMs = typeof timeoutMs === "number" && Number.isFinite(timeoutMs) && timeoutMs >= 0
+    ? timeoutMs
+    : REVIEW_WAIT_TIMEOUT_MS;
+  const pollMs = Math.max(10, Number(intervalMs) || REVIEW_WAIT_INTERVAL_MS);
+  const deadline = Date.now() + waitMs;
+  const completed = new Map();
+
+  while (true) {
+    const now = Date.now();
+    for (const id of ids) {
+      if (completed.has(id)) continue;
+      const ready = await readReadyResult(id, cwd);
+      if (!ready.ready) continue;
+      completed.set(id, ready.result);
+      if (typeof onResult === "function") onResult(ready.result);
+    }
+    if (completed.size === ids.length) return batchPayload(ids, completed);
+
+    if (now >= deadline) {
+      return batchPayload(ids, completed, {
+        timedOut: true,
+        message: `timed out waiting for generation results: ${ids.filter((id) => !completed.has(id)).join(", ")}`,
+      });
+    }
+
+    await sleep(Math.min(pollMs, deadline - now));
+  }
+}
+
 function viewerBaseUrl() {
   const host = process.env.VIEWER_HOST || "localhost";
   const port = process.env.VIEWER_PORT || "7488";
   return `http://${host}:${port}`;
 }
 
-export async function fireAndWait({ projectId, jobId, kind, timeoutMs } = {}) {
+export async function fireDraft({ projectId, jobId } = {}) {
   if (!projectId || !jobId) {
     return {
       ok: false,
       job_id: jobId || null,
       klass: "bad_args",
-      message: "fireAndWait requires projectId and jobId",
+      message: "fireDraft requires projectId and jobId",
     };
   }
   const url = new URL(
@@ -153,7 +246,9 @@ export async function fireAndWait({ projectId, jobId, kind, timeoutMs } = {}) {
   );
   let response;
   try {
-    response = await fetch(url, { method: "POST" });
+    response = await fetch(url, {
+      method: "POST",
+    });
   } catch (e) {
     return {
       ok: false,
@@ -182,6 +277,22 @@ export async function fireAndWait({ projectId, jobId, kind, timeoutMs } = {}) {
       message,
     };
   }
+  let body = null;
+  try {
+    body = await response.json();
+  } catch {
+    /* keep the normalized success below */
+  }
+  return {
+    ok: true,
+    job_id: jobId,
+    ...(body && typeof body === "object" ? body : {}),
+  };
+}
+
+export async function fireAndWait({ projectId, jobId, kind, timeoutMs } = {}) {
+  const fired = await fireDraft({ projectId, jobId });
+  if (!fired.ok) return fired;
   return waitForResult(jobId, { kind, timeoutMs });
 }
 
@@ -242,9 +353,10 @@ export async function writeResultSidecar(jobId, result, { cwd = process.cwd() } 
 }
 
 // Write `<cwd>/.pending/<jobId>.json` describing the in-flight or staged
-// job. Best-effort: mkdir + write, but never throw. `stage` defaults to
-// "running"; pass "draft" for a captured call awaiting user approval,
-// in which case `argv` + `script` + `costUsd` carry the replay context.
+// job. Best-effort: mkdir + write, return false on failure, but never throw.
+// `stage` defaults to "running"; pass "draft" for a captured call awaiting
+// user approval, in which case `argv` + `script` + `costUsd` carry the replay
+// context.
 //
 // `position`, `referenceSourceIds`, and `sourceNodeId` are sticky —
 // when a CLI calls writePending against an existing sidecar (e.g.,
@@ -264,11 +376,11 @@ export async function writePending({
   referenceSourceIds,
   sourceNodeId,
 }) {
-  if (!jobId || !kind || !prompt) return;
+  if (!jobId || !kind || !prompt) return false;
   const payload = {
     id: jobId,
     kind,                          // "image" | "video" | "audio"
-    stage,                         // "running" | "draft" | "failed"
+    stage,                         // "running" | "draft"
     prompt: String(prompt),
     aspect_ratio: aspectRatio || "16:9",
     created_at: new Date().toISOString(),
@@ -319,8 +431,10 @@ export async function writePending({
     const tmp = pendingPath(jobId) + ".tmp";
     await fsp.writeFile(tmp, JSON.stringify(payload) + "\n");
     await fsp.rename(tmp, pendingPath(jobId));
+    return true;
   } catch {
     /* swallow — the generator's primary work matters more */
+    return false;
   }
 }
 

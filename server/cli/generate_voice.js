@@ -19,10 +19,11 @@ import {
 } from "../local_mirror.js";
 import { postMutation } from "./_mutate_helper.js";
 import {
+  fireDraft,
   fireAndWait,
   isBypassEnabled,
-  isServerOwnedGenerationEnabled,
   newJobId,
+  waitForReviewResult,
   writePending,
   writeResultSidecar,
   removePending,
@@ -36,12 +37,13 @@ const rawArgv = process.argv.slice(2);
 const args = parseArgs({
   text:   { type: "string" },
   prompt: { type: "string", short: "p" },
-  "source-node-id":    { type: "string" }, // authorship edge — see CLAUDE.md
+  "source-node-id":    { type: "string" }, // authorship edge — see PROJECT_AGENT.md
   "project-id":        { type: "string" },
   "request-id":        { type: "string" },
   "no-canvas-write":   { type: "boolean" },
-  // Draft gate — see CLAUDE.md § "Draft gate".
+  // Draft gate — see PROJECT_AGENT.md § "Draft gate".
   stage:               { type: "boolean" },
+  "draft-only":        { type: "boolean" },
   "existing-job-id":   { type: "string" },
 });
 
@@ -65,37 +67,53 @@ const jobId = args["existing-job-id"] || newJobId();
 const routeOwnedPending = !!args["existing-job-id"];
 const sourceNodeId = args["source-node-id"] || null;
 
-if (args.stage) {
-  const bypassEnabled = await isBypassEnabled();
-  const serverOwned = bypassEnabled && await isServerOwnedGenerationEnabled();
-  if (!bypassEnabled || serverOwned) {
-    const costUsd = getCost(PLANNED_MODEL, { text: args.text });
-    await writePending({
-      jobId,
-      kind: "audio",
-      stage: "draft",
-      prompt: args.prompt,
-      sourceNodeId,
-      referenceSourceIds: [],
-      model: PLANNED_MODEL,
-      costUsd,
-      script: "generate_voice.js",
-      argv: rawArgv.filter((a) => a !== "--stage"),
-      text: args.text,
-    });
-    if (!bypassEnabled) {
-      emitSuccess({ stage: "draft", job_id: jobId, model: PLANNED_MODEL, cost_usd: costUsd });
-      process.exit(0);
+if (args.stage && !routeOwnedPending) {
+  const costUsd = getCost(PLANNED_MODEL, { text: args.text });
+  const replayArgv = rawArgv.filter((a) => a !== "--stage" && a !== "--draft-only");
+  const staged = await writePending({
+    jobId,
+    kind: "audio",
+    stage: "draft",
+    prompt: args.prompt,
+    sourceNodeId,
+    referenceSourceIds: [],
+    model: PLANNED_MODEL,
+    costUsd,
+    script: "generate_voice.js",
+    argv: replayArgv,
+    text: args.text,
+  });
+  if (!staged) {
+    fail("infra", "failed to write draft sidecar");
+    process.exit(1);
+  }
+  emitSuccess({ stage: "draft", job_id: jobId, model: PLANNED_MODEL, cost_usd: costUsd });
+  try {
+    const bypassEnabled = await isBypassEnabled();
+    if (args["draft-only"] && !bypassEnabled) process.exit(0);
+    const projectId = bypassEnabled
+      ? args["project-id"] || (await readActiveProject())
+      : null;
+    if (args["draft-only"]) {
+      const fired = await fireDraft({ projectId, jobId });
+      process.stdout.write(JSON.stringify({
+        ...fired,
+        ...(fired.ok ? { stage: "running", fired: true } : {}),
+      }) + "\n");
+      process.exit(fired.ok ? 0 : 1);
     }
-    try {
-      const projectId = args["project-id"] || (await readActiveProject());
-      const result = await fireAndWait({ projectId, jobId, kind: "audio" });
-      process.stdout.write(JSON.stringify(result) + "\n");
-      process.exit(result.ok ? 0 : 1);
-    } catch (e) {
-      fail(classify(e), e.message);
-      process.exit(1);
-    }
+    const result = bypassEnabled
+      ? await fireAndWait({
+          projectId,
+          jobId,
+          kind: "audio",
+        })
+      : await waitForReviewResult(jobId, { kind: "audio" });
+    process.stdout.write(JSON.stringify(result) + "\n");
+    process.exit(result.ok ? 0 : 1);
+  } catch (e) {
+    fail(classify(e), e.message);
+    process.exit(1);
   }
 }
 

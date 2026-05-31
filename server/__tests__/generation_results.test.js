@@ -83,6 +83,22 @@ test("readResultDir returns newest-first compact summaries", async () => {
   assert.equal(results[1].raw_response, undefined);
 });
 
+test("readResultDir reports cancelled results distinctly", async () => {
+  const id = "reader_cancelled";
+  await setupProject(id);
+  await writeResultFile(id, "pending_cancelled", {
+    ok: false,
+    kind: "audio",
+    klass: "cancelled",
+    message: "cancelled by user",
+    completed_at: "2026-01-03T00:00:00.000Z",
+  });
+
+  const results = await readers.readResultDir(id, { limit: 10 });
+  assert.equal(results[0].status, "cancelled");
+  assert.equal(results[0].klass, "cancelled");
+});
+
 test("readResultDir filters failures, since, and exact job ids", async () => {
   const id = "reader_filters";
   await setupProject(id);
