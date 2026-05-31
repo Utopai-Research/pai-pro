@@ -12,7 +12,9 @@
 import { useState } from 'react'
 import type { NodeProps } from '@xyflow/react'
 import { Handle, Position } from '@xyflow/react'
+import { useChatComposer } from '@/contexts/ChatComposerContext'
 import { useFireConfirm } from '../FireConfirmProvider'
+import { buildGenerationFailureAgentPrompt } from '../generationFailurePrompt'
 import { parseAspectRatio, sizeForAspect, type NodeState } from '../nodeData'
 import { useNodeActions } from '../NodeActionsContext'
 import { NodeHead } from './_shared'
@@ -95,6 +97,7 @@ export function PendingGenerationNode({ id, data, selected }: NodeProps): JSX.El
     onDiscardDraft,
     onDismissFailedGeneration,
   } = useNodeActions()
+  const composer = useChatComposer()
   const canExpand = onExpandMedia !== undefined
   const isDraft = stage === 'draft'
   const isFailed = stage === 'failed'
@@ -104,6 +107,7 @@ export function PendingGenerationNode({ id, data, selected }: NodeProps): JSX.El
   // sidecar back. `firing` stays true between click and the running flip.
   const [firing, setFiring] = useState(false)
   const [draftError, setDraftError] = useState<string | null>(null)
+  const [failureSent, setFailureSent] = useState(false)
   // First-fire gate: routes the very first Generate click in this
   // browser through a centered confirmation modal owned by
   // FireConfirmProvider. Subsequent clicks run `onConfirm` immediately.
@@ -144,6 +148,19 @@ export function PendingGenerationNode({ id, data, selected }: NodeProps): JSX.El
   }
   const handleDismissFailure = (e: React.MouseEvent): void => {
     e.stopPropagation()
+    onDismissFailedGeneration?.(id)
+  }
+  const handleSendFailure = (e: React.MouseEvent): void => {
+    e.stopPropagation()
+    if (composer === null || failureSent) return
+    composer.insertAtCursor(buildGenerationFailureAgentPrompt({
+      jobId: id,
+      kind,
+      klass: d.klass,
+      message: d.message,
+      sent: d.sent,
+    }) + '\r')
+    setFailureSent(true)
     onDismissFailedGeneration?.(id)
   }
   const handleExpand = (e: React.MouseEvent): void => {
@@ -298,6 +315,15 @@ export function PendingGenerationNode({ id, data, selected }: NodeProps): JSX.El
               title="Dismiss this failed generation"
             >
               Dismiss
+            </button>
+            <button
+              type="button"
+              className="btn-generate-primary pending-send-agent"
+              onClick={handleSendFailure}
+              disabled={composer === null || failureSent}
+              title={composer === null ? 'Terminal not ready' : 'Send this failure to the agent'}
+            >
+              {failureSent ? 'Sent' : 'Send to agent'}
             </button>
           </div>
         ) : (
