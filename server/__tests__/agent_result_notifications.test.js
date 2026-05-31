@@ -167,7 +167,8 @@ test("enqueue during an in-flight flush gets a follow-up delivery", async () => 
   const firstSubmitted = new Promise((resolve) => { releaseFirst = resolve; });
   const calls = [];
   notifications.configureAgentResultNotifications({
-    debounceMs: 5,
+    quietWindowMs: 5,
+    maxBatchWaitMs: 50,
     retryDelaysMs: {},
     submitAgentNotification: async (_id, text) => {
       calls.push(text);
@@ -199,6 +200,95 @@ test("enqueue during an in-flight flush gets a follow-up delivery", async () => 
 
   const records = await notifications.readAgentResultNotifications(projectId);
   assert.equal(records.filter((r) => r.delivered_at).length, 2);
+});
+
+test("enqueue uses a trailing quiet window", async () => {
+  const projectId = "project_quiet_window";
+  await writeResult(projectId, "pending_first", {
+    ok: true,
+    kind: "image",
+    canvas_mutation: { node_id: "image_first" },
+  });
+  await writeResult(projectId, "pending_second", {
+    ok: true,
+    kind: "image",
+    canvas_mutation: { node_id: "image_second" },
+  });
+
+  const calls = [];
+  notifications.configureAgentResultNotifications({
+    quietWindowMs: 40,
+    maxBatchWaitMs: 200,
+    retryDelaysMs: {},
+    submitAgentNotification: async (_id, text) => {
+      calls.push(text);
+      return { ok: true };
+    },
+  });
+
+  await notifications.enqueueGenerationResultNotification(projectId, {
+    job_id: "pending_first",
+    status: "succeeded",
+  });
+  await sleep(25);
+  await notifications.enqueueGenerationResultNotification(projectId, {
+    job_id: "pending_second",
+    status: "succeeded",
+  });
+  await sleep(25);
+  assert.equal(calls.length, 0, "second enqueue should push the quiet timer back");
+
+  const deadline = Date.now() + 500;
+  while (calls.length === 0 && Date.now() < deadline) await sleep(10);
+  assert.equal(calls.length, 1);
+  assert.match(calls[0], /--job-id 'pending_first'/);
+  assert.match(calls[0], /--job-id 'pending_second'/);
+});
+
+test("quiet window is capped by max batch wait", async () => {
+  const projectId = "project_max_wait";
+  for (const jobId of ["pending_first", "pending_second", "pending_third"]) {
+    await writeResult(projectId, jobId, {
+      ok: true,
+      kind: "image",
+      canvas_mutation: { node_id: jobId.replace("pending_", "image_") },
+    });
+  }
+
+  const calls = [];
+  notifications.configureAgentResultNotifications({
+    quietWindowMs: 40,
+    maxBatchWaitMs: 70,
+    retryDelaysMs: {},
+    submitAgentNotification: async (_id, text) => {
+      calls.push({ text, at: Date.now() });
+      return { ok: true };
+    },
+  });
+
+  const startedAt = Date.now();
+  await notifications.enqueueGenerationResultNotification(projectId, {
+    job_id: "pending_first",
+    status: "succeeded",
+  });
+  await sleep(30);
+  await notifications.enqueueGenerationResultNotification(projectId, {
+    job_id: "pending_second",
+    status: "succeeded",
+  });
+  await sleep(30);
+  await notifications.enqueueGenerationResultNotification(projectId, {
+    job_id: "pending_third",
+    status: "succeeded",
+  });
+
+  const deadline = Date.now() + 500;
+  while (calls.length === 0 && Date.now() < deadline) await sleep(10);
+  assert.equal(calls.length, 1);
+  assert.ok(calls[0].at - startedAt < 120, "max wait should prevent unbounded quiet-window extension");
+  assert.match(calls[0].text, /--job-id 'pending_first'/);
+  assert.match(calls[0].text, /--job-id 'pending_second'/);
+  assert.match(calls[0].text, /--job-id 'pending_third'/);
 });
 
 test("flush without a pty submitter keeps outbox pending", async () => {

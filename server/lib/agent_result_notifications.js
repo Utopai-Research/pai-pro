@@ -8,7 +8,8 @@ export const AGENT_RESULT_CONSUMER_HEADER = "x-pai-agent-result-consumer";
 export const WAITING_CLI_RESULT_CONSUMER = "waiting-cli";
 
 const KIND = "generation_result";
-const DEFAULT_DEBOUNCE_MS = 350;
+const DEFAULT_QUIET_WINDOW_MS = 10 * 1000;
+const DEFAULT_MAX_BATCH_WAIT_MS = 30 * 1000;
 const DEFAULT_REQUIRE_IDLE_MS = 1500;
 const DEFAULT_RETRY_DELAYS_MS = {
   busy: 2500,
@@ -21,7 +22,8 @@ const inFlight = new Map();
 const config = {
   submitAgentNotification: null,
   publishStatus: null,
-  debounceMs: DEFAULT_DEBOUNCE_MS,
+  quietWindowMs: DEFAULT_QUIET_WINDOW_MS,
+  maxBatchWaitMs: DEFAULT_MAX_BATCH_WAIT_MS,
   requireIdleMs: DEFAULT_REQUIRE_IDLE_MS,
   retryDelaysMs: { ...DEFAULT_RETRY_DELAYS_MS },
 };
@@ -175,8 +177,11 @@ export function configureAgentResultNotifications(options = {}) {
         ? options.publishStatus
         : null;
   }
-  if (typeof options.debounceMs === "number" && Number.isFinite(options.debounceMs) && options.debounceMs >= 0) {
-    config.debounceMs = options.debounceMs;
+  if (typeof options.quietWindowMs === "number" && Number.isFinite(options.quietWindowMs) && options.quietWindowMs >= 0) {
+    config.quietWindowMs = options.quietWindowMs;
+  }
+  if (typeof options.maxBatchWaitMs === "number" && Number.isFinite(options.maxBatchWaitMs) && options.maxBatchWaitMs >= 0) {
+    config.maxBatchWaitMs = options.maxBatchWaitMs;
   }
   if (typeof options.requireIdleMs === "number" && Number.isFinite(options.requireIdleMs) && options.requireIdleMs >= 0) {
     config.requireIdleMs = options.requireIdleMs;
@@ -312,7 +317,7 @@ export function flushProjectNotifications(projectId) {
   if (!projectId) return Promise.resolve({ ok: false, reason: "bad_args" });
   const existing = inFlight.get(projectId);
   if (existing) {
-    scheduleFlush(projectId, { delayMs: config.debounceMs });
+    scheduleFlush(projectId);
     return existing;
   }
   const promise = flushProjectNotificationsInner(projectId)
@@ -327,22 +332,47 @@ export function flushProjectNotifications(projectId) {
   return promise;
 }
 
+// No delayMs means result-arrival batching: wait for a quiet window, but
+// never extend a batch past maxBatchWaitMs. Explicit delayMs is for retries
+// and PTY lifecycle nudges, where the earliest scheduled retry should win.
 export function scheduleFlush(projectId, { delayMs } = {}) {
   if (!projectId) return false;
+  const now = Date.now();
+  const quietWindow = delayMs === undefined;
   const delay = Math.max(
     0,
-    typeof delayMs === "number" && Number.isFinite(delayMs) ? delayMs : config.debounceMs,
+    quietWindow
+      ? config.quietWindowMs
+      : typeof delayMs === "number" && Number.isFinite(delayMs) ? delayMs : 0,
   );
-  const runAt = Date.now() + delay;
   const existing = timers.get(projectId);
-  if (existing && existing.runAt <= runAt) return false;
+  const firstQueuedAt = quietWindow && existing?.mode === "quiet"
+    ? existing.firstQueuedAt
+    : now;
+  const maxWait = Math.max(0, Number(config.maxBatchWaitMs) || 0);
+  const runAt = quietWindow && maxWait > 0
+    ? Math.min(now + delay, firstQueuedAt + maxWait)
+    : now + delay;
+  if (existing) {
+    if (quietWindow && existing.mode === "quiet") {
+      if (existing.runAt === runAt) return false;
+    } else if (existing.runAt <= runAt) {
+      return false;
+    }
+  }
   if (existing) clearTimeout(existing.timer);
+  const timeoutMs = Math.max(0, runAt - Date.now());
   const timer = setTimeout(() => {
     timers.delete(projectId);
     void flushProjectNotifications(projectId);
-  }, delay);
+  }, timeoutMs);
   timer.unref?.();
-  timers.set(projectId, { timer, runAt });
+  timers.set(projectId, {
+    timer,
+    runAt,
+    firstQueuedAt,
+    mode: quietWindow ? "quiet" : "fixed",
+  });
   return true;
 }
 
@@ -352,7 +382,8 @@ export function resetAgentResultNotificationStateForTests() {
   inFlight.clear();
   config.submitAgentNotification = null;
   config.publishStatus = null;
-  config.debounceMs = DEFAULT_DEBOUNCE_MS;
+  config.quietWindowMs = DEFAULT_QUIET_WINDOW_MS;
+  config.maxBatchWaitMs = DEFAULT_MAX_BATCH_WAIT_MS;
   config.requireIdleMs = DEFAULT_REQUIRE_IDLE_MS;
   config.retryDelaysMs = { ...DEFAULT_RETRY_DELAYS_MS };
 }
