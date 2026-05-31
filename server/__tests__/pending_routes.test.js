@@ -16,6 +16,7 @@ import { mkdtemp, rm, writeFile, readFile, mkdir, stat } from "node:fs/promises"
 import { tmpdir } from "node:os";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { writePending } from "../cli/_pending.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const VIEWER_PATH = resolve(__dirname, "..", "local_viewer.js");
@@ -39,7 +40,10 @@ async function setupTestProject(projectsDir, id) {
   const workflow = { version: 2, workflow_id: id, title: "T", nodes: [], edges: [] };
   await writeFile(join(dir, "workflow.json"), JSON.stringify(workflow, null, 2) + "\n");
   const now = new Date().toISOString();
-  await writeFile(join(dir, "meta.json"), JSON.stringify({ id, title: "T", created_at: now, last_active_at: now }, null, 2) + "\n");
+  await writeFile(
+    join(dir, "meta.json"),
+    JSON.stringify({ id, title: "T", created_at: now, last_active_at: now, agent_id: "codex" }, null, 2) + "\n",
+  );
 }
 
 async function startViewer() {
@@ -91,6 +95,10 @@ function resultPath(jobId) {
   return projectPath(".results", `${jobId}.json`);
 }
 
+function notificationPath(jobId) {
+  return projectPath(".agent_notifications", `${jobId}.json`);
+}
+
 async function waitForResult(jobId, timeoutMs = 5000) {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
@@ -101,6 +109,18 @@ async function waitForResult(jobId, timeoutMs = 5000) {
     }
   }
   throw new Error(`result sidecar did not appear for ${jobId}`);
+}
+
+async function waitForNotification(jobId, timeoutMs = 5000) {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    try {
+      return JSON.parse(await readFile(notificationPath(jobId), "utf8"));
+    } catch {
+      await new Promise((r) => setTimeout(r, 50));
+    }
+  }
+  throw new Error(`agent notification sidecar did not appear for ${jobId}`);
 }
 
 async function seedDraft({ jobId, overrides = {} } = {}) {
@@ -254,6 +274,11 @@ test("POST /generate writes durable result sidecar and removes pending", async (
   assert.ok(summary, "bundle exposes durable generation result summary");
   assert.equal(summary.status, "failed");
   assert.equal(summary.klass, "bad_args");
+  const notification = await waitForNotification(jobId);
+  assert.equal(notification.kind, "generation_result");
+  assert.equal(notification.job_id, jobId);
+  assert.equal(notification.status, "failed");
+  assert.equal(notification.delivered_at, null);
   await assert.rejects(stat(sidecarPath(jobId)), /ENOENT/);
 });
 
@@ -284,6 +309,22 @@ test("POST /generate accepts generate_image_pro.js sidecars", async () => {
   await assert.rejects(stat(sidecarPath(jobId)), /ENOENT/);
 });
 
+test("POST /generate with waiting-cli consumer header suppresses Codex notification", async () => {
+  const { jobId } = await seedDraft({
+    overrides: { argv: ["--definitely-unknown-flag"] },
+  });
+  const r = await fetch(`${baseUrl}/projects/${TEST_PROJECT_ID}/pending/${jobId}/generate`, {
+    method: "POST",
+    headers: { "X-PAI-Agent-Result-Consumer": "waiting-cli" },
+  });
+  assert.equal(r.status, 202);
+
+  const result = await waitForResult(jobId);
+  assert.equal(result.ok, false);
+  assert.equal(result.job_id, jobId);
+  await assert.rejects(stat(notificationPath(jobId)), /ENOENT/);
+});
+
 test("POST /generate with non-whitelisted script → 400", async () => {
   const { jobId } = await seedDraft({
     overrides: { script: "rm -rf /" },
@@ -305,8 +346,8 @@ test("new-project bypass mode fires through viewer and waits on result sidecar",
       title: "T",
       created_at: now,
       last_active_at: now,
+      agent_id: "codex",
       dangerously_skip_draft_gate: true,
-      use_server_owned_generation: true,
     }, null, 2) + "\n",
   );
 
@@ -329,14 +370,24 @@ test("new-project bypass mode fires through viewer and waits on result sidecar",
   const result = await waitForResult(reply.job_id);
   assert.deepEqual(result, reply);
   await assert.rejects(stat(sidecarPath(reply.job_id)), /ENOENT/);
+  await assert.rejects(stat(notificationPath(reply.job_id)), /ENOENT/);
 });
 
-test("DELETE unlinks the sidecar; second DELETE is idempotent", async () => {
+test("DELETE writes cancelled result, unlinks sidecar, and is idempotent", async () => {
   const { jobId } = await seedDraft();
   const r1 = await fetch(`${baseUrl}/projects/${TEST_PROJECT_ID}/pending/${jobId}`, {
     method: "DELETE",
   });
   assert.equal(r1.status, 200);
+  const result = await waitForResult(jobId);
+  assert.equal(result.ok, false);
+  assert.equal(result.job_id, jobId);
+  assert.equal(result.kind, "image");
+  assert.equal(result.klass, "cancelled");
+  assert.equal(result.message, "cancelled by user");
+  assert.equal(result.prompt, "a test cat");
+  const notification = await waitForNotification(jobId);
+  assert.equal(notification.status, "aborted");
   await assert.rejects(stat(sidecarPath(jobId)));
   const r2 = await fetch(`${baseUrl}/projects/${TEST_PROJECT_ID}/pending/${jobId}`, {
     method: "DELETE",
@@ -380,24 +431,23 @@ test("writePending preserves position across stage transitions", async () => {
   const { jobId } = await seedDraft({
     overrides: { position: { x: 50, y: 60 } },
   });
-  // Re-run generate_image.js --stage --existing-job-id <jobId>.
-  // writePending overwrites the sidecar but should read the prior
-  // file and copy `position` forward (sticky field semantics).
-  await new Promise((resolve) => {
-    const child = spawn(process.execPath, [
-      join(__dirname, "..", "cli", "generate_image.js"),
-      "--stage",
-      "--existing-job-id", jobId,
-      "--prompt", "still the same cat",
-      "--aspect-ratio", "1:1",
-      "--image-size", "1K",
-    ], {
-      cwd: join(projectsDir, TEST_PROJECT_ID),
-      env: process.env,
-      stdio: "ignore",
+  // The route-owned replay path calls writePending against the existing
+  // job id. It overwrites the sidecar but should copy `position` forward
+  // from the draft sidecar (sticky field semantics).
+  const originalCwd = process.cwd();
+  process.chdir(projectPath());
+  try {
+    await writePending({
+      jobId,
+      kind: "image",
+      prompt: "still the same cat",
+      aspectRatio: "1:1",
+      model: "image-generation",
+      imageSize: "1K",
     });
-    child.on("exit", resolve);
-  });
+  } finally {
+    process.chdir(originalCwd);
+  }
   const after = await readSidecar(jobId);
   assert.deepEqual(after.position, { x: 50, y: 60 }, "position must survive writePending");
 });

@@ -25,6 +25,9 @@
 //   pty,                      // node-pty handle (carries its own cols/rows)
 //   buffer,                   // rolling stdout (last PTY_BUFFER_CAP bytes) for replay
 //   subscribers,              // Set<socket.id> currently attached
+//   createdAt, lastDataAt, lastInputAt,
+//   userInputDirty, notificationSubmitInProgress,
+//   provider,                  // owning provider shim for stdin protocol
 // }
 
 import {
@@ -40,6 +43,11 @@ import {
   projectIdFromCanvasUrl,
 } from "../lib/paths.js";
 import {
+  agentResultNotificationStatus,
+  configureAgentResultNotifications,
+  scheduleFlush,
+} from "../lib/agent_result_notifications.js";
+import {
   compareResultSummaries,
   GENERATION_RESULTS_BUNDLE_LIMIT,
 } from "../lib/readers.js";
@@ -48,6 +56,51 @@ import { writeMeta } from "../lib/writers.js";
 const ptys = new Map();
 const socketAttach = new Map();           // socket.id -> projectId
 const PTY_BUFFER_CAP = 256 * 1024;        // 256 KB rolling tail; xterm scrollback handles the rest
+let registeredProjects = null;
+let registeredIo = null;
+
+function writePtyInput(entry, data) {
+  entry.lastInputAt = Date.now();
+  entry.pty.write(data);
+}
+
+function stripAnsiControlSequences(data) {
+  return String(data || "")
+    .replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, "")
+    .replace(/\x1b\][\s\S]*?(?:\x07|\x1b\\)/g, "")
+    .replace(/\x1b./g, "");
+}
+
+function inputHasPrintableText(data) {
+  const stripped = stripAnsiControlSequences(data);
+  for (const ch of stripped) {
+    const code = ch.codePointAt(0);
+    if (code === undefined) continue;
+    if (code >= 0x20 && code !== 0x7f) return true;
+  }
+  return false;
+}
+
+function inputClearsDraft(data) {
+  const text = String(data || "");
+  return text.includes("\r")
+    || text.includes("\n")
+    || text.includes("\x03")
+    || text.includes("\x15");
+}
+
+function trackUserInput(entry, data) {
+  if (inputHasPrintableText(data)) entry.userInputDirty = true;
+  if (inputClearsDraft(data)) entry.userInputDirty = false;
+}
+
+function emitAgentNotificationStatus(projectId, payload) {
+  if (!projectId || !registeredIo) return;
+  registeredIo.to(projectId).emit("agent-notification-status", {
+    projectId,
+    ...payload,
+  });
+}
 
 function detachSocket(socketId) {
   const projectId = socketAttach.get(socketId);
@@ -89,6 +142,62 @@ export async function persistDiscoveredAgentSession(projectId, project, session)
     if (priorSessionId === undefined) delete project.meta.agent_session_id;
     else project.meta.agent_session_id = priorSessionId;
     throw e;
+  }
+}
+
+export async function submitAgentNotification(projectId, text, { requireIdleMs = 1500 } = {}) {
+  const entry = ptys.get(projectId);
+  if (!entry) {
+    return { ok: false, reason: "no_pty" };
+  }
+  if (typeof text !== "string" || text.length === 0) {
+    return { ok: false, reason: "empty_input" };
+  }
+  if (entry.notificationSubmitInProgress) {
+    return { ok: false, reason: "submit_in_progress" };
+  }
+  if (entry.userInputDirty) {
+    return { ok: false, reason: "unsafe_input" };
+  }
+
+  const now = Date.now();
+  const lastActivityAt = Math.max(
+    entry.createdAt || 0,
+    entry.lastDataAt || 0,
+    entry.lastInputAt || 0,
+  );
+  const idleForMs = Math.max(0, now - lastActivityAt);
+  const required = Math.max(0, Number(requireIdleMs) || 0);
+  if (idleForMs < required) {
+    return { ok: false, reason: "busy", idleForMs };
+  }
+
+  const project = registeredProjects?.get(projectId) ?? null;
+  const provider = entry.provider || getProvider(resolveAgentIdForMeta(project?.meta));
+  if (provider?.supportsSyntheticResultWake !== true
+      || typeof provider.submitAgentNotification !== "function") {
+    return { ok: false, reason: "unsupported_provider" };
+  }
+
+  entry.notificationSubmitInProgress = true;
+  try {
+    const submit = await provider.submitAgentNotification({
+      projectId,
+      meta: project?.meta,
+      text,
+      write: (data) => writePtyInput(entry, data),
+    });
+    if (submit?.ok) return { ok: true, idleForMs };
+    return {
+      ok: false,
+      reason: submit?.reason || "write_failed",
+      ...(submit?.message ? { message: submit.message } : {}),
+      idleForMs,
+    };
+  } catch (e) {
+    return { ok: false, reason: "write_failed", message: e.message, idleForMs };
+  } finally {
+    entry.notificationSubmitInProgress = false;
   }
 }
 
@@ -139,6 +248,7 @@ function registerSocketPtyHandlers({ socket, io, projects, nodePty }) {
       try { existing.pty.resize(cols, rows); } catch {}
       socket.emit("pty:spawned", { pid: existing.pty.pid, attached: true });
       if (existing.buffer) socket.emit("pty:output", existing.buffer);
+      scheduleFlush(projectId);
       return;
     }
 
@@ -182,11 +292,18 @@ function registerSocketPtyHandlers({ socket, io, projects, nodePty }) {
       pty,
       buffer: "",
       subscribers: new Set([socket.id]),
+      createdAt: Date.now(),
+      lastDataAt: 0,
+      lastInputAt: Date.now(),
+      userInputDirty: false,
+      notificationSubmitInProgress: false,
+      provider,
     };
     ptys.set(projectId, entry);
     socketAttach.set(socket.id, projectId);
 
     pty.onData((data) => {
+      entry.lastDataAt = Date.now();
       entry.buffer += data;
       if (entry.buffer.length > PTY_BUFFER_CAP) {
         entry.buffer = entry.buffer.slice(-PTY_BUFFER_CAP);
@@ -225,7 +342,8 @@ function registerSocketPtyHandlers({ socket, io, projects, nodePty }) {
       const cmd = latest
         ? provider.buildResumeCommand(input)
         : provider.buildLaunchCommand(input);
-      try { pty.write(cmd); } catch {}
+      try { writePtyInput(entry, cmd); } catch {}
+      scheduleFlush(projectId, { delayMs: 3000 });
     }, 500);
   });
 
@@ -234,7 +352,10 @@ function registerSocketPtyHandlers({ socket, io, projects, nodePty }) {
     if (!projectId) return;
     const entry = ptys.get(projectId);
     if (entry && typeof data === "string") {
-      try { entry.pty.write(data); } catch {}
+      if (entry.notificationSubmitInProgress) return;
+      trackUserInput(entry, data);
+      try { writePtyInput(entry, data); } catch {}
+      if (!entry.userInputDirty) scheduleFlush(projectId, { delayMs: 500 });
     }
   });
 
@@ -261,6 +382,12 @@ function registerSocketPtyHandlers({ socket, io, projects, nodePty }) {
 // Single entry point: wire the io-level asset-event listener once, then
 // register the per-socket subscribe + pty handlers on every connect.
 export function registerSocketHandlers({ io, projects, nodePty }) {
+  registeredProjects = projects;
+  registeredIo = io;
+  configureAgentResultNotifications({
+    submitAgentNotification,
+    publishStatus: emitAgentNotificationStatus,
+  });
   // Forward asset-preupload status updates to the project's room.
   // Terminal-state persistence (active / rejected) is handled separately
   // by services/asset_sync.js, which dispatches a mutator updateNode
@@ -297,6 +424,9 @@ export function registerSocketHandlers({ io, projects, nodePty }) {
         if (projectIdFromCanvasUrl(url) === projectId) projectEntries[url] = entry;
       }
       socket.emit("pai-assets-snapshot", { projectId, state: projectEntries });
+      agentResultNotificationStatus(projectId)
+        .then((status) => socket.emit("agent-notification-status", status))
+        .catch(() => {});
 
       // Backfill: re-pre-upload any image_result whose canvas URL isn't in the
       // cache yet. Lights up chips on projects re-opened across viewer restarts

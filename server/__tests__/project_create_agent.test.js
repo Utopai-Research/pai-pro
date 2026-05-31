@@ -102,7 +102,6 @@ test("POST /projects stores claude agent_id when PAI_DEFAULT_AGENT_ID is unset",
     const bundle = await (await fetch(`${handle.baseUrl}/projects/${row.id}`)).json();
     assert.equal(bundle.agent_id, "claude");
     assert.equal(bundle.agent_label, "Claude");
-    assert.equal(meta.use_server_owned_generation, true);
     assert.equal(await pathExists(join(dir, "PROJECT_AGENT.md")), true);
     assert.equal(await pathExists(join(dir, "CLAUDE.md")), true);
     const claudeMd = await readFile(join(dir, "CLAUDE.md"), "utf8");
@@ -141,6 +140,7 @@ test("POST /projects stores codex agent_id when PAI_DEFAULT_AGENT_ID=codex", asy
     const agentsMd = await readFile(join(dir, "AGENTS.md"), "utf8");
     assert.match(agentsMd, /read `\.\/PROJECT_AGENT\.md`/);
     assert.doesNotMatch(agentsMd, /@\.\/PROJECT_AGENT\.md/);
+    assert.match(agentsMd, /\[task-notification\]/);
     assert.equal(await pathExists(join(dir, "CLAUDE.md")), false);
     assert.equal(await pathExists(join(dir, ".claude")), false);
 

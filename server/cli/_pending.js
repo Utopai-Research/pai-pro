@@ -21,12 +21,18 @@ import {
   normalizeResultForRead,
   normalizeResultForWrite,
 } from "../lib/generation_result_normalize.js";
+import {
+  AGENT_RESULT_CONSUMER_HEADER,
+  WAITING_CLI_RESULT_CONSUMER,
+} from "../lib/agent_result_notifications.js";
 
 const PENDING_DIR_NAME = ".pending";
 const RESULTS_DIR_NAME = ".results";
 const DEFAULT_WAIT_TIMEOUT_MS = 10 * 60 * 1000;
 const VIDEO_WAIT_TIMEOUT_MS = 35 * 60 * 1000;
 const DEFAULT_WAIT_INTERVAL_MS = 1000;
+export const REVIEW_WAIT_TIMEOUT_MS = 24 * 60 * 60 * 1000;
+const REVIEW_WAIT_INTERVAL_MS = 250;
 
 function pendingDir() {
   return path.join(process.cwd(), PENDING_DIR_NAME);
@@ -59,20 +65,16 @@ export async function isBypassEnabled(cwd = process.cwd()) {
   }
 }
 
-export async function isServerOwnedGenerationEnabled(cwd = process.cwd()) {
-  if (process.env.PAI_SERVER_OWNED_GENERATION === "0") return false;
-  try {
-    const meta = JSON.parse(
-      await fsp.readFile(path.join(cwd, "meta.json"), "utf8"),
-    );
-    return meta.use_server_owned_generation === true;
-  } catch {
-    return false;
-  }
-}
-
 export function defaultWaitTimeoutMsForKind(kind) {
   return kind === "video" ? VIDEO_WAIT_TIMEOUT_MS : DEFAULT_WAIT_TIMEOUT_MS;
+}
+
+export async function waitForReviewResult(jobId, { kind } = {}) {
+  return waitForResult(jobId, {
+    kind,
+    timeoutMs: REVIEW_WAIT_TIMEOUT_MS,
+    intervalMs: REVIEW_WAIT_INTERVAL_MS,
+  });
 }
 
 function parseWaitTimeout(timeoutMs, kind) {
@@ -153,7 +155,12 @@ export async function fireAndWait({ projectId, jobId, kind, timeoutMs } = {}) {
   );
   let response;
   try {
-    response = await fetch(url, { method: "POST" });
+    response = await fetch(url, {
+      method: "POST",
+      headers: {
+        [AGENT_RESULT_CONSUMER_HEADER]: WAITING_CLI_RESULT_CONSUMER,
+      },
+    });
   } catch (e) {
     return {
       ok: false,
@@ -268,7 +275,7 @@ export async function writePending({
   const payload = {
     id: jobId,
     kind,                          // "image" | "video" | "audio"
-    stage,                         // "running" | "draft" | "failed"
+    stage,                         // "running" | "draft"
     prompt: String(prompt),
     aspect_ratio: aspectRatio || "16:9",
     created_at: new Date().toISOString(),

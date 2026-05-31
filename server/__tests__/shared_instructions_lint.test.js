@@ -17,6 +17,7 @@ const FORBIDDEN = [
   "slash command",
   "Claude Code",
   "claude-",
+  "[task-notification]",
   "/image-compose",
   "/video-compose",
   "/voice-compose",

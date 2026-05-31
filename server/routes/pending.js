@@ -1,10 +1,11 @@
 // Pending-draft fire path. Three routes that let the browser (or curl)
-// edit, fire, or discard a `.pending/<jobId>.json` sidecar that was
+// edit, fire, or cancel a `.pending/<jobId>.json` sidecar that was
 // staged by a generate_*.js CLI with --stage. The chokidar watcher in
 // services/watcher.js fans `pending-generations` out on every sidecar
 // add/change/unlink, so PATCH + DELETE need no extra emit; POST
 // /generate spawns the same CLI with --existing-job-id so it flips the
 // draft sidecar to running in place, then writes a durable result sidecar.
+// DELETE also writes a durable cancelled result before unlinking.
 //
 // Security: POST /generate gates the captured `script` against an
 // explicit whitelist. argv is passed positionally to spawn (no shell),
@@ -14,7 +15,13 @@ import { spawn } from "node:child_process";
 import fsp from "node:fs/promises";
 import path from "node:path";
 
+import { getProvider, resolveAgentIdForMeta } from "../agents/index.js";
 import { getCost } from "../model_registry.js";
+import {
+  AGENT_RESULT_CONSUMER_HEADER,
+  WAITING_CLI_RESULT_CONSUMER,
+  enqueueGenerationResultNotification,
+} from "../lib/agent_result_notifications.js";
 import { PAI_REPO_ROOT, pendingDir, projectDir } from "../lib/paths.js";
 import {
   normalizeResultEntry,
@@ -46,6 +53,16 @@ const IMAGE_PRO_DISPLAY_ONLY_PATCH_KEYS = new Set(["aspect_ratio", "image_size"]
 
 function pendingPath(id, jobId) {
   return path.join(pendingDir(id), `${jobId}.json`);
+}
+
+function hasWaitingCliConsumer(req) {
+  return String(req.get(AGENT_RESULT_CONSUMER_HEADER) || "").toLowerCase()
+    === WAITING_CLI_RESULT_CONSUMER;
+}
+
+function supportsSyntheticResultWake(project) {
+  const provider = getProvider(resolveAgentIdForMeta(project?.meta));
+  return provider?.supportsSyntheticResultWake === true;
 }
 
 function isImageProSidecar(entry) {
@@ -134,6 +151,27 @@ function pendingContext(entry) {
 }
 
 export function registerPendingRoutes({ app, projects, broadcasters }) {
+  async function writeResultAndBroadcast(id, jobId, result, { notifyAgent = false } = {}) {
+    const wrote = await writeResult(id, jobId, result);
+    if (!wrote) return false;
+    const raw = await readResultEntry(id, jobId);
+    const summary = normalizeResultEntry(jobId, raw);
+    const p = projects.get(id);
+    if (p && summary) {
+      if (!p.generationResults) p.generationResults = new Map();
+      p.generationResults.set(jobId, summary);
+      broadcasters?.broadcastGenerationResults?.(id);
+      if (notifyAgent && supportsSyntheticResultWake(p)) {
+        try {
+          await enqueueGenerationResultNotification(id, summary);
+        } catch (notifyErr) {
+          console.warn(`[viewer] agent notification enqueue failed for ${id}/${jobId}:`, notifyErr);
+        }
+      }
+    }
+    return true;
+  }
+
   app.patch("/projects/:id/pending/:jobId", async (req, res) => {
     const { id, jobId } = req.params;
     if (!projects.has(id)) return res.status(404).json({ error: "not found" });
@@ -216,6 +254,7 @@ export function registerPendingRoutes({ app, projects, broadcasters }) {
     if (!entry.script || !ALLOWED_SCRIPTS.has(entry.script)) {
       return res.status(400).json({ error: `unknown script: ${entry.script}` });
     }
+    const notifyAgent = !hasWaitingCliConsumer(req);
     try {
       const child = spawn(
         "node",
@@ -249,17 +288,7 @@ export function registerPendingRoutes({ app, projects, broadcasters }) {
           kind: entry.kind,
         };
         try {
-          const wrote = await writeResult(id, jobId, result);
-          if (wrote) {
-            const raw = await readResultEntry(id, jobId);
-            const summary = normalizeResultEntry(jobId, raw);
-            const p = projects.get(id);
-            if (p && summary) {
-              if (!p.generationResults) p.generationResults = new Map();
-              p.generationResults.set(jobId, summary);
-              broadcasters?.broadcastGenerationResults?.(id);
-            }
-          }
+          await writeResultAndBroadcast(id, jobId, result, { notifyAgent });
           await removePendingSidecar(id, jobId);
         } catch (e) {
           console.warn(`[viewer] result finalize failed for ${id}/${jobId}:`, e);
@@ -283,7 +312,18 @@ export function registerPendingRoutes({ app, projects, broadcasters }) {
     const { id, jobId } = req.params;
     if (!projects.has(id)) return res.status(404).json({ error: "not found" });
     try {
-      await fsp.unlink(pendingPath(id, jobId));
+      const entry = await readPendingEntry(id, jobId);
+      if (entry) {
+        await writeResultAndBroadcast(id, jobId, {
+          ...pendingContext(entry),
+          ok: false,
+          job_id: jobId,
+          kind: entry.kind,
+          klass: "cancelled",
+          message: "cancelled by user",
+        }, { notifyAgent: true });
+      }
+      await removePendingSidecar(id, jobId);
     } catch (e) {
       if (e.code !== "ENOENT") {
         console.warn(`[viewer] DELETE /projects/${id}/pending/${jobId} failed:`, e);

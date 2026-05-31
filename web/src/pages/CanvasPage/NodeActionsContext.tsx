@@ -53,10 +53,12 @@ export interface NodeActionsContextValue {
    * then unlinks once the real result lands.
    */
   onFireDraft?: (jobId: string) => Promise<void>
-  /** Unlink a draft sidecar. Idempotent server-side. */
+  /** Cancel a draft and resolve its result sidecar. Idempotent server-side. */
   onDiscardDraft?: (jobId: string) => Promise<void>
-  /** Hide a settled failed generation card after the user sends it to the agent. */
+  /** Hide a settled failed generation card. */
   onDismissFailedGeneration?: (jobId: string) => void
+  /** Codex needs an explicit failure prompt; Claude handles background results natively. */
+  canSendFailedGenerationToAgent?: boolean
 }
 
 // Module-level empty value so consumers reading from outside a provider

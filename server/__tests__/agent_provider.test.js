@@ -42,6 +42,8 @@ test("provider registry exposes claude and codex with labels", () => {
   assert.equal(getProvider("claude")?.label, "Claude");
   assert.equal(getProvider("codex")?.id, "codex");
   assert.equal(getProvider("codex")?.label, "Codex");
+  assert.notEqual(getProvider("claude")?.supportsSyntheticResultWake, true);
+  assert.equal(getProvider("codex")?.supportsSyntheticResultWake, true);
 });
 
 test("claude provider builds launch and resume commands with defaults", () => {
@@ -198,4 +200,32 @@ test("resolveAgentBypass defaults on and only falsy strings disable it", () => {
   for (const off of ["0", "false", "no", "off", "OFF", " Off "]) {
     assert.equal(resolveAgentBypass({ PAI_AGENT_BYPASS: off }), false, off);
   }
+});
+
+test("codex provider submits notifications as text followed by a separate enter", async () => {
+  const provider = getProvider("codex");
+  const writes = [];
+  const result = await provider.submitAgentNotification({
+    text: "[task-notification]\nhello\n[/task-notification]",
+    phaseGapMs: 0,
+    write: (data) => writes.push(data),
+  });
+  assert.equal(result.ok, true);
+  assert.deepEqual(writes, [
+    "[task-notification]\nhello\n[/task-notification]",
+    "\r",
+  ]);
+});
+
+test("codex provider rejects empty notification text before writing", async () => {
+  const provider = getProvider("codex");
+  const writes = [];
+  const result = await provider.submitAgentNotification({
+    text: "",
+    phaseGapMs: 0,
+    write: (data) => writes.push(data),
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.reason, "empty_input");
+  assert.deepEqual(writes, []);
 });
