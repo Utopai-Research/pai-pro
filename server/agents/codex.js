@@ -25,6 +25,12 @@ function safeSetValue(value, allowed) {
   return typeof value === "string" && allowed.has(value);
 }
 
+function safeSessionId(value) {
+  return typeof value === "string" && /^[A-Za-z0-9][A-Za-z0-9_-]*$/.test(value.trim())
+    ? value.trim()
+    : null;
+}
+
 function codexHomeDir(env = process.env) {
   return typeof env.CODEX_HOME === "string" && env.CODEX_HOME.trim() !== ""
     ? env.CODEX_HOME.trim()
@@ -169,6 +175,8 @@ export async function findLatestCodexSession(
       if (payload.originator !== CODEX_SESSION_ORIGINATOR) continue;
       const sessionCwd = await normalizePathForCompare(payload.cwd);
       if (sessionCwd !== projectCwd) continue;
+      const sessionId = safeSessionId(payload.id);
+      if (!sessionId) continue;
       let mtime = null;
       try {
         mtime = (await fsp.stat(filePath)).mtimeMs;
@@ -176,7 +184,7 @@ export async function findLatestCodexSession(
         // Race during session cleanup; keep the usable payload.
       }
       return {
-        sessionId: typeof payload.id === "string" ? payload.id : null,
+        sessionId,
         path: filePath,
         mtime,
       };
@@ -215,7 +223,11 @@ export const codexProvider = {
     return `codex ${optionSuffix(meta, env)}\r`;
   },
 
-  buildResumeCommand({ meta, env } = {}) {
+  buildResumeCommand({ meta, env, session } = {}) {
+    const sessionId = safeSessionId(session?.sessionId);
+    if (sessionId) {
+      return `codex resume ${optionSuffix(meta, env)} ${sessionId}\r`;
+    }
     return `codex resume --last ${optionSuffix(meta, env)}\r`;
   },
 

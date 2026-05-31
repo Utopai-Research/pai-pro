@@ -64,7 +64,7 @@ test("findLatestCodexSession returns the newest interactive cwd match using payl
   assert.match(latest?.path ?? "", /rollout-2026-05-27T11-00-00-new\.jsonl$/);
 });
 
-test("findLatestCodexSession ignores non-interactive and malformed sessions", async (t) => {
+test("findLatestCodexSession ignores non-interactive, malformed, and unusable-id sessions", async (t) => {
   const tmp = await mkdtemp(join(tmpdir(), "codex-provider-"));
   t.after(() => rm(tmp, { recursive: true, force: true }));
   const sessionsRoot = join(tmp, ".codex", "sessions");
@@ -76,6 +76,13 @@ test("findLatestCodexSession ignores non-interactive and malformed sessions", as
     "2026-05-27",
     "rollout-2026-05-27T12-00-00-malformed.jsonl",
     { mtime: new Date("2026-05-27T12:00:00Z") },
+  );
+  await writeSession(
+    sessionsRoot,
+    "2026-05-27",
+    "rollout-2026-05-27T12-45-00-unsafe-id.jsonl",
+    { id: "--last", cwd: projectPath, originator: "codex-tui" },
+    { mtime: new Date("2026-05-27T12:45:00Z") },
   );
   await writeSession(
     sessionsRoot,

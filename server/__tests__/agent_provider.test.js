@@ -117,6 +117,26 @@ test("codex provider builds launch and resume commands with defaults", () => {
   );
 });
 
+test("codex provider resumes the discovered project-scoped session id", () => {
+  const provider = getProvider("codex");
+  assert.equal(
+    provider.buildResumeCommand({
+      meta: {},
+      env: {},
+      session: { sessionId: "payload-session-id" },
+    }),
+    "codex resume --no-alt-screen --dangerously-bypass-approvals-and-sandbox payload-session-id\r",
+  );
+  assert.equal(
+    provider.buildResumeCommand({
+      meta: {},
+      env: NO_BYPASS,
+      session: { sessionId: "payload-session-id" },
+    }),
+    "codex resume --no-alt-screen payload-session-id\r",
+  );
+});
+
 test("codex provider drops the bypass flag when PAI_AGENT_BYPASS is off", () => {
   const provider = getProvider("codex");
   assert.equal(provider.buildLaunchCommand({ meta: {}, env: NO_BYPASS }), "codex --no-alt-screen\r");
