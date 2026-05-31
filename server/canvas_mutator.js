@@ -374,8 +374,8 @@ const reducers = {
  * @param p — per-project state with mutationQueue, stenoWriter, idempotencyCache, canvasState, version
  * @param envelope — { request_id, op, payload, ts?, actor? }
  * @param hooks — optional { onApply(p, envelope, reply) }: called inside the queue
- *   after a successful write+swap. Invoked synchronously; any work the hook does
- *   synchronously (e.g. socket.io emits) runs before the next mutation begins.
+ *   after a successful write+swap. Awaited so coupled side effects that must
+ *   stay ordered with workflow mutations can finish before the next mutation.
  *   Use this for write-then-broadcast couplings (e.g. server-side position
  *   handoff for completed pending generations — see lib/broadcasters.js).
  * @returns reply: { ok:true, applied, assigned, version } | { ok:false, klass, message, request_id }
@@ -431,7 +431,7 @@ async function mutateLocked(p, envelope, hooks) {
     p.version = (p.version || 0) + 1;
     const reply = { ok: true, applied: true, assigned, version: p.version };
     p.idempotencyCache.set(requestId, reply);
-    appendMutationLog(p, envelope, reply).catch((err) =>
+    await appendMutationLog(p, envelope, reply).catch((err) =>
       console.warn(`[mutator] log append failed for ${p.id}: ${err.message}`)
     );
     // Awaited so callers can find the .md mirror on disk by the time the
@@ -441,7 +441,7 @@ async function mutateLocked(p, envelope, hooks) {
     );
     if (hooks.onApply) {
       try {
-        hooks.onApply(p, envelope, reply);
+        await hooks.onApply(p, envelope, reply);
       } catch (e) {
         console.warn(`[mutator] onApply hook threw: ${e.message}`);
       }

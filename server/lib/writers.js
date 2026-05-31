@@ -3,11 +3,10 @@
 // sidecar mutex.
 //
 // Two locking systems coexist in this codebase. This module owns
-// `withProjectMutationLock`, which guards the canvas_positions.json
-// sidecar (high-volume drag positions; not audit-logged). The
-// canvas_mutator's PQueue guards workflow.json (audit-logged,
-// schema-validated). They protect different files and are
-// intentionally separate.
+// `withProjectMutationLock`, which guards sidecar state such as
+// meta.json and canvas_positions.json. The canvas_mutator's PQueue
+// guards workflow.json (audit-logged, schema-validated). They protect
+// different files and are intentionally separate.
 
 import fsp from "node:fs/promises";
 import path from "node:path";
@@ -21,13 +20,14 @@ import {
   resultsDir,
 } from "./paths.js";
 import { normalizeResultForWrite } from "./generation_result_normalize.js";
+import { writeFileAtomic, writeFileOnce } from "./atomic_writes.js";
 
 export async function writeMeta(id, meta) {
-  await fsp.writeFile(metaPath(id), JSON.stringify(meta, null, 2) + "\n");
+  await writeFileAtomic(metaPath(id), JSON.stringify(meta, null, 2) + "\n");
 }
 
 export async function writeCanvasPositions(id, state) {
-  await fsp.writeFile(
+  await writeFileAtomic(
     canvasPositionsPath(id),
     JSON.stringify(state, null, 2) + "\n",
   );
@@ -38,26 +38,15 @@ export async function writeResult(id, jobId, result) {
     throw new Error("writeResult requires a job id and result object");
   }
   const dir = resultsDir(id);
-  await fsp.mkdir(dir, { recursive: true });
   const target = path.join(dir, `${jobId}.json`);
   const payload = normalizeResultForWrite(jobId, result);
-  const tmp = `${target}.${process.pid}.${Date.now()}.tmp`;
-  try {
-    await fsp.writeFile(tmp, JSON.stringify(payload) + "\n");
-    await fsp.link(tmp, target);
-    return true;
-  } catch (e) {
-    if (e.code === "EEXIST") return false;
-    throw e;
-  } finally {
-    try { await fsp.unlink(tmp); } catch {}
-  }
+  return writeFileOnce(target, JSON.stringify(payload) + "\n");
 }
 
 // --- Per-project async mutex -------------------------------------------
 //
-// Every route that mutates p.canvasState / p.canvasPositions and writes
-// the corresponding JSON file goes through here. Without it, two
+// Every route that mutates p.meta / p.canvasPositions and writes the
+// corresponding JSON sidecar goes through here. Without it, two
 // concurrent handlers JSON.stringify their own snapshots and then
 // await writeFile — completion order is non-deterministic, so a later
 // snapshot can overwrite a fuller one (silent node loss) or two writes
@@ -80,6 +69,22 @@ export function withProjectMutationLock(id, fn) {
   };
   next.then(cleanup, cleanup);
   return next;
+}
+
+export function updateProjectMeta(id, project, updater) {
+  return withProjectMutationLock(id, async () => {
+    if (!project?.meta || typeof project.meta !== "object") {
+      throw new Error("project meta is not loaded");
+    }
+    const next = { ...project.meta };
+    const result = updater(next);
+    if (result === false) {
+      return { changed: false, meta: project.meta, result };
+    }
+    await writeMeta(id, next);
+    project.meta = next;
+    return { changed: true, meta: next, result };
+  });
 }
 
 // --- Active-project pointer + symlink ----------------------------------

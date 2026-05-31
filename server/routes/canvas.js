@@ -7,7 +7,7 @@
 import { mutate } from "../canvas_mutator.js";
 import { preuploadCanvasUrl } from "../pai_assets_client.js";
 import { statusForKlass } from "../lib/broadcasters.js";
-import { withProjectMutationLock, writeCanvasPositions, writeMeta } from "../lib/writers.js";
+import { withProjectMutationLock, writeCanvasPositions } from "../lib/writers.js";
 
 export function registerCanvasRoutes({ app, io, projects, mutatorHooks }) {
   // POST /projects/:id/preupload-asset — paired with server/scripts/_preupload_hook.js
@@ -35,13 +35,6 @@ export function registerCanvasRoutes({ app, io, projects, mutatorHooks }) {
     if (!p) return res.status(404).json({ error: "not found" });
     const envelope = { ...req.body, project_id: id };
     const reply = await mutate(p, envelope, mutatorHooks);
-    // Mirror setTitle into meta.json so the Home grid (which reads meta)
-    // catches up. PATCH /projects/:id does the inverse direction.
-    if (reply.ok && envelope.op === "setTitle" && p.meta.title !== p.canvasState.title) {
-      p.meta.title = p.canvasState.title;
-      await writeMeta(id, p.meta);
-      io.to(id).emit("title", { projectId: id, title: p.meta.title });
-    }
     if (reply.ok) return res.json(reply);
     return res.status(statusForKlass(reply.klass)).json(reply);
   });
