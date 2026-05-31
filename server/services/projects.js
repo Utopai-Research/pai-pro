@@ -53,6 +53,15 @@ Codex-specific notes:
 - Repo-local skills live in \`.agents/skills/\` and are discoverable by Codex.
 - Use staged media generation. Staged commands are long-running because they wait for the user's canvas Generate/Cancel decision before printing final JSON.
 - For multiple independent staged generations, use Codex's background-capable command execution and inspect background terminals with \`/ps\` when needed. Do not wait for staged jobs serially unless the user asked for a dependency chain.
+
+Codex task notifications:
+- The viewer may wake you with a \`[task-notification]\` when one or more browser-fired draft generations reach terminal status. Treat it as result context, not as a new creative request.
+- Run the exact \`list_generation_results.js --job-id ...\` command in the notification before answering or staging more work.
+- Treat \`.results/\` as ground truth; do not rely on memory of staged jobs.
+- Use successful \`node_id\` values as refs for follow-up generation.
+- Explain failures plainly and stage a correction only when the \`klass\`, message, and cost/risk make the fix clear.
+- Never rerun a completed job unless the user asks.
+- If a batch contains both successes and failures, plan only from verified successful node ids and name the failed jobs separately.
 `;
 
 const AGENT_TEMPLATE_PATH = path.join(PAI_REPO_ROOT, "agent-templates", "PROJECT_AGENT.md");

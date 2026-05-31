@@ -141,6 +141,7 @@ test("POST /projects stores codex agent_id when PAI_DEFAULT_AGENT_ID=codex", asy
     const agentsMd = await readFile(join(dir, "AGENTS.md"), "utf8");
     assert.match(agentsMd, /read `\.\/PROJECT_AGENT\.md`/);
     assert.doesNotMatch(agentsMd, /@\.\/PROJECT_AGENT\.md/);
+    assert.match(agentsMd, /\[task-notification\]/);
     assert.equal(await pathExists(join(dir, "CLAUDE.md")), false);
     assert.equal(await pathExists(join(dir, ".claude")), false);
 
