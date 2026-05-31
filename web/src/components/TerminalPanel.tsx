@@ -16,11 +16,12 @@
  * "Refer" button can type `@<nodeId>` text into the terminal directly.
  */
 import { useEffect, useMemo, useRef } from 'react'
+import { io } from 'socket.io-client'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { WebLinksAddon } from '@xterm/addon-web-links'
 import '@xterm/xterm/css/xterm.css'
-import { getSocket } from '@/lib/socket'
+import { getSocket, VIEWER_URL } from '@/lib/socket'
 import {
   useChatComposerRegistration,
   type ChatComposerHandle,
@@ -28,24 +29,106 @@ import {
 
 interface TerminalPanelProps {
   projectId: string | null
+  agentId: string | null
 }
 
-export function TerminalPanel({ projectId }: TerminalPanelProps): JSX.Element {
+const CODEX_SUBMIT_PHASE_GAP_MS = 500
+const PTY_ATTACH_SETTLE_MS = 200
+const PTY_WRITE_GRACE_MS = 200
+const PTY_FRESH_TIMEOUT_MS = 5000
+
+interface PtySize {
+  cols: number
+  rows: number
+}
+
+const sleep = (ms: number): Promise<void> => new Promise((resolve) => window.setTimeout(resolve, ms))
+
+function currentPtySize(term: Terminal | null): PtySize {
+  const cols = typeof term?.cols === 'number' && term.cols >= 10 ? term.cols : 120
+  const rows = typeof term?.rows === 'number' && term.rows >= 3 ? term.rows : 36
+  return { cols, rows }
+}
+
+// Codex submits only when Enter arrives from a fresh PTY attach after the
+// text phase; the same text+\r write leaves the prompt drafted.
+function writeFreshPtyInput(projectId: string, text: string, size: PtySize): Promise<boolean> {
+  return new Promise((resolve) => {
+    let done = false
+    let timeout: number | null = null
+    const socket = io(VIEWER_URL, {
+      transports: ['websocket', 'polling'],
+      withCredentials: true,
+      reconnection: false,
+      timeout: PTY_FRESH_TIMEOUT_MS,
+    })
+
+    const finish = (ok: boolean): void => {
+      if (done) return
+      done = true
+      if (timeout !== null) window.clearTimeout(timeout)
+      socket.disconnect()
+      resolve(ok)
+    }
+
+    timeout = window.setTimeout(() => finish(false), PTY_FRESH_TIMEOUT_MS)
+    socket.on('connect', () => {
+      socket.emit('pty:spawn', { projectId, ...size })
+    })
+    socket.on('pty:spawned', () => {
+      window.setTimeout(() => {
+        if (done) return
+        socket.emit('pty:input', text)
+        window.setTimeout(() => finish(true), PTY_WRITE_GRACE_MS)
+      }, PTY_ATTACH_SETTLE_MS)
+    })
+    socket.on('pty:error', () => finish(false))
+    socket.on('connect_error', () => finish(false))
+    socket.on('disconnect', () => {
+      finish(false)
+    })
+  })
+}
+
+async function submitCodexMessage(projectId: string, text: string, size: PtySize): Promise<void> {
+  const textSent = await writeFreshPtyInput(projectId, text, size)
+  if (!textSent) return
+  await sleep(CODEX_SUBMIT_PHASE_GAP_MS)
+  await writeFreshPtyInput(projectId, '\r', size)
+}
+
+export function TerminalPanel({ projectId, agentId }: TerminalPanelProps): JSX.Element {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const termRef = useRef<Terminal | null>(null)
+  const submitQueueRef = useRef<Promise<void>>(Promise.resolve())
 
-  // Stable handle so the registration effect only fires once.
+  // Keep draft insertion separate from true submission: Refer buttons use
+  // insertAtCursor, while Expansion chat uses sendToAgent.
   const composerHandle = useMemo<ChatComposerHandle>(
     () => ({
       insertAtCursor(text) {
         getSocket().emit('pty:input', text)
         termRef.current?.focus()
       },
+      sendToAgent(text) {
+        const message = text.replace(/\r+$/g, '')
+        if (message.trim() === '') return
+        if (agentId?.toLowerCase() === 'codex' && projectId !== null) {
+          const size = currentPtySize(termRef.current)
+          submitQueueRef.current = submitQueueRef.current
+            .catch(() => undefined)
+            .then(() => submitCodexMessage(projectId, message, size))
+          void submitQueueRef.current
+        } else {
+          getSocket().emit('pty:input', message + '\r')
+        }
+        termRef.current?.focus()
+      },
       focus() {
         termRef.current?.focus()
       },
     }),
-    [],
+    [agentId, projectId],
   )
   useChatComposerRegistration(composerHandle)
 

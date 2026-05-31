@@ -2,8 +2,8 @@
  * MediaExpandChat — bottom chat bar inside MediaExpandOverlay.
  *
  * Send-only fast-lane into the existing per-project pty session.
- * Composes a message and writes it to the pty via the same
- * ChatComposerContext path SelectionToolbar uses for "📎 Refer".
+ * Composes a message and submits it through ChatComposerContext;
+ * SelectionToolbar's "📎 Refer" path still only inserts draft text.
  *
  * Default scope chip pins the message to the currently-expanded
  * node (`@image_5` etc). User can × the chip to send unscoped, or
@@ -53,8 +53,8 @@ export function MediaExpandChat({
     if (composer === null) return
     const text = value.trim()
     if (text === '') return
-    const message = (scopeOn ? `@${nodeId} ${text}` : text) + '\r'
-    composer.insertAtCursor(message)
+    const message = scopeOn ? `@${nodeId} ${text}` : text
+    composer.sendToAgent(message)
     setValue('')
     setToast(true)
     window.setTimeout(() => setToast(false), 1500)

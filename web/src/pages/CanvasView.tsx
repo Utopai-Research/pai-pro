@@ -255,7 +255,7 @@ export default function CanvasView(): JSX.Element {
             <div className="relative flex-1 overflow-hidden">
               <div className="absolute inset-0">
                 {activated ? (
-                  <TerminalPanel projectId={projectId} />
+                  <TerminalPanel projectId={projectId} agentId={bundle?.agent_id ?? null} />
                 ) : (
                   <div className="h-full w-full bg-[#0a0a0a]" />
                 )}

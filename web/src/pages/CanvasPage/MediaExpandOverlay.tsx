@@ -218,13 +218,13 @@ export function MediaExpandOverlay({
   }
   const onSendFailureToAgent = (): void => {
     if (!isFailed || composer === null || typeof failureJobId !== 'string' || failureJobId === '') return
-    composer.insertAtCursor(buildGenerationFailureAgentPrompt({
+    composer.sendToAgent(buildGenerationFailureAgentPrompt({
       jobId: failureJobId,
       kind: kind === 'video-generation' ? 'video' : kind === 'audio-generation' ? 'audio' : 'image',
       klass: failure?.klass,
       message: failure?.message,
       sent: failure?.sent,
-    }) + '\r')
+    }))
     onDismissFailedGeneration?.(failureJobId)
     onClose()
   }

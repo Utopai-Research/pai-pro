@@ -1,13 +1,11 @@
 /**
- * ChatComposerContext — bridge between the canvas (SelectionToolbar)
- * and the AgentPanel composer.
+ * ChatComposerContext — bridge between canvas controls and the terminal.
  *
  * The canvas's "📎 Refer" button needs to inject `@<nodeId>` text into
- * the AgentPanel composer at the user's cursor. The canvas + AgentPanel
- * sit as siblings under separate layout subtrees, so lifting a ref
- * through every intermediate would be invasive. Context fits: AgentPanel
- * registers its imperative handle on mount; SelectionToolbar consumes
- * it.
+ * the mounted agent terminal. The canvas + terminal sit as siblings under
+ * separate layout subtrees, so lifting a ref through every intermediate
+ * would be invasive. Context fits: TerminalPanel registers its imperative
+ * handle on mount; canvas controls consume it.
  */
 import {
   createContext,
@@ -19,16 +17,13 @@ import {
   type ReactNode,
 } from 'react'
 
-/** Imperative handle exposed by the AgentPanel composer. */
+/** Imperative handle exposed by the mounted terminal. */
 export interface ChatComposerHandle {
-  /**
-   * Insert text at the current caret position. If the input has a
-   * selection range, the snippet replaces it. Focuses the input and
-   * positions the cursor immediately after the inserted text via
-   * requestAnimationFrame so the user can keep typing.
-   */
+  /** Write draft text into the terminal input without submitting it. */
   insertAtCursor: (text: string) => void
-  /** Move keyboard focus to the composer input. */
+  /** Submit a complete message to the mounted agent session. */
+  sendToAgent: (text: string) => void
+  /** Move keyboard focus to the terminal. */
   focus: () => void
 }
 
