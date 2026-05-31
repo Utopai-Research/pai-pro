@@ -50,6 +50,8 @@ function currentPtySize(term: Terminal | null): PtySize {
   return { cols, rows }
 }
 
+// Codex submits only when Enter arrives from a fresh PTY attach after the
+// text phase; the same text+\r write leaves the prompt drafted.
 function writeFreshPtyInput(projectId: string, text: string, size: PtySize): Promise<boolean> {
   return new Promise((resolve) => {
     let done = false
