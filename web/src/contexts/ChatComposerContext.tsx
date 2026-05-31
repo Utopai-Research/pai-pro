@@ -28,6 +28,8 @@ export interface ChatComposerHandle {
    * requestAnimationFrame so the user can keep typing.
    */
   insertAtCursor: (text: string) => void
+  /** Submit a complete message to the mounted agent session. */
+  sendToAgent: (text: string) => void
   /** Move keyboard focus to the composer input. */
   focus: () => void
 }

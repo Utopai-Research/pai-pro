@@ -154,13 +154,13 @@ export function PendingGenerationNode({ id, data, selected }: NodeProps): JSX.El
   const handleSendFailure = (e: React.MouseEvent): void => {
     e.stopPropagation()
     if (composer === null || failureSent) return
-    composer.insertAtCursor(buildGenerationFailureAgentPrompt({
+    composer.sendToAgent(buildGenerationFailureAgentPrompt({
       jobId: id,
       kind,
       klass: d.klass,
       message: d.message,
       sent: d.sent,
-    }) + '\r')
+    }))
     setFailureSent(true)
     onDismissFailedGeneration?.(id)
   }
