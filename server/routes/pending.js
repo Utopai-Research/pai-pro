@@ -1,10 +1,11 @@
 // Pending-draft fire path. Three routes that let the browser (or curl)
-// edit, fire, or discard a `.pending/<jobId>.json` sidecar that was
+// edit, fire, or cancel a `.pending/<jobId>.json` sidecar that was
 // staged by a generate_*.js CLI with --stage. The chokidar watcher in
 // services/watcher.js fans `pending-generations` out on every sidecar
 // add/change/unlink, so PATCH + DELETE need no extra emit; POST
 // /generate spawns the same CLI with --existing-job-id so it flips the
 // draft sidecar to running in place, then writes a durable result sidecar.
+// DELETE also writes a durable cancelled result before unlinking.
 //
 // Security: POST /generate gates the captured `script` against an
 // explicit whitelist. argv is passed positionally to spawn (no shell),
@@ -134,6 +135,52 @@ function pendingContext(entry) {
 }
 
 export function registerPendingRoutes({ app, projects, broadcasters }) {
+  async function claimDraftForGenerate(id, jobId) {
+    let claimed = null;
+    await withProjectMutationLock(id, async () => {
+      const target = pendingPath(id, jobId);
+      let sidecar;
+      try {
+        sidecar = JSON.parse(await fsp.readFile(target, "utf8"));
+      } catch (e) {
+        if (e.code === "ENOENT" || e.code === "ENOTDIR" || e instanceof SyntaxError) {
+          throw Object.assign(new Error("draft not found"), { http: 404 });
+        }
+        throw e;
+      }
+      const stage = sidecar.stage === "draft" ? "draft" : "running";
+      if (stage !== "draft") {
+        throw Object.assign(new Error(`already ${stage}`), { http: 409 });
+      }
+      if (!sidecar.script || !ALLOWED_SCRIPTS.has(sidecar.script)) {
+        throw Object.assign(new Error(`unknown script: ${sidecar.script}`), { http: 400 });
+      }
+      sidecar.stage = "running";
+      const tmp = target + ".tmp";
+      await fsp.writeFile(tmp, JSON.stringify(sidecar) + "\n");
+      await fsp.rename(tmp, target);
+      claimed = await readPendingEntry(id, jobId);
+      if (!claimed) {
+        throw Object.assign(new Error("draft not found"), { http: 404 });
+      }
+    });
+    return claimed;
+  }
+
+  async function writeResultAndBroadcast(id, jobId, result) {
+    const wrote = await writeResult(id, jobId, result);
+    if (!wrote) return false;
+    const raw = await readResultEntry(id, jobId);
+    const summary = normalizeResultEntry(jobId, raw);
+    const p = projects.get(id);
+    if (p && summary) {
+      if (!p.generationResults) p.generationResults = new Map();
+      p.generationResults.set(jobId, summary);
+      broadcasters?.broadcastGenerationResults?.(id);
+    }
+    return true;
+  }
+
   app.patch("/projects/:id/pending/:jobId", async (req, res) => {
     const { id, jobId } = req.params;
     if (!projects.has(id)) return res.status(404).json({ error: "not found" });
@@ -208,13 +255,13 @@ export function registerPendingRoutes({ app, projects, broadcasters }) {
   app.post("/projects/:id/pending/:jobId/generate", async (req, res) => {
     const { id, jobId } = req.params;
     if (!projects.has(id)) return res.status(404).json({ error: "not found" });
-    const entry = await readPendingEntry(id, jobId);
-    if (!entry) return res.status(404).json({ error: "draft not found" });
-    if (entry.stage !== "draft") {
-      return res.status(409).json({ error: `already ${entry.stage}` });
-    }
-    if (!entry.script || !ALLOWED_SCRIPTS.has(entry.script)) {
-      return res.status(400).json({ error: `unknown script: ${entry.script}` });
+    let entry;
+    try {
+      entry = await claimDraftForGenerate(id, jobId);
+    } catch (e) {
+      if (e?.http) return res.status(e.http).json({ error: e.message });
+      console.warn(`[viewer] POST /projects/${id}/pending/${jobId}/generate claim failed:`, e);
+      return res.status(500).json({ error: e.message });
     }
     try {
       const child = spawn(
@@ -249,17 +296,7 @@ export function registerPendingRoutes({ app, projects, broadcasters }) {
           kind: entry.kind,
         };
         try {
-          const wrote = await writeResult(id, jobId, result);
-          if (wrote) {
-            const raw = await readResultEntry(id, jobId);
-            const summary = normalizeResultEntry(jobId, raw);
-            const p = projects.get(id);
-            if (p && summary) {
-              if (!p.generationResults) p.generationResults = new Map();
-              p.generationResults.set(jobId, summary);
-              broadcasters?.broadcastGenerationResults?.(id);
-            }
-          }
+          await writeResultAndBroadcast(id, jobId, result);
           await removePendingSidecar(id, jobId);
         } catch (e) {
           console.warn(`[viewer] result finalize failed for ${id}/${jobId}:`, e);
@@ -275,6 +312,16 @@ export function registerPendingRoutes({ app, projects, broadcasters }) {
       res.status(202).json({ ok: true, job_id: jobId, pid: child.pid ?? null });
     } catch (e) {
       console.warn(`[viewer] POST /projects/${id}/pending/${jobId}/generate failed:`, e);
+      try {
+        await writeResultAndBroadcast(id, jobId, {
+          ...pendingContext(entry),
+          ...fallbackResult({ jobId, spawnError: e }),
+          kind: entry.kind,
+        });
+        await removePendingSidecar(id, jobId);
+      } catch (finalizeError) {
+        console.warn(`[viewer] spawn failure finalize failed for ${id}/${jobId}:`, finalizeError);
+      }
       res.status(500).json({ error: e.message });
     }
   });
@@ -283,7 +330,21 @@ export function registerPendingRoutes({ app, projects, broadcasters }) {
     const { id, jobId } = req.params;
     if (!projects.has(id)) return res.status(404).json({ error: "not found" });
     try {
-      await fsp.unlink(pendingPath(id, jobId));
+      const entry = await readPendingEntry(id, jobId);
+      if (entry) {
+        if (entry.stage !== "draft") {
+          return res.status(409).json({ error: `cannot cancel ${entry.stage} entry` });
+        }
+        await writeResultAndBroadcast(id, jobId, {
+          ...pendingContext(entry),
+          ok: false,
+          job_id: jobId,
+          kind: entry.kind,
+          klass: "cancelled",
+          message: "cancelled by user",
+        });
+      }
+      await removePendingSidecar(id, jobId);
     } catch (e) {
       if (e.code !== "ENOENT") {
         console.warn(`[viewer] DELETE /projects/${id}/pending/${jobId} failed:`, e);

@@ -4,7 +4,7 @@
 //   3. emit a single JSON line on stdout (success or failure).
 //
 // Convention for skills: read the JSON line, branch on `ok`. On `ok: false`
-// the `klass` field maps 1:1 to the failure-class taxonomy in CLAUDE.md
+// the `klass` field maps 1:1 to the failure-class taxonomy in PROJECT_AGENT.md
 // (rate_limited, content_filtered, bad_args, transient_exhausted, infra).
 
 import { parseArgs as nodeParseArgs } from "node:util";

@@ -1,5 +1,5 @@
 /**
- * Workflow / canvas types — mirror CLAUDE.md's `version: 2` schema.
+ * Workflow / canvas types — mirror PROJECT_AGENT.md's `version: 2` schema.
  *
  * Source-of-truth shape: each project's `workflow.json` on disk under
  * `projects/<id>/workflow.json`. The viewer (`server/local_viewer.js`)
@@ -283,7 +283,7 @@ export interface PendingGeneration {
 export interface GenerationResult {
   job_id: string
   kind: 'image' | 'video' | 'audio'
-  status: 'succeeded' | 'failed' | 'aborted' | 'timeout'
+  status: 'succeeded' | 'failed' | 'aborted' | 'cancelled' | 'timeout'
   ok: boolean
   completed_at?: string
   klass?: string

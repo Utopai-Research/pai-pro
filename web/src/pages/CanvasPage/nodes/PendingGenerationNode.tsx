@@ -3,7 +3,7 @@
  * in-flight generation. Driven by viewer sidecar Socket.IO channels,
  * not workflow.json. Running/draft pads come from `.pending/<jobId>.json`;
  * failed pads are synthesized from durable
- * `.results/<jobId>.json` until the user sends/dismisses them.
+ * `.results/<jobId>.json` until the user dismisses them.
  *
  * Audio drafts/running share the same chrome as image — taller body
  * with the spoken text (the deliverable) editable on draft. The voice
@@ -96,6 +96,7 @@ export function PendingGenerationNode({ id, data, selected }: NodeProps): JSX.El
     onFireDraft,
     onDiscardDraft,
     onDismissFailedGeneration,
+    canSendFailedGenerationToAgent,
   } = useNodeActions()
   const composer = useChatComposer()
   const canExpand = onExpandMedia !== undefined
@@ -146,6 +147,10 @@ export function PendingGenerationNode({ id, data, selected }: NodeProps): JSX.El
       setDraftError(err instanceof Error ? err.message : String(err))
     })
   }
+  const handleDismissFailure = (e: React.MouseEvent): void => {
+    e.stopPropagation()
+    onDismissFailedGeneration?.(id)
+  }
   const handleSendFailure = (e: React.MouseEvent): void => {
     e.stopPropagation()
     if (composer === null || failureSent) return
@@ -157,10 +162,6 @@ export function PendingGenerationNode({ id, data, selected }: NodeProps): JSX.El
       sent: d.sent,
     }) + '\r')
     setFailureSent(true)
-    onDismissFailedGeneration?.(id)
-  }
-  const handleDismissFailure = (e: React.MouseEvent): void => {
-    e.stopPropagation()
     onDismissFailedGeneration?.(id)
   }
   const handleExpand = (e: React.MouseEvent): void => {
@@ -316,15 +317,17 @@ export function PendingGenerationNode({ id, data, selected }: NodeProps): JSX.El
             >
               Dismiss
             </button>
-            <button
-              type="button"
-              className="btn-generate-primary pending-send-agent"
-              onClick={handleSendFailure}
-              disabled={composer === null || failureSent}
-              title={composer === null ? 'Terminal not ready' : 'Send this failure to the agent'}
-            >
-              {failureSent ? 'Sent' : 'Send failure to agent'}
-            </button>
+            {canSendFailedGenerationToAgent ? (
+              <button
+                type="button"
+                className="btn-generate-primary pending-send-agent"
+                onClick={handleSendFailure}
+                disabled={composer === null || failureSent}
+                title={composer === null ? 'Terminal not ready' : 'Send this failure to the agent'}
+              >
+                {failureSent ? 'Sent' : 'Send to agent'}
+              </button>
+            ) : null}
           </div>
         ) : (
           <span>{footMeta}</span>

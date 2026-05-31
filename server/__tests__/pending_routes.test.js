@@ -6,8 +6,8 @@
 // Spawns the viewer in a subprocess against a tmp PROJECTS_DIR (same
 // pattern as canvas_mutator_http.test.js), seeds a draft sidecar on
 // disk, and exercises each route. POST /generate spawns the real CLI;
-// the spawned child fails quickly without API keys but the route returns
-// 202 before that, which is all we assert.
+// these tests use bad args / missing refs so the child settles quickly,
+// and the route must persist that terminal result.
 
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -16,6 +16,7 @@ import { mkdtemp, rm, writeFile, readFile, mkdir, stat } from "node:fs/promises"
 import { tmpdir } from "node:os";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { writePending } from "../cli/_pending.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const VIEWER_PATH = resolve(__dirname, "..", "local_viewer.js");
@@ -39,7 +40,10 @@ async function setupTestProject(projectsDir, id) {
   const workflow = { version: 2, workflow_id: id, title: "T", nodes: [], edges: [] };
   await writeFile(join(dir, "workflow.json"), JSON.stringify(workflow, null, 2) + "\n");
   const now = new Date().toISOString();
-  await writeFile(join(dir, "meta.json"), JSON.stringify({ id, title: "T", created_at: now, last_active_at: now }, null, 2) + "\n");
+  await writeFile(
+    join(dir, "meta.json"),
+    JSON.stringify({ id, title: "T", created_at: now, last_active_at: now, agent_id: "codex" }, null, 2) + "\n",
+  );
 }
 
 async function startViewer() {
@@ -159,6 +163,10 @@ function runCli({ script, args }) {
 function parseReply(stdout) {
   const lines = stdout.trim().split("\n").filter((l) => l.trim().startsWith("{"));
   return JSON.parse(lines[lines.length - 1]);
+}
+
+function parseReplies(stdout) {
+  return stdout.trim().split("\n").filter((l) => l.trim().startsWith("{")).map((line) => JSON.parse(line));
 }
 
 test.before(async () => { await startViewer(); });
@@ -296,6 +304,22 @@ test("POST /generate with non-whitelisted script → 400", async () => {
   assert.match(body.error, /unknown script/);
 });
 
+test("POST /generate claims the draft before spawning", async () => {
+  const { jobId } = await seedDraft({
+    overrides: { argv: ["--definitely-unknown-flag"] },
+  });
+  const [r1, r2] = await Promise.all([
+    fetch(`${baseUrl}/projects/${TEST_PROJECT_ID}/pending/${jobId}/generate`, { method: "POST" }),
+    fetch(`${baseUrl}/projects/${TEST_PROJECT_ID}/pending/${jobId}/generate`, { method: "POST" }),
+  ]);
+  assert.deepEqual([r1.status, r2.status].sort(), [202, 409]);
+
+  const result = await waitForResult(jobId);
+  assert.equal(result.ok, false);
+  assert.equal(result.klass, "bad_args");
+  await assert.rejects(stat(sidecarPath(jobId)), /ENOENT/);
+});
+
 test("new-project bypass mode fires through viewer and waits on result sidecar", async () => {
   const now = new Date().toISOString();
   await writeFile(
@@ -305,8 +329,8 @@ test("new-project bypass mode fires through viewer and waits on result sidecar",
       title: "T",
       created_at: now,
       last_active_at: now,
+      agent_id: "codex",
       dangerously_skip_draft_gate: true,
-      use_server_owned_generation: true,
     }, null, 2) + "\n",
   );
 
@@ -331,17 +355,77 @@ test("new-project bypass mode fires through viewer and waits on result sidecar",
   await assert.rejects(stat(sidecarPath(reply.job_id)), /ENOENT/);
 });
 
-test("DELETE unlinks the sidecar; second DELETE is idempotent", async () => {
+test("new-project bypass mode with --draft-only fires and lets a batch waiter own the result", async () => {
+  const now = new Date().toISOString();
+  await writeFile(
+    projectPath("meta.json"),
+    JSON.stringify({
+      id: TEST_PROJECT_ID,
+      title: "T",
+      created_at: now,
+      last_active_at: now,
+      agent_id: "codex",
+      dangerously_skip_draft_gate: true,
+    }, null, 2) + "\n",
+  );
+
+  const { code, stdout, stderr } = await runCli({
+    script: "generate_image.js",
+    args: [
+      "--stage",
+      "--draft-only",
+      "--prompt", "x",
+      "--ref-source-id", "image_missing",
+      "--project-id", TEST_PROJECT_ID,
+    ],
+  });
+  assert.equal(code, 0, `stderr:\n${stderr}`);
+  const replies = parseReplies(stdout);
+  const staged = replies.find((r) => r.stage === "draft");
+  const fired = replies[replies.length - 1];
+  assert.match(staged.job_id, /^pending_/);
+  assert.equal(fired.ok, true);
+  assert.equal(fired.job_id, staged.job_id);
+  assert.equal(fired.stage, "running");
+  assert.equal(fired.fired, true);
+
+  const result = await waitForResult(staged.job_id);
+  assert.equal(result.ok, false);
+  assert.equal(result.klass, "bad_args");
+  await assert.rejects(stat(sidecarPath(staged.job_id)), /ENOENT/);
+});
+
+test("DELETE writes cancelled result, unlinks sidecar, and is idempotent", async () => {
   const { jobId } = await seedDraft();
   const r1 = await fetch(`${baseUrl}/projects/${TEST_PROJECT_ID}/pending/${jobId}`, {
     method: "DELETE",
   });
   assert.equal(r1.status, 200);
+  const result = await waitForResult(jobId);
+  assert.equal(result.ok, false);
+  assert.equal(result.job_id, jobId);
+  assert.equal(result.kind, "image");
+  assert.equal(result.klass, "cancelled");
+  assert.equal(result.message, "cancelled by user");
+  assert.equal(result.prompt, "a test cat");
   await assert.rejects(stat(sidecarPath(jobId)));
   const r2 = await fetch(`${baseUrl}/projects/${TEST_PROJECT_ID}/pending/${jobId}`, {
     method: "DELETE",
   });
   assert.equal(r2.status, 200, "DELETE on missing sidecar is idempotent");
+});
+
+test("DELETE refuses to cancel a running entry", async () => {
+  const { jobId } = await seedDraft({ overrides: { stage: "running" } });
+  const r = await fetch(`${baseUrl}/projects/${TEST_PROJECT_ID}/pending/${jobId}`, {
+    method: "DELETE",
+  });
+  assert.equal(r.status, 409);
+  const body = await r.json();
+  assert.match(body.error, /cannot cancel running/);
+  const sidecar = await readSidecar(jobId);
+  assert.equal(sidecar.stage, "running");
+  await assert.rejects(stat(resultPath(jobId)), /ENOENT/);
 });
 
 test("PATCH on unknown project → 404", async () => {
@@ -380,24 +464,23 @@ test("writePending preserves position across stage transitions", async () => {
   const { jobId } = await seedDraft({
     overrides: { position: { x: 50, y: 60 } },
   });
-  // Re-run generate_image.js --stage --existing-job-id <jobId>.
-  // writePending overwrites the sidecar but should read the prior
-  // file and copy `position` forward (sticky field semantics).
-  await new Promise((resolve) => {
-    const child = spawn(process.execPath, [
-      join(__dirname, "..", "cli", "generate_image.js"),
-      "--stage",
-      "--existing-job-id", jobId,
-      "--prompt", "still the same cat",
-      "--aspect-ratio", "1:1",
-      "--image-size", "1K",
-    ], {
-      cwd: join(projectsDir, TEST_PROJECT_ID),
-      env: process.env,
-      stdio: "ignore",
+  // The route-owned replay path calls writePending against the existing
+  // job id. It overwrites the sidecar but should copy `position` forward
+  // from the draft sidecar (sticky field semantics).
+  const originalCwd = process.cwd();
+  process.chdir(projectPath());
+  try {
+    await writePending({
+      jobId,
+      kind: "image",
+      prompt: "still the same cat",
+      aspectRatio: "1:1",
+      model: "image-generation",
+      imageSize: "1K",
     });
-    child.on("exit", resolve);
-  });
+  } finally {
+    process.chdir(originalCwd);
+  }
   const after = await readSidecar(jobId);
   assert.deepEqual(after.position, { x: 50, y: 60 }, "position must survive writePending");
 });

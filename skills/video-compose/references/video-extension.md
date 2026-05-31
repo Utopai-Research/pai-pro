@@ -83,7 +83,7 @@ The user can interrupt with new instructions between links. For long chains, sur
 
 ## Long sequences — surface cost upfront
 
-For a long chain (≥4 linked clips), serial rendering adds ~3 min wall-clock per clip — that's 15–20 min of real time for a 6-scene sequence. Each clip's render is backgrounded, so the chat stays responsive, but the next clip can't start until its predecessor finishes (the prompt depends on the predecessor's output URL). Surface upfront: *"This is a 6-clip chain — each renders ~3 min in the background, so the whole sequence takes 15–20 min end-to-end. You'll see each scene appear on the canvas as it lands. Ping me if any pair could run as independent drafts."*
+For a long chain (≥4 linked clips), serial rendering adds ~3 min wall-clock per clip — that's 15–20 min of real time for a 6-scene sequence. The next dependent clip cannot be staged until the predecessor result exists, because the prompt depends on that output URL. Surface upfront: *"This is a 6-clip chain — each render is ~3 min, so the whole sequence takes 15–20 min end-to-end. You'll see each scene appear on the canvas as it lands. Ping me if any pair could run as independent drafts."*
 
 ## Exception — explicit parallel drafts
 

@@ -39,8 +39,8 @@ You are invoked as \`claude\` in this project's PTY. The \`@./PROJECT_AGENT.md\`
 
 Claude-specific notes:
 - Skill invocation syntax is \`/<skill-name>\` (slash-prefixed). The skills referenced in PROJECT_AGENT.md (\`image-compose\`, \`video-compose\`, etc.) live at \`~/.claude/skills/\` and auto-discover by description.
-- Every \`generate_image.js\`, \`generate_video.js\`, and \`generate_voice.js\` Bash call needs both the CLI flag \`--stage\` and the Bash tool option \`run_in_background: true\`. This applies to every call in a parallel batch.
-- To wait on a backgrounded Bash call, use the \`BashOutput\` tool against the bash id you got back. Never \`cat\`/\`grep\` \`/tmp/claude-*/.../tasks/<id>.output\`.
+- Every \`generate_image.js\`, \`generate_video.js\`, and \`generate_voice.js\` Bash call needs both the CLI flag \`--stage\` and the Bash tool option \`run_in_background: true\`; staged commands wait for the user's canvas Generate/Cancel decision before printing final JSON. This applies to every call in a parallel batch.
+- To wait on a backgrounded Bash call's final JSON, use the \`BashOutput\` tool against the bash id you got back. Never \`cat\`/\`grep\` \`/tmp/claude-*/.../tasks/<id>.output\`.
 `;
 
 const PER_PROJECT_CODEX_AGENTS_MD = `# Per-project filmmaking agent -- Codex
@@ -51,8 +51,11 @@ You are invoked as \`codex\` in this project's PTY.
 
 Codex-specific notes:
 - Repo-local skills live in \`.agents/skills/\` and are discoverable by Codex.
-- Use staged media generation and \`wait_for_generation.js\` for final results.
-- Use Codex's normal command execution; do not rely on Claude-specific background tool behavior.
+- Use staged media generation. Run generation commands in the foreground; the command waits for the user's canvas Generate/Cancel decision before printing final JSON.
+- Do not use Codex background command execution for \`generate_*\` calls.
+- For independent batches, stage each draft with \`--stage --draft-only\`, keep the returned job ids, then run one foreground waiter:
+  \`node "$PAI_REPO_ROOT/server/cli/wait_for_generations.js" --job-id <id> --job-id <id>\`
+  In Run immediately mode, \`--draft-only\` also asks the viewer to fire the draft before exiting. The waiter prints each completed job as it lands, then prints a final summary after every job has succeeded, failed, or been cancelled. If it times out with pending ids, recover them later with \`list_generation_results.js --job-id ...\`.
 `;
 
 const AGENT_TEMPLATE_PATH = path.join(PAI_REPO_ROOT, "agent-templates", "PROJECT_AGENT.md");
@@ -294,7 +297,6 @@ export async function primeProjects(projects) {
       created_at: now,
       last_active_at: now,
       agent_id: agentId,
-      use_server_owned_generation: true,
     });
     await loadProject(projects, id);
     await writeActive(id);

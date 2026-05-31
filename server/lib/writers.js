@@ -73,11 +73,12 @@ export function withProjectMutationLock(id, fn) {
   const prev = projectMutationLocks.get(id) ?? Promise.resolve();
   const next = prev.catch(() => {}).then(fn);
   projectMutationLocks.set(id, next);
-  next.finally(() => {
+  const cleanup = () => {
     if (projectMutationLocks.get(id) === next) {
       projectMutationLocks.delete(id);
     }
-  });
+  };
+  next.then(cleanup, cleanup);
   return next;
 }
 

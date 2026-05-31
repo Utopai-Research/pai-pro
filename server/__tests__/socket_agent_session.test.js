@@ -4,6 +4,13 @@ import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+const priorBypass = process.env.PAI_AGENT_BYPASS;
+process.env.PAI_AGENT_BYPASS = "0";
+test.after(() => {
+  if (priorBypass === undefined) delete process.env.PAI_AGENT_BYPASS;
+  else process.env.PAI_AGENT_BYPASS = priorBypass;
+});
+
 test("persistDiscoveredAgentSession writes agent_session_id from discovered payload id", async (t) => {
   const projectsDir = await mkdtemp(join(tmpdir(), "socket-agent-session-"));
   t.after(() => rm(projectsDir, { recursive: true, force: true }));

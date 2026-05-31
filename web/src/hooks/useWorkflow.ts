@@ -38,6 +38,7 @@ const EMPTY_ASSET_STATUSES: ReadonlyMap<string, AssetStatusEntry> = new Map()
 
 function failedResultToPending(result: GenerationResult): PendingGeneration | null {
   if (result.status === 'succeeded') return null
+  if (result.status === 'cancelled' || result.klass === 'cancelled') return null
   return {
     id: result.job_id,
     kind: result.kind,

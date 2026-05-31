@@ -138,7 +138,7 @@ export async function mutateCanvas(
 // Pending-draft mutations. Each round-trip is fire-and-forget HTTP;
 // the viewer's chokidar watcher fans the resulting sidecar
 // add/change/unlink back via the `pending-generations` socket event,
-// which useWorkflow merges into React state automatically.
+// while Generate/Cancel resolve `.results/<jobId>.json` for agents.
 // ────────────────────────────────────────────────────────────────────
 
 export interface PendingDraftPatch {

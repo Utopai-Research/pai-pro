@@ -9,6 +9,7 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const WAIT_CLI = resolve(__dirname, "..", "cli", "wait_for_generation.js");
+const WAIT_BATCH_CLI = resolve(__dirname, "..", "cli", "wait_for_generations.js");
 
 function runWait({ cwd, jobId, env = {} }) {
   return new Promise((resolve) => {
@@ -25,9 +26,28 @@ function runWait({ cwd, jobId, env = {} }) {
   });
 }
 
+function runBatchWait({ cwd, args, env = {} }) {
+  return new Promise((resolve) => {
+    let stdout = "";
+    let stderr = "";
+    const child = spawn(
+      process.execPath,
+      [WAIT_BATCH_CLI, ...args],
+      { cwd, env: { ...process.env, ...env }, stdio: ["ignore", "pipe", "pipe"] },
+    );
+    child.stdout.on("data", (d) => { stdout += d; });
+    child.stderr.on("data", (d) => { stderr += d; });
+    child.on("exit", (code) => resolve({ code, stdout, stderr }));
+  });
+}
+
 function parseReply(stdout) {
   const lines = stdout.trim().split("\n").filter((l) => l.trim().startsWith("{"));
   return JSON.parse(lines[lines.length - 1]);
+}
+
+function parseReplies(stdout) {
+  return stdout.trim().split("\n").filter((l) => l.trim().startsWith("{")).map((line) => JSON.parse(line));
 }
 
 test("wait_for_generation prints existing success result and exits 0", async (t) => {
@@ -102,6 +122,111 @@ test("wait_for_generation treats canvas mutation error as failure", async (t) =>
   assert.equal(reply.message, "canvas rejected");
 });
 
+test("wait_for_generations streams results and waits for the full batch", async (t) => {
+  const cwd = await mkdtemp(join(tmpdir(), "wait-generations-"));
+  t.after(() => rm(cwd, { recursive: true, force: true }));
+  await mkdir(join(cwd, ".results"), { recursive: true });
+  setTimeout(() => {
+    writeFile(
+      join(cwd, ".results", "pending_a.json"),
+      JSON.stringify({ ok: true, job_id: "pending_a", kind: "image", output_url: "/a.png" }) + "\n",
+    ).catch(() => {});
+  }, 30);
+  setTimeout(() => {
+    writeFile(
+      join(cwd, ".results", "pending_b.json"),
+      JSON.stringify({ ok: true, job_id: "pending_b", kind: "image", output_url: "/b.png" }) + "\n",
+    ).catch(() => {});
+  }, 70);
+
+  const { code, stdout, stderr } = await runBatchWait({
+    cwd,
+    args: [
+      "--job-id", "pending_a",
+      "--job-id", "pending_b",
+      "--timeout-ms", "1000",
+      "--interval-ms", "10",
+    ],
+  });
+  assert.equal(code, 0, stderr);
+  const replies = parseReplies(stdout);
+  assert.equal(replies.length, 3);
+  assert.equal(replies[0].event, "generation_result");
+  assert.equal(replies[0].job_id, "pending_a");
+  assert.equal(replies[1].event, "generation_result");
+  assert.equal(replies[1].job_id, "pending_b");
+  const reply = replies[2];
+  assert.equal(reply.ok, true);
+  assert.equal(reply.count, 2);
+  assert.equal(reply.batch_complete, true);
+  assert.deepEqual(reply.pending_job_ids, []);
+  assert.equal(reply.results[0].job_id, "pending_a");
+  assert.equal(reply.results[1].job_id, "pending_b");
+});
+
+test("wait_for_generations times out with completed and pending ids", async (t) => {
+  const cwd = await mkdtemp(join(tmpdir(), "wait-generations-"));
+  t.after(() => rm(cwd, { recursive: true, force: true }));
+  await mkdir(join(cwd, ".results"), { recursive: true });
+  setTimeout(() => {
+    writeFile(
+      join(cwd, ".results", "pending_a.json"),
+      JSON.stringify({ ok: true, job_id: "pending_a", kind: "image", output_url: "/a.png" }) + "\n",
+    ).catch(() => {});
+  }, 30);
+
+  const { code, stdout, stderr } = await runBatchWait({
+    cwd,
+    args: [
+      "--job-id", "pending_a",
+      "--job-id", "pending_b",
+      "--timeout-ms", "90",
+      "--interval-ms", "10",
+    ],
+  });
+  assert.equal(code, 1, stderr);
+  const replies = parseReplies(stdout);
+  assert.equal(replies.length, 2);
+  assert.equal(replies[0].event, "generation_result");
+  assert.equal(replies[0].job_id, "pending_a");
+  const reply = replies[1];
+  assert.equal(reply.ok, false);
+  assert.equal(reply.klass, "timeout");
+  assert.equal(reply.count, 1);
+  assert.equal(reply.pending_count, 1);
+  assert.equal(reply.batch_complete, false);
+  assert.equal(reply.timed_out, true);
+  assert.deepEqual(reply.pending_job_ids, ["pending_b"]);
+});
+
+test("wait_for_generations returns complete batch when every job is ready", async (t) => {
+  const cwd = await mkdtemp(join(tmpdir(), "wait-generations-"));
+  t.after(() => rm(cwd, { recursive: true, force: true }));
+  await mkdir(join(cwd, ".results"), { recursive: true });
+  await writeFile(
+    join(cwd, ".results", "pending_a.json"),
+    JSON.stringify({ ok: true, job_id: "pending_a", kind: "image" }) + "\n",
+  );
+  await writeFile(
+    join(cwd, ".results", "pending_b.json"),
+    JSON.stringify({ ok: false, job_id: "pending_b", kind: "image", klass: "bad_args", message: "nope" }) + "\n",
+  );
+
+  const { code, stdout, stderr } = await runBatchWait({
+    cwd,
+    args: ["pending_a", "pending_b", "--timeout-ms", "1000"],
+  });
+  assert.equal(code, 0, stderr);
+  const reply = parseReply(stdout);
+  assert.equal(reply.ok, true);
+  assert.equal(reply.count, 2);
+  assert.equal(reply.succeeded_count, 1);
+  assert.equal(reply.failed_count, 1);
+  assert.equal(reply.cancelled_count, 0);
+  assert.equal(reply.batch_complete, true);
+  assert.deepEqual(reply.pending_job_ids, []);
+});
+
 test("wait_for_generation times out with structured failure", async (t) => {
   const cwd = await mkdtemp(join(tmpdir(), "wait-generation-"));
   t.after(() => rm(cwd, { recursive: true, force: true }));
@@ -120,7 +245,7 @@ test("wait_for_generation times out with structured failure", async (t) => {
 
 test("fireAndWait maps viewer 404 to existing bad_args taxonomy", async () => {
   const { fireAndWait } = await import(`../cli/_pending.js?fire=${Date.now()}`);
-  const server = createServer((_req, res) => {
+  const server = createServer((req, res) => {
     res.writeHead(404, { "content-type": "application/json" });
     res.end(JSON.stringify({ error: "draft not found" }));
   });

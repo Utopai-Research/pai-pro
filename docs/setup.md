@@ -13,6 +13,18 @@ Codex CLI can run inside the embedded browser terminal.
 | Hack on the web or server source | Host mode | Claude Code default | `./scripts/setup --agent claude` then `./scripts/start.sh` |
 | Hack on the web or server source | Host mode | Codex CLI | `./scripts/setup --agent codex` then `PAI_DEFAULT_AGENT_ID=codex ./scripts/start.sh` |
 
+Generation behavior differs slightly by agent. Claude Code uses backgrounded
+staged Bash calls and reads each final JSON result with `BashOutput`; Codex uses
+foreground staged calls and a foreground batch waiter. We keep Codex foreground
+because upstream background completion/wake support is still an open area:
+openai/codex issues
+[#15723](https://github.com/openai/codex/issues/15723),
+[#22003](https://github.com/openai/codex/issues/22003), and
+[#22099](https://github.com/openai/codex/issues/22099) cover background
+subprocess completion, output injection, and nonblocking task management. If
+Codex gains reliable background completion delivery, PAI-Pro can switch Codex
+generation to the same background pattern.
+
 `PAI_DEFAULT_AGENT_ID` only affects projects created after the viewer starts.
 Existing projects keep their saved `meta.json` `agent_id`, so a Claude project
 continues to open Claude and a Codex project continues to open Codex regardless
