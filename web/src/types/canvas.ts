@@ -198,13 +198,6 @@ export interface Edge {
   kind?: 'derived'
 }
 
-export interface Group {
-  id: string
-  title: string
-  node_ids: string[]
-  hue: number
-}
-
 /** Persistent monotonic id counters keyed by schema type. Optional —
  * absent on legacy projects; backfilled by the mutator on first mint. */
 export interface NextIds {
@@ -220,7 +213,6 @@ export interface Workflow {
   title: string
   nodes: CanvasNode[]
   edges: Edge[]
-  groups?: Group[]
   next_ids?: NextIds
 }
 

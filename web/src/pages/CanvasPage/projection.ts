@@ -146,10 +146,8 @@ export function resultPendingJobId(type: string, data: unknown): string | null {
 export interface ProjectionInput {
   workflow: Workflow | null
   /**
-   * Group frames from a (future) canvas_state sidecar. Optional —
-   * empty record when no groups are persisted as frames. The
-   * workflow's own `groups` array is still rendered as semantic
-   * groups in the listing UI; this is the spatial frame variant.
+   * Group frames from the canvas_positions sidecar. Optional —
+   * empty record when no visual frames are persisted.
    */
   groupFrames?: Record<string, CanvasGroupFrame>
   /**
@@ -513,10 +511,8 @@ export function projectWorkflowToCanvas(
     })
   }
 
-  // Synthetic group_frame nodes from the optional sidecar. The
-  // workflow's own `groups` array is metadata-only (no spatial
-  // frame); spatial frames need x/y/width/height which we'd persist
-  // in canvas_state separately.
+  // Synthetic group_frame nodes from the optional sidecar. Frames are
+  // layout state, so they live beside positions rather than in workflow.json.
   if (input.groupFrames !== undefined) {
     for (const [frameId, frame] of Object.entries(input.groupFrames)) {
       // Hide frame when every member is archived; reappears on restore.
@@ -533,6 +529,8 @@ export function projectWorkflowToCanvas(
           title: frame.title,
           hue: frame.hue,
           memberIds: frame.memberIds,
+          x: frame.x,
+          y: frame.y,
           width: frame.width,
           height: frame.height,
           shortId: frameId,

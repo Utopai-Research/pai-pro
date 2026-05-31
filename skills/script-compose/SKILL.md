@@ -78,4 +78,4 @@ If the user's command was narrower ("just the shots", "only characters"), do onl
 ## 4. Revisions
 
 **Surgical** (title still fits): update script-note body + affected shot bodies in place. Use the mutator's `updateNode` op (one call per node, or batched via `updateBatch`).
-**Structural** (title no longer fits): new script note (`addNode`); old→new edge `addEdge` with `kind:"derived"`; new shot family via `addBatch` against the new script note. Leave old shots; delete only if asked (`deleteNode` cascades the edges + group memberships for you).
+**Structural** (title no longer fits): new script note (`addNode`); old→new edge `addEdge` with `kind:"derived"`; new shot family via `addBatch` against the new script note. Leave old shots; delete only if asked (`deleteNode` cascades edges for you).

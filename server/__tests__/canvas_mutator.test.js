@@ -168,7 +168,7 @@ test("updateNode: missing id returns klass:not_found", async () => {
   }
 });
 
-test("deleteNode: cascades edges + groups, drops empty groups", async () => {
+test("deleteNode: cascades edges and drops legacy workflow groups", async () => {
   const { p, dir } = await setupProject({
     version: 2,
     workflow_id: "t",
@@ -192,8 +192,7 @@ test("deleteNode: cascades edges + groups, drops empty groups", async () => {
     assert.equal(r.ok, true);
     assert.equal(p.canvasState.nodes.length, 2);
     assert.equal(p.canvasState.edges.length, 1, "edge image_1->image_2 dropped");
-    assert.equal(p.canvasState.groups.length, 1, "solo group dropped");
-    assert.equal(p.canvasState.groups[0].id, "group_two");
+    assert.equal("groups" in p.canvasState, false, "legacy workflow groups dropped");
   } finally {
     await teardown(dir);
   }
@@ -286,29 +285,6 @@ test("deleteEdge: removes; missing returns not_found", async () => {
   }
 });
 
-test("addGroup: assigns id, dedupes node_ids, enforces one-group-per-node", async () => {
-  const { p, dir } = await setupProject();
-  try {
-    const r1 = await mutate(p, {
-      request_id: newRid(),
-      op: "addGroup",
-      payload: { group: { title: "G1", node_ids: ["a", "a", "b"], hue: 120 } },
-    });
-    assert.equal(r1.ok, true);
-    assert.equal(r1.assigned.group_id, "group_1");
-    assert.deepEqual(p.canvasState.groups[0].node_ids, ["a", "b"]);
-    const r2 = await mutate(p, {
-      request_id: newRid(),
-      op: "addGroup",
-      payload: { group: { title: "G2", node_ids: ["b", "c"], hue: 0 } },
-    });
-    assert.equal(r2.ok, false, "node b already in G1 → conflict");
-    assert.equal(r2.klass, "conflict");
-  } finally {
-    await teardown(dir);
-  }
-});
-
 test("setTitle updates title", async () => {
   const { p, dir } = await setupProject();
   try {
@@ -320,7 +296,7 @@ test("setTitle updates title", async () => {
   }
 });
 
-test("addBatch: nodes + edges with $N + group, atomic on disk", async () => {
+test("addBatch: nodes + edges with $N, atomic on disk", async () => {
   const { p, dir, workflowPath } = await setupProject({
     version: 2,
     workflow_id: "t",
@@ -343,19 +319,15 @@ test("addBatch: nodes + edges with $N + group, atomic on disk", async () => {
           { from: "image_1", to: "$0", kind: "derived" },
           { from: "image_1", to: "$1", kind: "derived" },
         ],
-        groups: [
-          { title: "Split", node_ids: ["$0", "$1"], hue: 30 },
-        ],
       },
     });
     assert.equal(r.ok, true);
     assert.deepEqual(r.assigned.node_ids, ["image_2", "image_3"]);
-    assert.deepEqual(r.assigned.group_ids, ["group_1"]);
     const onDisk = await readWorkflow(workflowPath);
     assert.equal(onDisk.nodes.length, 3);
     assert.equal(onDisk.edges.length, 2);
     assert.deepEqual(onDisk.edges.map((e) => e.to), ["image_2", "image_3"]);
-    assert.deepEqual(onDisk.groups[0].node_ids, ["image_2", "image_3"]);
+    assert.equal("groups" in onDisk, false);
   } finally {
     await teardown(dir);
   }

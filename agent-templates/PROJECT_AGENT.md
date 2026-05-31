@@ -157,23 +157,30 @@ Every CLI prints `{ ok: false, klass, message, limits, sent, ... }` on failure. 
 
 ## Canvas
 
-There's a JSON file at `./workflow.json` representing a React Flow canvas. It's a symlink to `projects/<active>/workflow.json`; the active project is recorded in `.active_project` at the repo root. **You may read it freely** to inspect node ids, subtypes, voice attachments, etc. — but you may NOT write or edit it. Every mutation flows through the canvas mutator instead, which owns lock + validate + atomic write + idempotent dedupe. Agent-specific hooks may also block direct writes, but the server-side mutator is the authority.
+There's a JSON file at `./workflow.json` representing a React Flow canvas. It's a symlink to `projects/<active>/workflow.json`; the active project is recorded in `.active_project` at the repo root. **You may read it freely** to inspect node ids, subtypes, voice attachments, etc. — but you may NOT write or edit it. Every workflow change flows through the canvas mutator, which owns lock + validate + atomic write + idempotent dedupe. Layout changes flow through `canvas_layout.js`, which owns the positions sidecar.
 
 ### How to mutate
 
-Three ways into the mutator, all equivalent:
+Use the narrowest entrypoint for the state you are changing:
 
-1. **Most generation skills do this for you.** `generate_image`, `generate_video`, `generate_voice`, and `split_image` all write their own result nodes via `--ref-source-id` (byte refs) and `--source-node-id` (one authorship edge) flags. The agent passes the source ids and the CLI handles the mutation; the success JSON now includes `canvas_mutation: { node_id, version, request_id }`. See the per-skill SKILL.md files for the flag set.
+1. **Most generation skills do this for you.** `generate_image`, `generate_video`, `generate_voice`, and `split_image` all write their own result nodes via `--ref-source-id` (byte refs) and `--source-node-id` (one authorship edge) flags. The agent passes the source ids and the CLI handles the mutation; the success JSON now includes `canvas_mutation` with the assigned node id(s), version, and request id. See the per-skill SKILL.md files for the flag set.
 
-2. **For manual mutations** (the inline "Take a note" recipe above, `groups-compose`, script breakdowns) the agent invokes:
+2. **For manual workflow mutations** (the inline "Take a note" recipe above, script breakdowns) the agent invokes:
    ```
    node "$PAI_REPO_ROOT/server/cli/canvas_mutate.js" \
-     --op <addNode|updateNode|deleteNode|addEdge|deleteEdge|addGroup|updateGroup|deleteGroup|setTitle|addBatch|updateBatch> \
+     --op <addNode|updateNode|deleteNode|addEdge|deleteEdge|setTitle|addBatch|updateBatch> \
      --payload-json '<JSON>'
    ```
    Same stdout shape as the generation CLIs.
 
-3. **Direct HTTP** for the browser / other clients: `POST /projects/:id/mutate` with body `{ request_id, op, payload, ts?, actor? }`.
+3. **Canvas layout** (`groups-compose`, arranging cards) uses the positions sidecar, not the mutator:
+   ```
+   node "$PAI_REPO_ROOT/server/cli/canvas_layout.js" \
+     --layout-json '<JSON>'
+   ```
+   The layout JSON may set `positions` and `groupFrames` together; the viewer validates and writes `canvas_positions.json` once.
+
+4. **Direct HTTP** for the browser / other clients: `POST /projects/:id/mutate` with body `{ request_id, op, payload, ts?, actor? }`, or `POST /projects/:id/canvas-layout` for positions + group frames.
 
 **Asset-bearing nodes (`addNode` with `tmp_path`).** Image/video/audio nodes are minted via a temp-then-rename hand-off: the CLI (or the browser upload route) writes the provider's bytes to `projects/<id>/assets/.tmp/<random>.<ext>`, then passes that absolute path as `tmp_path` alongside the node payload — `{ type, data, tmp_path }`. The mutator mints the node id, renames the file to `assets/<bucket>/<node-id>.<ext>` (bucket = `images` / `videos` / `audios`), fills `data.local_path`, and persists workflow.json — all atomic under the mutationQueue lock with rollback on either failure. CLIs leave `local_path` blank when supplying `tmp_path`. `local_mirror.js` exposes `writeBytesToTmp` and `mirrorToTmp` for the staging step.
 
@@ -181,7 +188,7 @@ The full op surface, reducer table, idempotency rules, and failure-class taxonom
 
 ### Node grammar (what to put in payloads)
 
-Schema is `{ version: 2, workflow_id, title, nodes: [...], edges: [...], groups?: [...] }`. Four node types — `note`, `image_result`, `video_result`, `audio_result` — each with required and optional fields:
+Schema is `{ version: 2, workflow_id, title, nodes: [...], edges: [...] }`. Four node types — `note`, `image_result`, `video_result`, `audio_result` — each with required and optional fields:
 
 **`note`** — `data: { label (≤30), body, metadata: { author, timestamp } }`.
 
@@ -200,18 +207,16 @@ Schema is `{ version: 2, workflow_id, title, nodes: [...], edges: [...], groups?
 
 **Edges**: `{ from, to, kind?: "derived" }`.
 
-**Groups**: `{ id?, title, node_ids: [...], hue: 0-360 }`. A node may appear in at most one group; no nesting. The mutator enforces both.
-
 ### Hard rules
 
 - **Never `Write` or `Edit` `workflow.json` directly.** Always go through canvas-mutate. The hook will block you; the corruption + lost-write classes the mutator exists to kill come right back if you bypass it.
-- Never set `x` / `y` on any node — the renderer computes layout.
+- Never set `x` / `y` on any workflow node. To organize the canvas, update `canvas_positions.json` through `canvas_layout.js`.
 - `type` must match a literal: `note`, `image_result`, `video_result`, `audio_result`. `"video"` does NOT render.
 - Don't set `image_url` / `video_url` / `audio_url` manually; the renderer derives them from `local_path`.
 - `duration` is an integer.
 - Don't mint node ids yourself — pass `addNode` with no `id` and the mutator assigns the next `image_N` / `video_N` / `audio_N` / `note_N`. The counter is persisted in `workflow.json` under `next_ids` so ids never repeat after a delete (the on-disk file at the deleted id sticks around per the leave-orphans policy, so reuse would collide).
 
-**Drag positions sidecar.** `projects/<active>/canvas_positions.json` holds `{ positions: { <nodeId>: {x,y} }, groupFrames: { <frameId>: {...} } }` — the viewer writes here when the user drags a node. The mutator does NOT touch this file; it's a view-state concern. To reset, delete the sidecar (the next subscribe rehydrates as empty).
+**Drag positions sidecar.** `projects/<active>/canvas_positions.json` holds `{ positions: { <nodeId>: {x,y} }, groupFrames: { <frameId>: {...} } }` — the viewer writes here when the user drags a node. Use `canvas_layout.js` for agent-authored layout changes; it updates positions and group frames atomically. To reset, delete the sidecar (the next subscribe rehydrates as empty).
 
 ### Archived nodes
 
@@ -223,7 +228,7 @@ Generation CLIs reject archived `--source-node-id` / `--ref-source-id` with `bad
 
 ## Projects
 
-Each project is a self-contained canvas — its own `workflow.json`, its own node-id space, its own scenes/groups, its own asset folder. You always operate on the *active* project via `./workflow.json` — the symlink resolves it for you. To find out which project is active without dereferencing, read `.active_project`.
+Each project is a self-contained canvas — its own `workflow.json`, its own node-id space, its own scene frames, its own asset folder. You always operate on the *active* project via `./workflow.json` — the symlink resolves it for you. To find out which project is active without dereferencing, read `.active_project`.
 
 Generated and user-uploaded media live under `projects/<id>/assets/{images,videos,audios}/` and are served by the viewer at `/projects/:id/assets/<kind>/<filename>` — that's the URL the renderer pulls. Each file is named `<node-id>.<ext>` (e.g. `image_3.png`, `video_1.mp4`), so an `ls` of any bucket lines up 1:1 with the workflow's node ids. There is no remote object storage in the loop; if you delete the project folder you lose the assets. A staging area at `projects/<id>/assets/.tmp/` holds files mid-generation between the CLI's write and the mutator's rename — temp files left behind by a crashed generation are harmless but accumulate.
 

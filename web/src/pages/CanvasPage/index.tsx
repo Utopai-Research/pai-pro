@@ -27,12 +27,11 @@ import {
   type Node as RFNode,
 } from '@xyflow/react'
 import {
-  deleteCanvasGroupFrame,
+  applyCanvasLayout,
   discardPendingDraft,
   firePendingDraft,
   mutateCanvas,
   patchPendingDraft,
-  setCanvasGroupFrame,
   setCanvasNodePosition,
   type CanvasGroupFrame,
 } from '@/lib/canvas-stub'
@@ -397,29 +396,32 @@ function CanvasPageInner(): JSX.Element | null {
 
       // Membership exclusivity: a node belongs to at most one frame.
       const newMembers = new Set(pendingGroupIds)
-      const evictionWrites: Promise<void>[] = []
+      const frameUpserts: Record<string, CanvasGroupFrame> = {
+        [frameId]: frame,
+      }
+      const frameDeletes: string[] = []
       for (const [oldFrameId, oldFrame] of Object.entries(groupFrames)) {
         const overlap = oldFrame.memberIds.some((id) => newMembers.has(id))
         if (!overlap) continue
         const remaining = oldFrame.memberIds.filter((id) => !newMembers.has(id))
         if (remaining.length < 2) {
-          evictionWrites.push(deleteCanvasGroupFrame(projectId, oldFrameId))
+          frameDeletes.push(oldFrameId)
         } else {
-          evictionWrites.push(
-            setCanvasGroupFrame(projectId, oldFrameId, {
-              ...oldFrame,
-              memberIds: remaining,
-            }),
-          )
+          frameUpserts[oldFrameId] = {
+            ...oldFrame,
+            memberIds: remaining,
+          }
         }
       }
 
       setModalOpen(false)
       try {
-        if (evictionWrites.length > 0) {
-          await Promise.all(evictionWrites)
-        }
-        await setCanvasGroupFrame(projectId, frameId, frame)
+        await applyCanvasLayout(projectId, {
+          groupFrames: {
+            upsert: frameUpserts,
+            delete: frameDeletes,
+          },
+        })
       } catch (err) {
         console.warn(
           `[canvas:${projectId}] frame create failed: ${err instanceof Error ? err.message : String(err)}`,
@@ -732,7 +734,9 @@ function CanvasPageInner(): JSX.Element | null {
       },
       createGroupFrame: async (frame) => {
         const frameId = `frame_${crypto.randomUUID().replace(/-/g, '')}`
-        await setCanvasGroupFrame(projectId, frameId, frame)
+        await applyCanvasLayout(projectId, {
+          groupFrames: { upsert: { [frameId]: frame } },
+        })
         return { ok: true, frameId, projectId }
       },
       refer: (nodeIds) => {
