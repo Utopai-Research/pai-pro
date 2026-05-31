@@ -43,7 +43,7 @@ import {
   compareResultSummaries,
   GENERATION_RESULTS_BUNDLE_LIMIT,
 } from "../lib/readers.js";
-import { writeMeta } from "../lib/writers.js";
+import { updateProjectMeta } from "../lib/writers.js";
 
 const ptys = new Map();
 const socketAttach = new Map();           // socket.id -> projectId
@@ -80,16 +80,11 @@ export async function persistDiscoveredAgentSession(projectId, project, session)
   if (!sessionId || !project?.meta) return false;
   if (project.meta.agent_session_id === sessionId) return false;
 
-  const priorSessionId = project.meta.agent_session_id;
-  project.meta.agent_session_id = sessionId;
-  try {
-    await writeMeta(projectId, project.meta);
-    return true;
-  } catch (e) {
-    if (priorSessionId === undefined) delete project.meta.agent_session_id;
-    else project.meta.agent_session_id = priorSessionId;
-    throw e;
-  }
+  const { changed } = await updateProjectMeta(projectId, project, (meta) => {
+    if (meta.agent_session_id === sessionId) return false;
+    meta.agent_session_id = sessionId;
+  });
+  return changed;
 }
 
 // Walk a project's image_result nodes and pre-upload any whose canvas

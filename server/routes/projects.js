@@ -17,7 +17,8 @@ import {
   slugify,
   workflowPath,
 } from "../lib/paths.js";
-import { readActive, writeActive, writeMeta } from "../lib/writers.js";
+import { statusForKlass } from "../lib/broadcasters.js";
+import { readActive, updateProjectMeta, writeActive, writeMeta } from "../lib/writers.js";
 import {
   compareResultSummaries,
   GENERATION_RESULTS_BUNDLE_LIMIT,
@@ -116,35 +117,42 @@ export function registerProjectsRoutes({ app, io, projects, mutatorHooks }) {
       let title = p.meta.title;
       if (hasTitle) {
         title = titleIn.trim().slice(0, 120) || "Untitled project";
-        p.meta.title = title;
-      }
-      if (hasFlag) {
-        // Store true explicitly; clear on false so the meta stays
-        // minimal for projects that never enabled bypass.
-        if (flagIn) p.meta.dangerously_skip_draft_gate = true;
-        else delete p.meta.dangerously_skip_draft_gate;
-      }
-      await writeMeta(id, p.meta);
-      if (hasTitle && p.canvasState && typeof p.canvasState === "object") {
-        const reply = await mutate(
-          p,
-          {
-            request_id: `viewer-title-${id}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-            op: "setTitle",
-            payload: { title },
-            actor: "viewer",
-          },
-          mutatorHooks,
-        );
-        if (!reply.ok) {
-          console.warn(`[viewer] title mirror failed for ${id}: ${reply.message}`);
+        if (p.canvasState && typeof p.canvasState === "object") {
+          const reply = await mutate(
+            p,
+            {
+              request_id: `viewer-title-${id}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+              op: "setTitle",
+              payload: { title },
+              actor: "viewer",
+            },
+            mutatorHooks,
+          );
+          if (!reply.ok) {
+            return res.status(statusForKlass(reply.klass)).json({ error: reply.message });
+          }
+        } else {
+          await updateProjectMeta(id, p, (meta) => {
+            if (meta.title === title) return false;
+            meta.title = title;
+          });
         }
       }
-      io.to(id).emit("title", {
-        projectId: id,
-        title,
-        dangerously_skip_draft_gate: !!p.meta.dangerously_skip_draft_gate,
-      });
+      if (hasFlag) {
+        await updateProjectMeta(id, p, (meta) => {
+          // Store true explicitly; clear on false so the meta stays
+          // minimal for projects that never enabled bypass.
+          if (flagIn) meta.dangerously_skip_draft_gate = true;
+          else delete meta.dangerously_skip_draft_gate;
+        });
+      }
+      if (hasFlag || !p.canvasState || typeof p.canvasState !== "object") {
+        io.to(id).emit("title", {
+          projectId: id,
+          title: p.meta.title,
+          dangerously_skip_draft_gate: !!p.meta.dangerously_skip_draft_gate,
+        });
+      }
       res.json({ ok: true, row: rowFor(p.meta, p) });
     } catch (e) {
       console.warn(`[viewer] PATCH /projects/${id} failed:`, e);
@@ -205,8 +213,9 @@ export function registerProjectsRoutes({ app, io, projects, mutatorHooks }) {
     if (!p) return res.status(404).json({ error: "not found" });
     try {
       await writeActive(id);
-      p.meta.last_active_at = new Date().toISOString();
-      await writeMeta(id, p.meta);
+      await updateProjectMeta(id, p, (meta) => {
+        meta.last_active_at = new Date().toISOString();
+      });
       res.json({ ok: true, active: id });
     } catch (e) {
       console.warn(`[viewer] activate failed for ${id}:`, e);

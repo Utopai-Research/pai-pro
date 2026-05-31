@@ -8,10 +8,9 @@
 //
 // External edits (the agent rewriting workflow.json from inside its
 // per-project terminal session) are the primary use case. Viewer-side
-// writes ALSO trip the watcher; the mutator's `onApply` hook has
-// already broadcast canvas-state by the time chokidar fires
-// (~100ms after awaitWriteFinish), so the second emit is a no-op-y
-// repeat. Worth deduping in a follow-up.
+// writes ALSO trip the watcher; reloads are funneled through the same
+// project queues as in-process mutations so a delayed watcher event cannot
+// swap stale disk state over a newer in-memory update.
 
 import path from "node:path";
 
@@ -31,6 +30,7 @@ import {
   readResultEntry,
   normalizeResultEntry,
 } from "../lib/readers.js";
+import { withProjectMutationLock } from "../lib/writers.js";
 import { loadProject } from "./projects.js";
 
 function projectIdFromPath(p) {
@@ -52,9 +52,67 @@ export async function watchProjects({ projects, io, broadcasters }) {
     ignoreInitial: true,
     ignored: (p) =>
       p.endsWith(".swp") ||
+      p.endsWith(".tmp") ||
+      p.endsWith(".lock") ||
       p.endsWith("~") ||
       p.includes(`${path.sep}assets${path.sep}`),
   });
+
+  const reloadCanvas = async (id) => {
+    let p = projects.get(id);
+    if (!p) {
+      p = await loadProject(projects, id);
+      if (p) broadcastCanvas(id);
+      return;
+    }
+    if (p.mutationQueue?.add) {
+      await p.mutationQueue.add(async () => {
+        const canvas = await readCanvas(id);
+        if (projects.get(id) === p) {
+          p.canvasState = canvas;
+          p.version = (p.version || 0) + 1;
+        }
+      });
+    } else {
+      p.canvasState = await readCanvas(id);
+    }
+    if (projects.has(id)) broadcastCanvas(id);
+  };
+
+  const reloadPositions = async (id) => {
+    await withProjectMutationLock(id, async () => {
+      let p = projects.get(id);
+      if (!p) {
+        await loadProject(projects, id);
+        return;
+      }
+      const state = await readCanvasPositions(id);
+      if (projects.get(id) === p) p.canvasPositions = state;
+    });
+    if (projects.has(id)) broadcastPositions(id);
+  };
+
+  const reloadMeta = async (id) => {
+    let meta = null;
+    await withProjectMutationLock(id, async () => {
+      let p = projects.get(id);
+      if (!p) {
+        p = await loadProject(projects, id);
+        meta = p?.meta ?? null;
+        return;
+      }
+      meta = await readMeta(id);
+      if (meta && projects.get(id) === p) p.meta = meta;
+    });
+    if (!meta) return;
+    // `title` event now carries the full meta slice the renderer
+    // needs — title + bypass flag drive different UI; one broadcast.
+    io.to(id).emit("title", {
+      projectId: id,
+      title: meta.title,
+      dangerously_skip_draft_gate: !!meta.dangerously_skip_draft_gate,
+    });
+  };
 
   const onFile = async (abs) => {
     const id = projectIdFromPath(abs);
@@ -62,36 +120,17 @@ export async function watchProjects({ projects, io, broadcasters }) {
     const rel = path.relative(projectDir(id), abs);
 
     if (rel === "workflow.json") {
-      const canvas = await readCanvas(id);
-      let p = projects.get(id);
-      if (!p) p = await loadProject(projects, id);
-      else    p.canvasState = canvas;
-      if (projects.has(id)) broadcastCanvas(id);
+      await reloadCanvas(id);
       return;
     }
 
     if (rel === "canvas_positions.json") {
-      const state = await readCanvasPositions(id);
-      let p = projects.get(id);
-      if (!p) p = await loadProject(projects, id);
-      else    p.canvasPositions = state;
-      if (projects.has(id)) broadcastPositions(id);
+      await reloadPositions(id);
       return;
     }
 
     if (rel === "meta.json") {
-      const meta = await readMeta(id);
-      if (!meta) return;
-      let p = projects.get(id);
-      if (!p) p = await loadProject(projects, id);
-      else    p.meta = meta;
-      // `title` event now carries the full meta slice the renderer
-      // needs — title + bypass flag drive different UI; one broadcast.
-      io.to(id).emit("title", {
-        projectId: id,
-        title: meta.title,
-        dangerously_skip_draft_gate: !!meta.dangerously_skip_draft_gate,
-      });
+      await reloadMeta(id);
       return;
     }
 

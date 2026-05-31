@@ -8,7 +8,11 @@ import {
   GENERATION_RESULTS_BUNDLE_LIMIT,
 } from "./readers.js";
 import { kickReelPrebuild } from "./reel_cache.js";
-import { withProjectMutationLock, writeCanvasPositions } from "./writers.js";
+import {
+  updateProjectMeta,
+  withProjectMutationLock,
+  writeCanvasPositions,
+} from "./writers.js";
 
 // Coalesce burst pending-sidecar writes (N parallel CLIs → N chokidar
 // add events) into one broadcast so the client's placement effect sees
@@ -100,9 +104,31 @@ export function createBroadcasters({ io, projects }) {
     });
   }
 
+  async function mirrorTitleToMeta(proj, envelope) {
+    if (envelope?.op !== "setTitle") return;
+    const title = envelope?.payload?.title;
+    if (typeof title !== "string") return;
+    try {
+      const { changed, meta } = await updateProjectMeta(proj.id, proj, (next) => {
+        if (next.title === title) return false;
+        next.title = title;
+      });
+      if (changed) {
+        io.to(proj.id).emit("title", {
+          projectId: proj.id,
+          title: meta.title,
+          dangerously_skip_draft_gate: !!meta.dangerously_skip_draft_gate,
+        });
+      }
+    } catch (e) {
+      console.warn(`[viewer] title mirror failed for ${proj.id}: ${e.message}`);
+    }
+  }
+
   const mutatorHooks = {
-    onApply: (proj, envelope, reply) => {
+    onApply: async (proj, envelope, reply) => {
       handoffPendingPosition(proj, envelope, reply);
+      await mirrorTitleToMeta(proj, envelope);
       broadcastCanvas(proj.id);
     },
   };

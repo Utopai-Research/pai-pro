@@ -22,6 +22,7 @@ import {
   normalizeResultForRead,
   normalizeResultForWrite,
 } from "../lib/generation_result_normalize.js";
+import { writeFileOnce } from "../lib/atomic_writes.js";
 
 const PENDING_DIR_NAME = ".pending";
 const RESULTS_DIR_NAME = ".results";
@@ -328,9 +329,9 @@ async function pendingContextForResult(jobId, cwd) {
 // Write the durable terminal record for a CLI-owned generation to
 // `<cwd>/.results/<jobId>.json`. The viewer's chokidar watcher picks it up
 // and broadcasts `generation-results`; `list_generation_results.js` and
-// `wait_for_generation.js` read it back. Write-once and best-effort: the
-// link fails EEXIST if a result already exists (e.g. boot recovery beat us
-// to it), so we never clobber and never throw into the CLI's finally.
+// `wait_for_generation.js` read it back. Write-once and best-effort:
+// an existing result means boot recovery or another waiter beat us to it,
+// so we never clobber and never throw into the CLI's finally.
 export async function writeResultSidecar(jobId, result, { cwd = process.cwd() } = {}) {
   if (!jobId || !result || typeof result !== "object") return false;
   const dir = path.join(cwd, RESULTS_DIR_NAME);
@@ -339,16 +340,10 @@ export async function writeResultSidecar(jobId, result, { cwd = process.cwd() } 
     ...(await pendingContextForResult(jobId, cwd)),
     ...result,
   });
-  const tmp = `${target}.${process.pid}.${Date.now()}.tmp`;
   try {
-    await fsp.mkdir(dir, { recursive: true });
-    await fsp.writeFile(tmp, JSON.stringify(payload) + "\n");
-    await fsp.link(tmp, target);
-    return true;
+    return await writeFileOnce(target, JSON.stringify(payload) + "\n");
   } catch {
     return false;
-  } finally {
-    try { await fsp.unlink(tmp); } catch {}
   }
 }
 
