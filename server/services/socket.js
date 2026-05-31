@@ -214,10 +214,11 @@ function registerSocketPtyHandlers({ socket, io, projects, nodePty }) {
           console.warn(`[viewer] failed to persist agent session for ${projectId}: ${e.message}`);
         });
       }
-      // When the permission bypass is on, also pre-trust the project folder so
-      // the agent's one-time workspace-trust prompt doesn't block the launch.
-      // Best-effort: a failure here just means the trust prompt appears once.
-      if (resolveAgentBypass() && typeof provider.ensureTrust === "function") {
+      // Codex project-local hooks live under the generated project .codex/
+      // layer, which Codex only loads for trusted project directories. Seed
+      // that trust for PAI-owned Codex projects; for other providers, keep the
+      // previous bypass-only behavior.
+      if ((provider.id === "codex" || resolveAgentBypass()) && typeof provider.ensureTrust === "function") {
         try { await provider.ensureTrust(cwd); }
         catch (e) { console.warn(`[viewer] ensureTrust failed for ${projectId}: ${e.message}`); }
       }

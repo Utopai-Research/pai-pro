@@ -141,8 +141,16 @@ test("POST /projects stores codex agent_id when PAI_DEFAULT_AGENT_ID=codex", asy
     const agentsMd = await readFile(join(dir, "AGENTS.md"), "utf8");
     assert.match(agentsMd, /read `\.\/PROJECT_AGENT\.md`/);
     assert.doesNotMatch(agentsMd, /@\.\/PROJECT_AGENT\.md/);
+    assert.match(agentsMd, /UserPromptSubmit/);
     assert.equal(await pathExists(join(dir, "CLAUDE.md")), false);
     assert.equal(await pathExists(join(dir, ".claude")), false);
+    assert.equal(await pathExists(join(dir, ".codex", "hooks.json")), true);
+    const hooks = JSON.parse(await readFile(join(dir, ".codex", "hooks.json"), "utf8"));
+    assert.ok(Array.isArray(hooks.hooks.UserPromptSubmit));
+    assert.match(
+      hooks.hooks.UserPromptSubmit[0].hooks[0].command,
+      /codex_generation_results_hook\.js/,
+    );
 
     const names = await skillNames();
     assert.ok(names.length > 0);

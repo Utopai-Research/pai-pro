@@ -53,10 +53,12 @@ Codex-specific notes:
 - Repo-local skills live in \`.agents/skills/\` and are discoverable by Codex.
 - Use staged media generation. Staged commands are long-running because they wait for the user's canvas Generate/Cancel decision before printing final JSON.
 - For multiple independent staged generations, use Codex's background-capable command execution and inspect background terminals with \`/ps\` when needed. Do not wait for staged jobs serially unless the user asked for a dependency chain.
+- A per-project \`UserPromptSubmit\` hook injects newly completed generation results into the next user turn. Reconcile those hook-provided results before answering when they affect the request.
 `;
 
 const AGENT_TEMPLATE_PATH = path.join(PAI_REPO_ROOT, "agent-templates", "PROJECT_AGENT.md");
 const SKILLS_ROOT = path.join(PAI_REPO_ROOT, "skills");
+const CODEX_RESULTS_HOOK_SCRIPT = path.join(PAI_REPO_ROOT, "server", "cli", "codex_generation_results_hook.js");
 
 // Per-project settings.local.json — excludes the root dev CLAUDE.md from
 // the agent's memory so the per-project session sees ONLY its own
@@ -154,6 +156,7 @@ async function ensureCodexProjectFiles(dir) {
   if (!(await fileExists(agentsPath))) {
     await fsp.writeFile(agentsPath, PER_PROJECT_CODEX_AGENTS_MD);
   }
+  await ensureCodexHooksFile(dir);
 
   const skillDestRoot = path.join(dir, ".agents", "skills");
   await fsp.mkdir(skillDestRoot, { recursive: true });
@@ -170,6 +173,58 @@ async function ensureCodexProjectFiles(dir) {
     if (!(await fileExists(path.join(src, "SKILL.md")))) continue;
     await ensureSymlink(src, path.join(skillDestRoot, entry.name));
   }
+}
+
+async function ensureCodexHooksFile(dir) {
+  const codexDir = path.join(dir, ".codex");
+  await fsp.mkdir(codexDir, { recursive: true });
+  const hooksPath = path.join(codexDir, "hooks.json");
+  const command = `node ${JSON.stringify(CODEX_RESULTS_HOOK_SCRIPT)}`;
+  let existing = {};
+  try {
+    existing = JSON.parse(await fsp.readFile(hooksPath, "utf8"));
+    if (!existing || typeof existing !== "object" || Array.isArray(existing)) existing = {};
+  } catch {
+    existing = {};
+  }
+  const hooks = existing.hooks && typeof existing.hooks === "object" && !Array.isArray(existing.hooks)
+    ? { ...existing.hooks }
+    : {};
+  const groups = Array.isArray(hooks.UserPromptSubmit) ? hooks.UserPromptSubmit : [];
+  const filteredGroups = groups
+    .map((group) => {
+      if (!group || typeof group !== "object" || !Array.isArray(group.hooks)) return group;
+      return {
+        ...group,
+        hooks: group.hooks.filter((hook) => {
+          return !(hook && typeof hook === "object"
+            && typeof hook.command === "string"
+            && hook.command.includes("codex_generation_results_hook.js"));
+        }),
+      };
+    })
+    .filter((group) => !(group && typeof group === "object" && Array.isArray(group.hooks) && group.hooks.length === 0));
+
+  hooks.UserPromptSubmit = [
+    {
+      hooks: [
+        {
+          type: "command",
+          command,
+          timeout: 5,
+        },
+      ],
+    },
+    ...filteredGroups,
+  ];
+
+  await fsp.writeFile(
+    hooksPath,
+    JSON.stringify({
+      ...existing,
+      hooks,
+    }, null, 2) + "\n",
+  );
 }
 
 // Idempotent symlink: succeed if a link with the right target already

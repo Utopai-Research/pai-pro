@@ -164,7 +164,7 @@ setup_codex() {
 
   echo "codex CLI: $version"
   if (( ! tolerant )); then
-    echo "codex setup: repo-local .agents/skills/ symlinks are created for each Codex-owned project."
+    echo "codex setup: repo-local .agents/skills/ symlinks and .codex/hooks.json are created for each Codex-owned project."
     echo "start host mode for new Codex projects with:"
     echo "  PAI_DEFAULT_AGENT_ID=codex ./scripts/start.sh"
   fi
