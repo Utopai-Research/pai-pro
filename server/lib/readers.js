@@ -71,10 +71,7 @@ export async function readPendingEntry(id, jobId) {
     const raw = await fsp.readFile(path.join(pendingDir(id), `${jobId}.json`), "utf8");
     const parsed = JSON.parse(raw);
     if (!parsed || typeof parsed !== "object") return null;
-    const stage =
-      parsed.stage === "failed" ? "failed"
-      : parsed.stage === "draft" ? "draft"
-      : "running";
+    const stage = parsed.stage === "draft" ? "draft" : "running";
     const createdAt = Date.parse(parsed.created_at || "");
     const staleMs = stage === "draft" ? PENDING_STALE_DRAFT_MS : PENDING_STALE_RUNNING_MS;
     if (Number.isFinite(createdAt) && Date.now() - createdAt > staleMs) return null;
@@ -170,7 +167,7 @@ export async function readResultEntry(id, jobId) {
 
 function resultStatus(raw) {
   if (raw?.ok === true && !raw?.canvas_mutation_error) return "succeeded";
-  if (raw?.klass === "aborted") return "aborted";
+  if (raw?.klass === "aborted" || raw?.klass === "cancelled") return "aborted";
   if (raw?.klass === "timeout") return "timeout";
   return "failed";
 }

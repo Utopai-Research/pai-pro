@@ -348,7 +348,6 @@ test("new-project bypass mode fires through viewer and waits on result sidecar",
       last_active_at: now,
       agent_id: "codex",
       dangerously_skip_draft_gate: true,
-      use_server_owned_generation: true,
     }, null, 2) + "\n",
   );
 
@@ -388,7 +387,7 @@ test("DELETE writes cancelled result, unlinks sidecar, and is idempotent", async
   assert.equal(result.message, "cancelled by user");
   assert.equal(result.prompt, "a test cat");
   const notification = await waitForNotification(jobId);
-  assert.equal(notification.status, "failed");
+  assert.equal(notification.status, "aborted");
   await assert.rejects(stat(sidecarPath(jobId)));
   const r2 = await fetch(`${baseUrl}/projects/${TEST_PROJECT_ID}/pending/${jobId}`, {
     method: "DELETE",

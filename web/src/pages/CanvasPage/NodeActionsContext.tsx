@@ -57,6 +57,8 @@ export interface NodeActionsContextValue {
   onDiscardDraft?: (jobId: string) => Promise<void>
   /** Hide a settled failed generation card. */
   onDismissFailedGeneration?: (jobId: string) => void
+  /** Codex needs an explicit failure prompt; Claude handles background results natively. */
+  canSendFailedGenerationToAgent?: boolean
 }
 
 // Module-level empty value so consumers reading from outside a provider

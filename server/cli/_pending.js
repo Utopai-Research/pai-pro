@@ -65,18 +65,6 @@ export async function isBypassEnabled(cwd = process.cwd()) {
   }
 }
 
-export async function isServerOwnedGenerationEnabled(cwd = process.cwd()) {
-  if (process.env.PAI_SERVER_OWNED_GENERATION === "0") return false;
-  try {
-    const meta = JSON.parse(
-      await fsp.readFile(path.join(cwd, "meta.json"), "utf8"),
-    );
-    return meta.use_server_owned_generation === true;
-  } catch {
-    return false;
-  }
-}
-
 export function defaultWaitTimeoutMsForKind(kind) {
   return kind === "video" ? VIDEO_WAIT_TIMEOUT_MS : DEFAULT_WAIT_TIMEOUT_MS;
 }
@@ -287,7 +275,7 @@ export async function writePending({
   const payload = {
     id: jobId,
     kind,                          // "image" | "video" | "audio"
-    stage,                         // "running" | "draft" | "failed"
+    stage,                         // "running" | "draft"
     prompt: String(prompt),
     aspect_ratio: aspectRatio || "16:9",
     created_at: new Date().toISOString(),

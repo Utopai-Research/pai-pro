@@ -102,7 +102,6 @@ test("POST /projects stores claude agent_id when PAI_DEFAULT_AGENT_ID is unset",
     const bundle = await (await fetch(`${handle.baseUrl}/projects/${row.id}`)).json();
     assert.equal(bundle.agent_id, "claude");
     assert.equal(bundle.agent_label, "Claude");
-    assert.equal(meta.use_server_owned_generation, true);
     assert.equal(await pathExists(join(dir, "PROJECT_AGENT.md")), true);
     assert.equal(await pathExists(join(dir, "CLAUDE.md")), true);
     const claudeMd = await readFile(join(dir, "CLAUDE.md"), "utf8");

@@ -229,15 +229,3 @@ test("codex provider rejects empty notification text before writing", async () =
   assert.equal(result.reason, "empty_input");
   assert.deepEqual(writes, []);
 });
-
-test("codex provider reports unconfirmed submit when output confirmation is required", async () => {
-  const provider = getProvider("codex");
-  const result = await provider.submitAgentNotification({
-    text: "[task-notification]\nhello\n[/task-notification]",
-    phaseGapMs: 0,
-    write: () => {},
-    waitForOutput: async () => false,
-  });
-  assert.equal(result.ok, false);
-  assert.equal(result.reason, "unconfirmed_submit");
-});

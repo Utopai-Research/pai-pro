@@ -12,9 +12,7 @@ const DEFAULT_DEBOUNCE_MS = 350;
 const DEFAULT_REQUIRE_IDLE_MS = 1500;
 const DEFAULT_RETRY_DELAYS_MS = {
   busy: 2500,
-  unsafe_input: 1000,
   submit_in_progress: 1000,
-  unconfirmed_submit: 5000,
   write_failed: 5000,
 };
 
@@ -41,13 +39,13 @@ function notificationPath(projectId, jobId) {
 }
 
 function normalizeStatus(result) {
+  if (result?.klass === "aborted" || result?.klass === "cancelled") return "aborted";
+  if (result?.klass === "timeout") return "timeout";
   if (result?.status === "succeeded" || result?.status === "failed"
       || result?.status === "aborted" || result?.status === "timeout") {
     return result.status;
   }
   if (result?.ok === true && !result?.canvas_mutation_error) return "succeeded";
-  if (result?.klass === "aborted" || result?.klass === "cancelled") return "aborted";
-  if (result?.klass === "timeout") return "timeout";
   return "failed";
 }
 
@@ -140,7 +138,7 @@ async function undeliveredCount(projectId) {
 
 function statusForReason(reason) {
   if (reason === "unsafe_input") return "waiting_for_input";
-  if (reason === "unconfirmed_submit" || reason === "write_failed") return "error";
+  if (reason === "write_failed") return "error";
   return "queued";
 }
 

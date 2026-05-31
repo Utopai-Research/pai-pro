@@ -59,9 +59,8 @@ const PTY_BUFFER_CAP = 256 * 1024;        // 256 KB rolling tail; xterm scrollba
 let registeredProjects = null;
 let registeredIo = null;
 
-function writePtyInput(entry, data, { source = "user" } = {}) {
+function writePtyInput(entry, data) {
   entry.lastInputAt = Date.now();
-  if (source === "user") entry.lastUserInputAt = entry.lastInputAt;
   entry.pty.write(data);
 }
 
@@ -100,23 +99,6 @@ function emitAgentNotificationStatus(projectId, payload) {
   registeredIo.to(projectId).emit("agent-notification-status", {
     projectId,
     ...payload,
-  });
-}
-
-function waitForPtyData(entry, { timeoutMs = 2000 } = {}) {
-  return new Promise((resolve) => {
-    const waiter = () => {
-      clearTimeout(timer);
-      entry.dataWaiters?.delete(waiter);
-      resolve(true);
-    };
-    const timer = setTimeout(() => {
-      entry.dataWaiters?.delete(waiter);
-      resolve(false);
-    }, Math.max(1, Number(timeoutMs) || 2000));
-    timer.unref?.();
-    if (!entry.dataWaiters) entry.dataWaiters = new Set();
-    entry.dataWaiters.add(waiter);
   });
 }
 
@@ -171,9 +153,6 @@ export async function submitAgentNotification(projectId, text, { requireIdleMs =
   if (typeof text !== "string" || text.length === 0) {
     return { ok: false, reason: "empty_input" };
   }
-  if (entry.subscribers.size === 0) {
-    return { ok: false, reason: "no_subscriber" };
-  }
   if (entry.notificationSubmitInProgress) {
     return { ok: false, reason: "submit_in_progress" };
   }
@@ -206,8 +185,7 @@ export async function submitAgentNotification(projectId, text, { requireIdleMs =
       projectId,
       meta: project?.meta,
       text,
-      write: (data) => writePtyInput(entry, data, { source: "notification" }),
-      waitForOutput: (opts) => waitForPtyData(entry, opts),
+      write: (data) => writePtyInput(entry, data),
     });
     if (submit?.ok) return { ok: true, idleForMs };
     return {
@@ -317,10 +295,8 @@ function registerSocketPtyHandlers({ socket, io, projects, nodePty }) {
       createdAt: Date.now(),
       lastDataAt: 0,
       lastInputAt: Date.now(),
-      lastUserInputAt: 0,
       userInputDirty: false,
       notificationSubmitInProgress: false,
-      dataWaiters: new Set(),
       provider,
     };
     ptys.set(projectId, entry);
@@ -328,7 +304,6 @@ function registerSocketPtyHandlers({ socket, io, projects, nodePty }) {
 
     pty.onData((data) => {
       entry.lastDataAt = Date.now();
-      for (const waiter of Array.from(entry.dataWaiters)) waiter();
       entry.buffer += data;
       if (entry.buffer.length > PTY_BUFFER_CAP) {
         entry.buffer = entry.buffer.slice(-PTY_BUFFER_CAP);
@@ -367,7 +342,7 @@ function registerSocketPtyHandlers({ socket, io, projects, nodePty }) {
       const cmd = latest
         ? provider.buildResumeCommand(input)
         : provider.buildLaunchCommand(input);
-      try { writePtyInput(entry, cmd, { source: "system" }); } catch {}
+      try { writePtyInput(entry, cmd); } catch {}
       scheduleFlush(projectId, { delayMs: 3000 });
     }, 500);
   });
@@ -379,7 +354,7 @@ function registerSocketPtyHandlers({ socket, io, projects, nodePty }) {
     if (entry && typeof data === "string") {
       if (entry.notificationSubmitInProgress) return;
       trackUserInput(entry, data);
-      try { writePtyInput(entry, data, { source: "user" }); } catch {}
+      try { writePtyInput(entry, data); } catch {}
       if (!entry.userInputDirty) scheduleFlush(projectId, { delayMs: 500 });
     }
   });

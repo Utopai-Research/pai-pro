@@ -165,6 +165,7 @@ function CanvasPageInner(): JSX.Element | null {
     workflow,
     pendingGenerations,
     assetStatuses,
+    bundle,
     loading,
     error,
   } = useWorkflow(projectId)
@@ -297,8 +298,9 @@ function CanvasPageInner(): JSX.Element | null {
         await discardPendingDraft(projectId, jobId)
       },
       onDismissFailedGeneration: dismissFailedGeneration,
+      canSendFailedGenerationToAgent: bundle?.agent_id === 'codex',
     }),
-    [projectId, dismissFailedGeneration],
+    [projectId, dismissFailedGeneration, bundle?.agent_id],
   )
 
   const displayNodes = useMemo(() => {

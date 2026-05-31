@@ -106,7 +106,14 @@ export function MediaExpandOverlay({
   const [noteEditLabel, setNoteEditLabel] = useState('')
   const [noteSaving, setNoteSaving] = useState(false)
   const [noteSaveError, setNoteSaveError] = useState<string | null>(null)
-  const { onSaveNote, onPatchDraft, onFireDraft, onDiscardDraft, onDismissFailedGeneration } = useNodeActions()
+  const {
+    onSaveNote,
+    onPatchDraft,
+    onFireDraft,
+    onDiscardDraft,
+    onDismissFailedGeneration,
+    canSendFailedGenerationToAgent,
+  } = useNodeActions()
   const composer = useChatComposer()
   const [fireError, setFireError] = useState<string | null>(null)
   // First-fire gate: routes the overlay's Generate click through the
@@ -491,15 +498,17 @@ export function MediaExpandOverlay({
             >
               Dismiss
             </button>
-            <button
-              type="button"
-              className="media-expand-failure-cta"
-              onClick={onSendFailureToAgent}
-              disabled={composer === null || typeof failureJobId !== 'string' || failureJobId === ''}
-              title={composer === null ? 'Terminal not ready' : 'Send this failure to the agent'}
-            >
-              Send to agent
-            </button>
+            {canSendFailedGenerationToAgent ? (
+              <button
+                type="button"
+                className="media-expand-failure-cta"
+                onClick={onSendFailureToAgent}
+                disabled={composer === null || typeof failureJobId !== 'string' || failureJobId === ''}
+                title={composer === null ? 'Terminal not ready' : 'Send this failure to the agent'}
+              >
+                Send to agent
+              </button>
+            ) : null}
           </div>
         ) : canChat ? (
           <MediaExpandChat nodeId={id!} projectId={projectId} />

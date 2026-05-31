@@ -96,6 +96,7 @@ export function PendingGenerationNode({ id, data, selected }: NodeProps): JSX.El
     onFireDraft,
     onDiscardDraft,
     onDismissFailedGeneration,
+    canSendFailedGenerationToAgent,
   } = useNodeActions()
   const composer = useChatComposer()
   const canExpand = onExpandMedia !== undefined
@@ -316,15 +317,17 @@ export function PendingGenerationNode({ id, data, selected }: NodeProps): JSX.El
             >
               Dismiss
             </button>
-            <button
-              type="button"
-              className="btn-generate-primary pending-send-agent"
-              onClick={handleSendFailure}
-              disabled={composer === null || failureSent}
-              title={composer === null ? 'Terminal not ready' : 'Send this failure to the agent'}
-            >
-              {failureSent ? 'Sent' : 'Send to agent'}
-            </button>
+            {canSendFailedGenerationToAgent ? (
+              <button
+                type="button"
+                className="btn-generate-primary pending-send-agent"
+                onClick={handleSendFailure}
+                disabled={composer === null || failureSent}
+                title={composer === null ? 'Terminal not ready' : 'Send this failure to the agent'}
+              >
+                {failureSent ? 'Sent' : 'Send to agent'}
+              </button>
+            ) : null}
           </div>
         ) : (
           <span>{footMeta}</span>

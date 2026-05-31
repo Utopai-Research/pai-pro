@@ -192,7 +192,7 @@ test("submitAgentNotification defers while browser input is dirty", async (t) =>
   assert.ok(writes.includes("hello"));
 });
 
-test("submitAgentNotification defers when no browser is attached", async (t) => {
+test("submitAgentNotification can write to a detached project PTY", async (t) => {
   const projectsDir = await mkdtemp(join(tmpdir(), "socket-submit-detached-"));
   const prior = process.env.PAI_PROJECTS_DIR;
   t.after(async () => {
@@ -204,9 +204,10 @@ test("submitAgentNotification defers when no browser is attached", async (t) => 
   const projectId = "p_detached";
   await mkdir(join(projectsDir, projectId), { recursive: true });
 
+  const writes = [];
   const fakePtyHandle = {
     pid: 4444,
-    write() {},
+    write(data) { writes.push(data); },
     onData() {},
     onExit() {},
     resize() {},
@@ -230,8 +231,8 @@ test("submitAgentNotification defers when no browser is attached", async (t) => 
   socket.fire("disconnect");
 
   const result = await submitAgentNotification(projectId, "hello", { requireIdleMs: 0 });
-  assert.equal(result.ok, false);
-  assert.equal(result.reason, "no_subscriber");
+  assert.equal(result.ok, true);
+  assert.deepEqual(writes.slice(-2), ["hello", "\r"]);
 });
 
 test("submitAgentNotification refuses providers without synthetic result wake", async (t) => {
