@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/bin/sh -lc 'node \"$(git rev-parse --show-toplevel)/.codex/hooks/block_workflow_writes.js\"'"
+          }
+        ]
+      }
+    ]
+  }
+}
