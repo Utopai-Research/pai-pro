@@ -365,14 +365,14 @@ export function MediaExpandOverlay({
             onSavePrompt={
               isDraft && onPatchDraft !== undefined && typeof id === 'string' && id !== ''
                 ? (newPrompt) => { onPatchDraft(id, { prompt: newPrompt }).catch((e) => {
-                    console.warn('[expand] draft prompt PATCH failed:', e)
+                    setFireError(e instanceof Error ? e.message : String(e))
                   }) }
                 : undefined
             }
             onSaveText={
               isDraft && kind === 'audio-generation' && onPatchDraft !== undefined && typeof id === 'string' && id !== ''
                 ? (newText) => { onPatchDraft(id, { text: newText }).catch((e) => {
-                    console.warn('[expand] draft text PATCH failed:', e)
+                    setFireError(e instanceof Error ? e.message : String(e))
                   }) }
                 : undefined
             }
