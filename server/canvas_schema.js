@@ -206,19 +206,6 @@ const edgeSchema = {
   },
 };
 
-const groupSchema = {
-  $id: "#group",
-  type: "object",
-  required: ["id", "title", "node_ids", "hue"],
-  additionalProperties: false,
-  properties: {
-    id: { type: "string" },
-    title: { type: "string" },
-    node_ids: { type: "array", items: { type: "string" } },
-    hue: { type: "number", minimum: 0, maximum: 360 },
-  },
-};
-
 // Persistent monotonic id counters per node type. See canvas_mutator.js →
 // nextNodeId for the read/bump/backfill semantics.
 const nextIdsSchema = {
@@ -244,7 +231,6 @@ const workflowSchema = {
     title: { type: "string" },
     nodes: { type: "array", items: { $ref: "#canvasNode" } },
     edges: { type: "array", items: { $ref: "#edge" } },
-    groups: { type: "array", items: { $ref: "#group" } },
     next_ids: { $ref: "#nextIds" },
   },
 };
@@ -264,19 +250,6 @@ const addNodeInputSchema = {
       type: "object",
     },
     tmp_path: { type: "string", minLength: 1 },
-  },
-};
-
-const addGroupInputSchema = {
-  $id: "#addGroupInput",
-  type: "object",
-  required: ["title", "node_ids", "hue"],
-  additionalProperties: false,
-  properties: {
-    id: { type: "string" },
-    title: { type: "string" },
-    node_ids: { type: "array", items: { type: "string" } },
-    hue: { type: "number", minimum: 0, maximum: 360 },
   },
 };
 
@@ -342,30 +315,6 @@ const opSchemas = {
       kind: { type: "string" },
     },
   },
-  addGroup: {
-    $id: "#op_addGroup",
-    type: "object",
-    required: ["group"],
-    additionalProperties: false,
-    properties: { group: { $ref: "#addGroupInput" } },
-  },
-  updateGroup: {
-    $id: "#op_updateGroup",
-    type: "object",
-    required: ["id", "patch"],
-    additionalProperties: false,
-    properties: {
-      id: { type: "string" },
-      patch: { type: "object" },
-    },
-  },
-  deleteGroup: {
-    $id: "#op_deleteGroup",
-    type: "object",
-    required: ["id"],
-    additionalProperties: false,
-    properties: { id: { type: "string" } },
-  },
   setTitle: {
     $id: "#op_setTitle",
     type: "object",
@@ -380,7 +329,6 @@ const opSchemas = {
     properties: {
       nodes: { type: "array", items: { $ref: "#addNodeInput" } },
       edges: { type: "array", items: { $ref: "#edge" } },
-      groups: { type: "array", items: { $ref: "#addGroupInput" } },
     },
   },
 };
@@ -415,11 +363,9 @@ for (const s of [
   audioResultNodeSchema,
   canvasNodeSchema,
   edgeSchema,
-  groupSchema,
   nextIdsSchema,
   workflowSchema,
   addNodeInputSchema,
-  addGroupInputSchema,
   envelopeSchema,
   ...Object.values(opSchemas),
 ]) {

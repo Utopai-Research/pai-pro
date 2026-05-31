@@ -110,15 +110,6 @@ function bumpNextIdsForExplicit(draft, type, id) {
   if (typeof current !== "number" || current < n) draft.next_ids[type] = n;
 }
 
-function nextGroupId(draft) {
-  let max = 0;
-  for (const g of draft.groups || []) {
-    const m = /^group_(\d+)$/.exec(g.id);
-    if (m) max = Math.max(max, Number(m[1]));
-  }
-  return `group_${max + 1}`;
-}
-
 function findNodeIndex(draft, id) {
   return draft.nodes.findIndex((n) => n.id === id);
 }
@@ -127,11 +118,6 @@ function assertNodeExists(draft, id, role) {
   if (findNodeIndex(draft, id) === -1) {
     throw new MutatorError("not_found", `edge ${role} node not found: ${id}`);
   }
-}
-
-function findGroupIndex(draft, id) {
-  if (!Array.isArray(draft.groups)) return -1;
-  return draft.groups.findIndex((g) => g.id === id);
 }
 
 // Deep-merge `patch` into `target`. Null values in patch DELETE the key.
@@ -147,21 +133,6 @@ function deepMergePatch(target, patch) {
       deepMergePatch(target[k], v);
     } else {
       target[k] = v;
-    }
-  }
-}
-
-function enforceOneGroupPerNode(draft, groupId, nodeIds) {
-  if (!Array.isArray(draft.groups)) return;
-  for (const g of draft.groups) {
-    if (g.id === groupId) continue;
-    for (const nid of nodeIds) {
-      if (g.node_ids.includes(nid)) {
-        throw new MutatorError(
-          "conflict",
-          `node ${nid} already in group ${g.id}; cannot add to ${groupId}`
-        );
-      }
     }
   }
 }
@@ -235,11 +206,6 @@ function reduceDeleteNode(draft, { id }) {
   if (idx === -1) throw new MutatorError("not_found", `node not found: ${id}`);
   draft.nodes.splice(idx, 1);
   draft.edges = draft.edges.filter((e) => e.from !== id && e.to !== id);
-  if (Array.isArray(draft.groups)) {
-    draft.groups = draft.groups
-      .map((g) => ({ ...g, node_ids: g.node_ids.filter((nid) => nid !== id) }))
-      .filter((g) => g.node_ids.length > 0);
-  }
   return {};
 }
 
@@ -269,42 +235,6 @@ function reduceDeleteEdge(draft, { from, to, kind }) {
   return {};
 }
 
-function reduceAddGroup(draft, { group }) {
-  if (!Array.isArray(draft.groups)) draft.groups = [];
-  const id = group.id || nextGroupId(draft);
-  if (findGroupIndex(draft, id) !== -1) {
-    throw new MutatorError("conflict", `group id collision: ${id}`);
-  }
-  // dedupe node_ids
-  const nodeIds = [...new Set(group.node_ids)];
-  enforceOneGroupPerNode(draft, id, nodeIds);
-  draft.groups.push({ id, title: group.title, node_ids: nodeIds, hue: group.hue });
-  return { group_id: id };
-}
-
-function reduceUpdateGroup(draft, { id, patch }) {
-  const idx = findGroupIndex(draft, id);
-  if (idx === -1) throw new MutatorError("not_found", `group not found: ${id}`);
-  const next = { ...draft.groups[idx] };
-  if (patch.title !== undefined) next.title = patch.title;
-  if (patch.hue !== undefined) next.hue = patch.hue;
-  if (patch.node_ids !== undefined) {
-    const nodeIds = [...new Set(patch.node_ids)];
-    enforceOneGroupPerNode(draft, id, nodeIds);
-    next.node_ids = nodeIds;
-  }
-  draft.groups[idx] = next;
-  return {};
-}
-
-function reduceDeleteGroup(draft, { id }) {
-  if (!Array.isArray(draft.groups)) throw new MutatorError("not_found", `group not found: ${id}`);
-  const idx = findGroupIndex(draft, id);
-  if (idx === -1) throw new MutatorError("not_found", `group not found: ${id}`);
-  draft.groups.splice(idx, 1);
-  return {};
-}
-
 function reduceSetTitle(draft, { title }) {
   draft.title = title;
   return {};
@@ -320,9 +250,8 @@ function reduceUpdateBatch(draft, { updates }) {
   return {};
 }
 
-// addBatch: atomic. Apply nodes, then resolve $N placeholders in edges +
-// groups, then apply edges, then groups.
-function reduceAddBatch(draft, { nodes = [], edges = [], groups = [] }, ctx) {
+// addBatch: atomic. Apply nodes, then resolve $N placeholders in edges.
+function reduceAddBatch(draft, { nodes = [], edges = [] }, ctx) {
   const assignedNodeIds = [];
   for (const node of nodes) {
     const { node_id } = reduceAddNode(draft, { node }, ctx);
@@ -340,16 +269,7 @@ function reduceAddBatch(draft, { nodes = [], edges = [], groups = [] }, ctx) {
       edge: { from: resolvePlaceholder(edge.from), to: resolvePlaceholder(edge.to), ...(edge.kind ? { kind: edge.kind } : {}) },
     });
   }
-  const assignedGroupIds = [];
-  for (const group of groups) {
-    const resolvedGroup = {
-      ...group,
-      node_ids: group.node_ids.map(resolvePlaceholder),
-    };
-    const { group_id } = reduceAddGroup(draft, { group: resolvedGroup });
-    assignedGroupIds.push(group_id);
-  }
-  return { node_ids: assignedNodeIds, group_ids: assignedGroupIds };
+  return { node_ids: assignedNodeIds };
 }
 
 const reducers = {
@@ -358,9 +278,6 @@ const reducers = {
   deleteNode: reduceDeleteNode,
   addEdge: reduceAddEdge,
   deleteEdge: reduceDeleteEdge,
-  addGroup: reduceAddGroup,
-  updateGroup: reduceUpdateGroup,
-  deleteGroup: reduceDeleteGroup,
   setTitle: reduceSetTitle,
   addBatch: reduceAddBatch,
   updateBatch: reduceUpdateBatch,
@@ -413,6 +330,9 @@ async function mutateLocked(p, envelope, hooks) {
     // write fails so disk + workflow.json stay consistent.
     const ctx = { projectDir: dirname(p.workflowPath), fsOps: [] };
     const assigned = reducer(draft, envelope.payload, ctx);
+    // Legacy workflow.groups was never rendered. Group frames now live only
+    // in canvas_positions.json, so any workflow write drops the stale field.
+    if (Object.prototype.hasOwnProperty.call(draft, "groups")) delete draft.groups;
     if (!validateWorkflow(draft)) {
       throw new MutatorError(
         "validation",

@@ -16,8 +16,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { NodeProps, OnResizeEnd } from '@xyflow/react'
 import { NodeResizer, useReactFlow, useStore } from '@xyflow/react'
 import {
-  deleteCanvasGroupFrame,
-  setCanvasGroupFrame,
+  applyCanvasLayout,
   type CanvasGroupFrame,
 } from '@/lib/canvas-stub'
 import { useProject } from '@/contexts/ProjectContext'
@@ -32,6 +31,8 @@ interface GroupFrameData {
   title: string
   hue: number
   memberIds: string[]
+  x: number
+  y: number
   width: number
   height: number
 }
@@ -71,8 +72,8 @@ export function GroupFrameNode({ id, data, selected }: NodeProps): JSX.Element {
       if (projectId === null) return
       const merged: CanvasGroupFrame = {
         memberIds: d.memberIds,
-        x: 0, // x/y owned by canvas_state.positions; setCanvasGroupFrame keeps existing
-        y: 0,
+        x: d.x,
+        y: d.y,
         width: d.width,
         height: d.height,
         hue: d.hue,
@@ -81,7 +82,9 @@ export function GroupFrameNode({ id, data, selected }: NodeProps): JSX.Element {
       }
       saveStatus?.beginPersist()
       try {
-        await setCanvasGroupFrame(projectId, id, merged)
+        await applyCanvasLayout(projectId, {
+          groupFrames: { upsert: { [id]: merged } },
+        })
         saveStatus?.endPersist(false)
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err)
@@ -91,7 +94,7 @@ export function GroupFrameNode({ id, data, selected }: NodeProps): JSX.Element {
         }
       }
     },
-    [projectId, id, d.memberIds, d.width, d.height, d.hue, d.title, saveStatus],
+    [projectId, id, d.memberIds, d.x, d.y, d.width, d.height, d.hue, d.title, saveStatus],
   )
 
   const commitTitle = useCallback((): void => {
@@ -142,7 +145,9 @@ export function GroupFrameNode({ id, data, selected }: NodeProps): JSX.Element {
     if (projectId === null) return
     saveStatus?.beginPersist()
     try {
-      await deleteCanvasGroupFrame(projectId, id)
+      await applyCanvasLayout(projectId, {
+        groupFrames: { delete: [id] },
+      })
       saveStatus?.endPersist(false)
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)

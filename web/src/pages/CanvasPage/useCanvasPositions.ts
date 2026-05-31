@@ -39,7 +39,7 @@ import {
   useState,
 } from 'react'
 import {
-  setCanvasGroupFramePosition,
+  applyCanvasLayout,
   setCanvasNodePosition,
   setCanvasNodePositions,
   setPendingPosition,
@@ -589,24 +589,6 @@ export function useCanvasPositions({
     [persistOne],
   )
 
-  const persistFramePositionSerialized = useCallback(
-    async (frameId: string, x: number, y: number): Promise<void> => {
-      if (projectId === null) {
-        throw new Error('frame persist without projectId')
-      }
-      const prev = inFlightByNodeRef.current.get(frameId)
-      if (prev !== undefined) {
-        try {
-          await prev
-        } catch {
-          /* prior failure surfaced */
-        }
-      }
-      await setCanvasGroupFramePosition(projectId, frameId, { x, y })
-    },
-    [projectId],
-  )
-
   // Pending-pad sibling of persistOneSerialized; the retry catches
   // dropped keepalive PATCHes when bursts saturate the browser cap.
   const persistPendingSerialized = useCallback(
@@ -658,47 +640,53 @@ export function useCanvasPositions({
         let batchFailed = false
         let batchError: string | undefined
         try {
-          const promises: Promise<void>[] = []
-          const framePromise = persistFramePositionSerialized(
-            node.id,
-            node.position.x,
-            node.position.y,
-          )
-          inFlightByNodeRef.current.set(node.id, framePromise)
-          void framePromise.finally(() => {
-            if (inFlightByNodeRef.current.get(node.id) === framePromise) {
-              inFlightByNodeRef.current.delete(node.id)
-            }
-          })
-          promises.push(framePromise)
+          if (projectId === null) throw new Error('frame persist without projectId')
+          const affectedIds = [node.id]
+          const positions: Record<string, { x: number; y: number }> = {}
           if (ctx !== null) {
             for (const [memberId, offset] of ctx.offsets) {
-              const memberNode: RFNode = {
-                id: memberId,
-                position: {
-                  x: node.position.x + offset.dx,
-                  y: node.position.y + offset.dy,
-                },
-                data: {},
+              affectedIds.push(memberId)
+              positions[memberId] = {
+                x: node.position.x + offset.dx,
+                y: node.position.y + offset.dy,
               }
-              const p = persistOneSerialized(memberNode)
-              inFlightByNodeRef.current.set(memberId, p)
-              void p.finally(() => {
-                if (inFlightByNodeRef.current.get(memberId) === p) {
-                  inFlightByNodeRef.current.delete(memberId)
-                }
-              })
-              promises.push(p)
             }
           }
-          const results = await Promise.allSettled(promises)
-          for (const r of results) {
-            if (r.status === 'rejected') {
-              batchFailed = true
-              batchError =
-                r.reason instanceof Error ? r.reason.message : String(r.reason)
+          const previousWrites = affectedIds
+            .map((id) => inFlightByNodeRef.current.get(id))
+            .filter((p): p is Promise<void> => p !== undefined)
+          const persistPromise = (async (): Promise<void> => {
+            for (const previous of previousWrites) {
+              try {
+                await previous
+              } catch {
+                /* previous failure surfaced */
+              }
             }
-          }
+            const frame = groupFramesRef.current[node.id]
+            if (frame === undefined) throw new Error(`frame not found: ${node.id}`)
+            await applyCanvasLayout(projectId, {
+              ...(Object.keys(positions).length > 0 ? { positions } : {}),
+              groupFrames: {
+                upsert: {
+                  [node.id]: {
+                    ...frame,
+                    x: node.position.x,
+                    y: node.position.y,
+                  },
+                },
+              },
+            })
+          })()
+          for (const id of affectedIds) inFlightByNodeRef.current.set(id, persistPromise)
+          void persistPromise.finally(() => {
+            for (const id of affectedIds) {
+              if (inFlightByNodeRef.current.get(id) === persistPromise) {
+                inFlightByNodeRef.current.delete(id)
+              }
+            }
+          })
+          await persistPromise
         } catch (err) {
           batchFailed = true
           batchError = err instanceof Error ? err.message : 'frame persist failed'
@@ -785,7 +773,7 @@ export function useCanvasPositions({
         draggingIdsRef.current.delete(node.id)
       }
     },
-    [persistOneSerialized, persistFramePositionSerialized, persistPendingSerialized, saveStatus, projectId],
+    [persistOneSerialized, persistPendingSerialized, saveStatus, projectId],
   )
 
   const onSelectionDragStart = useCallback(

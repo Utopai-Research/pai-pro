@@ -10,12 +10,12 @@
  * Replacing the React state on every push would re-run downstream
  * `useMemo(projection, [workflow])` and force React Flow to re-diff
  * the whole graph. `mergeWorkflow` returns the previous reference when
- * nothing changed, and preserves identity per node/edge/group when an
+ * nothing changed, and preserves identity per node/edge when an
  * individual element didn't change — so the parent useMemo can
  * short-circuit and per-node memos can recognise unchanged elements
  * by reference.
  */
-import type { CanvasNode, Edge, Group, Workflow } from '@/types/canvas'
+import type { CanvasNode, Edge, Workflow } from '@/types/canvas'
 
 function deepEqual(a: unknown, b: unknown): boolean {
   if (Object.is(a, b)) return true
@@ -51,17 +51,6 @@ function edgeEqual(a: Edge, b: Edge): boolean {
   return a.from === b.from && a.to === b.to && a.kind === b.kind
 }
 
-function groupEqual(a: Group, b: Group): boolean {
-  if (a.id !== b.id) return false
-  if (a.title !== b.title) return false
-  if (a.hue !== b.hue) return false
-  if (a.node_ids.length !== b.node_ids.length) return false
-  for (let i = 0; i < a.node_ids.length; i++) {
-    if (a.node_ids[i] !== b.node_ids[i]) return false
-  }
-  return true
-}
-
 function mergeNodes(prev: CanvasNode[], next: CanvasNode[]): CanvasNode[] {
   const prevById = new Map(prev.map((n) => [n.id, n] as const))
   const result = next.map((n) => {
@@ -90,27 +79,6 @@ function mergeEdges(prev: Edge[], next: Edge[]): Edge[] {
   if (
     result.length === prev.length &&
     result.every((e, i) => e === prev[i])
-  ) {
-    return prev
-  }
-  return result
-}
-
-function mergeGroups(
-  prev: Group[] | undefined,
-  next: Group[] | undefined,
-): Group[] | undefined {
-  if (prev === undefined && next === undefined) return undefined
-  if (prev === undefined) return next
-  if (next === undefined) return undefined
-  const prevById = new Map(prev.map((g) => [g.id, g] as const))
-  const result = next.map((g) => {
-    const existing = prevById.get(g.id)
-    return existing && groupEqual(existing, g) ? existing : g
-  })
-  if (
-    result.length === prev.length &&
-    result.every((g, i) => g === prev[i])
   ) {
     return prev
   }
@@ -166,7 +134,6 @@ export function mergeWorkflow(
 
   const mergedNodes = mergeNodes(prev.nodes, next.nodes)
   const mergedEdges = mergeEdges(prev.edges, next.edges)
-  const mergedGroups = mergeGroups(prev.groups, next.groups)
   const mergedNextIds = deepEqual(prev.next_ids, next.next_ids) ? prev.next_ids : next.next_ids
 
   const scalarsEqual =
@@ -177,7 +144,6 @@ export function mergeWorkflow(
   const mergedReferencesIdentical =
     mergedNodes === prev.nodes &&
     mergedEdges === prev.edges &&
-    mergedGroups === prev.groups &&
     mergedNextIds === prev.next_ids
 
   if (scalarsEqual && mergedReferencesIdentical) return prev
@@ -188,7 +154,6 @@ export function mergeWorkflow(
     title: next.title,
     nodes: mergedNodes,
     edges: mergedEdges,
-    groups: mergedGroups,
     next_ids: mergedNextIds,
   }
 }

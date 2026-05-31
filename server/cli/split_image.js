@@ -20,8 +20,6 @@ const args = parseArgs({
   "project-id":      { type: "string" },
   "request-id":      { type: "string" },
   "no-canvas-write": { type: "boolean" },
-  "group-title":     { type: "string" }, // label for the wrap-group; defaults to "Split <CxR>"
-  "group-hue":       { type: "string" }, // 0-360; defaults to 30
 });
 
 if (!args.url)  { emitFailure("bad_args", "missing --url");  process.exit(2); }
@@ -71,17 +69,9 @@ try {
         to: `$${i}`,
         kind: "derived",
       }));
-      const hue = Number.isFinite(Number(args["group-hue"])) ? Number(args["group-hue"]) : 30;
-      const groups = [
-        {
-          title: args["group-title"] || `Split ${grid}`,
-          node_ids: pieces.map((_, i) => `$${i}`),
-          hue,
-        },
-      ];
       const m = await postMutation({
         op: "addBatch",
-        payload: { nodes, edges, groups },
+        payload: { nodes, edges },
         requestId: args["request-id"],
         projectId: args["project-id"],
         actor: "cli:split_image",
@@ -91,7 +81,6 @@ try {
         canvasFragment = {
           canvas_mutation: {
             node_ids: assignedNodeIds,
-            group_id: m.reply.assigned?.group_ids?.[0],
             version: m.reply.version,
             request_id: m.request_id,
           },

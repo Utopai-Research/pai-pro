@@ -129,7 +129,7 @@ test("steno.write failure → reply klass:infra, in-memory state preserved", asy
   }
 });
 
-test("interleaved adds + deletes + groups complete consistently", async () => {
+test("interleaved adds + deletes complete consistently", async () => {
   const { p, dir, workflowPath } = await setupProject();
   try {
     // Seed: add 20 nodes in parallel.
@@ -143,25 +143,18 @@ test("interleaved adds + deletes + groups complete consistently", async () => {
       )
     );
     const ids = addReplies.map((r) => r.assigned.node_id);
-    // Interleave: delete the first 10, group the last 10.
+    // Interleave deletes with no id reuse or disk divergence.
     const work = [
       ...ids.slice(0, 10).map((id, i) =>
         mutate(p, { request_id: `d-${i}`, op: "deleteNode", payload: { id } })
       ),
-      mutate(p, {
-        request_id: "g-1",
-        op: "addGroup",
-        payload: { group: { title: "tail", node_ids: ids.slice(10), hue: 200 } },
-      }),
     ];
     const replies = await Promise.all(work);
     assert.equal(replies.every((r) => r.ok), true);
     assert.equal(p.canvasState.nodes.length, 10);
-    assert.equal(p.canvasState.groups.length, 1);
-    assert.equal(p.canvasState.groups[0].node_ids.length, 10);
     const onDisk = JSON.parse(await readFile(workflowPath, "utf8"));
     assert.equal(onDisk.nodes.length, 10);
-    assert.equal(onDisk.groups.length, 1);
+    assert.equal("groups" in onDisk, false);
     assert.ok(validateWorkflow(onDisk));
   } finally {
     await teardown(dir);

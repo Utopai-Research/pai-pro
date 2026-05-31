@@ -62,13 +62,5 @@
   "edges": [
     { "from": "note_1", "to": "image_1", "kind": "derived" },
     { "from": "image_1", "to": "video_1", "kind": "derived" }
-  ],
-  "groups": [
-    {
-      "id": "group_1",
-      "title": "Scene 1",
-      "node_ids": ["note_1", "image_1", "video_1"],
-      "hue": 200
-    }
   ]
 }

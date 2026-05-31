@@ -7,7 +7,7 @@
 // running the project's owning coding agent with cwd=projects/<active>/.
 //
 // File layout (from the repo root):
-//   projects/<id>/workflow.json          — the canvas (nodes/edges/groups)
+//   projects/<id>/workflow.json          — the canvas content graph (nodes/edges)
 //   projects/<id>/meta.json              — { id, title, created_at, last_active_at, agent_id? }
 //   projects/<id>/assets/                — local mirror of generated media
 //   projects/<id>/canvas_positions.json  — drag positions + group frames sidecar
@@ -24,9 +24,7 @@
 //   DELETE /projects/:id                                   soft delete (move to projects/.archive/)
 //   POST   /projects/:id/activate                         flip active symlinks
 //   PATCH  /projects/:id/positions                        merge { nodeId: {x,y}, … } into positions
-//   PUT    /projects/:id/group-frames/:frameId            upsert a group frame
-//   PATCH  /projects/:id/group-frames/:frameId/position   move an existing frame
-//   DELETE /projects/:id/group-frames/:frameId            remove a frame
+//   POST   /projects/:id/canvas-layout                    atomically update positions + group frames
 //
 // Socket.IO:
 //   subscribe { projectId }   — join the project's room and seed all state

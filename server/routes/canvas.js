@@ -1,12 +1,13 @@
 // Canvas routes: the generic /mutate envelope (the agent's main entry
 // point), the convenience PATCH wrappers (used by the renderer's
-// Timeline drag-reorder), the positions sidecar PATCH, the group-frame
-// upsert/move/delete (sidecar siblings to /positions), and the
+// Timeline drag-reorder), the positions sidecar PATCH, the atomic
+// canvas-layout sidecar update, and the
 // asset-preupload kick.
 
 import { mutate } from "../canvas_mutator.js";
 import { preuploadCanvasUrl } from "../pai_assets_client.js";
 import { statusForKlass } from "../lib/broadcasters.js";
+import { applyCanvasLayoutPatch, CanvasLayoutError } from "../lib/canvas_layout.js";
 import { withProjectMutationLock, writeCanvasPositions } from "../lib/writers.js";
 
 export function registerCanvasRoutes({ app, io, projects, mutatorHooks }) {
@@ -146,67 +147,21 @@ export function registerCanvasRoutes({ app, io, projects, mutatorHooks }) {
     res.json({ ok: true });
   });
 
-  app.put("/projects/:id/group-frames/:frameId", async (req, res) => {
+  app.post("/projects/:id/canvas-layout", async (req, res) => {
     const id = req.params.id;
-    const frameId = req.params.frameId;
     const p = projects.get(id);
     if (!p) return res.status(404).json({ error: "not found" });
-    const frame = req.body;
-    if (!frame || typeof frame !== "object") {
-      return res.status(400).json({ error: "frame body required" });
-    }
     try {
       await withProjectMutationLock(id, async () => {
-        p.canvasPositions.groupFrames[frameId] = frame;
+        p.canvasPositions = applyCanvasLayoutPatch(p, req.body);
         await writeCanvasPositions(id, p.canvasPositions);
       });
     } catch (e) {
-      return res.status(500).json({ error: e.message });
+      const status = e instanceof CanvasLayoutError ? 400 : 500;
+      return res.status(status).json({ error: e.message });
     }
     io.to(id).emit("canvas-positions", { projectId: id, state: p.canvasPositions });
-    res.json({ ok: true });
+    res.json({ ok: true, state: p.canvasPositions });
   });
 
-  app.patch("/projects/:id/group-frames/:frameId/position", async (req, res) => {
-    const id = req.params.id;
-    const frameId = req.params.frameId;
-    const p = projects.get(id);
-    if (!p) return res.status(404).json({ error: "not found" });
-    const pos = req.body;
-    if (typeof pos?.x !== "number" || typeof pos?.y !== "number") {
-      return res.status(400).json({ error: "{x,y} required" });
-    }
-    let notFound = false;
-    try {
-      await withProjectMutationLock(id, async () => {
-        const existing = p.canvasPositions.groupFrames[frameId];
-        if (!existing) { notFound = true; return; }
-        existing.x = pos.x;
-        existing.y = pos.y;
-        await writeCanvasPositions(id, p.canvasPositions);
-      });
-    } catch (e) {
-      return res.status(500).json({ error: e.message });
-    }
-    if (notFound) return res.status(404).json({ error: "frame not found" });
-    io.to(id).emit("canvas-positions", { projectId: id, state: p.canvasPositions });
-    res.json({ ok: true });
-  });
-
-  app.delete("/projects/:id/group-frames/:frameId", async (req, res) => {
-    const id = req.params.id;
-    const frameId = req.params.frameId;
-    const p = projects.get(id);
-    if (!p) return res.status(404).json({ error: "not found" });
-    try {
-      await withProjectMutationLock(id, async () => {
-        delete p.canvasPositions.groupFrames[frameId];
-        await writeCanvasPositions(id, p.canvasPositions);
-      });
-    } catch (e) {
-      return res.status(500).json({ error: e.message });
-    }
-    io.to(id).emit("canvas-positions", { projectId: id, state: p.canvasPositions });
-    res.json({ ok: true });
-  });
 }

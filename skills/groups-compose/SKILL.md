@@ -1,6 +1,6 @@
 ---
 name: groups-compose
-description: Designs and maintains semantic groupings of nodes on the filmmaking canvas — scenes, character-reference sets, act beats, and other reading-clarity frames. Use when nodes on the canvas cluster around a shared meaning (same scene, same character, same act, same production state) and would read more clearly with a titled frame around them. Don't force it — groups are a view concern, not an organizing tax.
+description: Designs and maintains semantic groupings and readable layouts on the filmmaking canvas — scenes, character-reference sets, act beats, and other titled visual frames. Use when nodes on the canvas cluster around a shared meaning and would read more clearly if arranged together and wrapped in a frame. Don't force it — groups are a view concern, not an organizing tax.
 ---
 
 ## When to propose a group
@@ -15,11 +15,13 @@ If fewer than 3 members resolve, or the tie is just "these happened to be genera
 
 ## Contract recap (enforced)
 
-A group is a **visual frame** that wraps its member nodes on the canvas. The frame's geometry (x, y, width, height) is a bounding box computed from the members' current positions.
+A group is a **visual frame** that wraps member nodes on the canvas. The frame and the member node positions are view state in `canvas_positions.json`; they are not workflow content.
 
-- Write `memberIds`, `title`, `hue` (0–360), AND `x` / `y` / `width` / `height` for the frame itself.
-- Never touch the **member nodes'** `x` / `y` — the renderer positions them; the frame just wraps wherever they currently sit.
-- A node may appear in at most one frame. If a proposed member is already in an existing frame, evict it first (re-PUT the old frame with the reduced `memberIds`, or `DELETE` the old frame if fewer than 2 members would remain).
+- Use `canvas_layout.js` to write member `positions` and `groupFrames` in one atomic sidecar update.
+- Never write or edit `workflow.json`; never put `x` / `y` into node data.
+- A layout change may move member nodes when that makes the canvas clearer.
+- The frame's geometry (`x`, `y`, `width`, `height`) is a bounding box computed from the final member positions.
+- A node may appear in at most one frame. If a proposed member is already in an existing frame, evict it in the same layout update (upsert the old frame with reduced `memberIds`, or delete the old frame if fewer than 2 members would remain).
 - No nested frames.
 - `frameId` format: `frame_<unix_ms>` (e.g. `frame_1716579123456`). Matches the frontend's convention. Titles are free-form (≤ 30 chars recommended).
 
@@ -38,6 +40,7 @@ Most common. Group the prompt, generated imagery, and any notes that all belong 
   - `Scene 5 — Rooftop chase`
 - Typical size: 3–8 members.
 - Members: the scene's prompt / shot / image_result / video_result cards, plus any notes that scope to that scene.
+- Layout: place the script/shot note on the left, then images/videos in reading order to the right. Put attached voice/audio below the source card.
 
 ### 2. Character-reference set
 
@@ -49,6 +52,7 @@ A character card + its reference images.
   - `Riya — references`
 - Typical size: 2–6 images.
 - Members: any `image_result` nodes depicting the same character.
+- Layout: hero/reference card first, variations in a compact grid, attached voice node below.
 
 ### 3. Act / beat grouping
 
@@ -61,6 +65,7 @@ Coarser than scene — groups a whole Act or story beat.
   - `Chase sequence`
 - Typical size: 8–15 members. If larger, prefer splitting into scene subgroups instead.
 - Members: all nodes that belong to that act/beat, spanning multiple scenes.
+- Layout: arrange scene clusters left-to-right in story order, with enough gutter that frames do not overlap.
 
 ### 4. Production-state grouping (opt-in)
 
@@ -72,14 +77,18 @@ Less common; use only when the user explicitly sorts by quality / status.
 
 ## Recipe
 
-Frames go through the HTTP API (`PUT /projects/:id/group-frames/:frameId`) — the same path the frontend's own "+ Group" button uses. The mutator's `addGroup` op writes to a metadata-only store nothing visualizes; don't use it.
+Frames and positions go through the layout CLI. The workflow mutator has no group ops; grouping is visible canvas layout.
 
-1. **Read `./workflow.json` + `./canvas_positions.json`.** workflow.json gives you node ids + labels + subtypes; canvas_positions.json gives you each node's `x` / `y` AND the existing `groupFrames` map. Reads are unrestricted; only writes are blocked.
+1. **Read `./workflow.json` + `./canvas_positions.json`.** workflow.json gives you node ids + labels + subtypes; canvas_positions.json gives you each node's `x` / `y` AND the existing `groupFrames` map. Reads are unrestricted; writes go through `canvas_layout.js`.
 2. **Pick members.** Identify which nodes belong in the proposed frame by looking at their ids, labels, prompts, and subtypes. Keep only ids that actually exist in `nodes`.
-3. **Evict any member already in another frame.** For each id in your proposed `memberIds`, scan existing `groupFrames`. If you find a frame that contains it:
-   - If the old frame would still have ≥ 2 members after eviction: re-PUT the old frame with `memberIds` minus the evictee (recompute bbox).
-   - If the old frame would have < 2 members: `DELETE /projects/<id>/group-frames/<oldFrameId>` (the frame loses meaning at 0–1 members).
-4. **Compute the bbox** from your members' positions. Use 24px padding (matches the frontend's `FRAME_BBOX_PADDING`). Member widths/heights are determined by `pickSize` in `web/src/pages/CanvasPage/placement.ts:176`. Use these fallbacks per type:
+3. **Plan positions.** Preserve existing positions when they already read well. Otherwise move the selected nodes into a compact layout for the chosen pattern. Use these default gaps:
+   - horizontal card gap: 40 px
+   - vertical row gap: 36 px
+   - frame padding: 24 px
+4. **Evict any member already in another frame.** For each id in your proposed `memberIds`, scan existing `groupFrames`. If you find a frame that contains it, include that old frame in the same layout JSON:
+   - If the old frame would still have ≥ 2 members after eviction: include it under `groupFrames.upsert` with `memberIds` minus the evictee.
+   - If the old frame would have < 2 members: include its id under `groupFrames.delete`.
+5. **Compute frame bboxes** from final member positions. Use 24px padding (matches the frontend's `FRAME_BBOX_PADDING`). Member widths/heights are determined by `pickSize` in `web/src/pages/CanvasPage/placement.ts`. Use these fallbacks per type:
    - `note`: **280 × 420**  (width hardcoded; height = `NOTE_CARD_FALLBACK_HEIGHT` for first paint)
    - `image_result`: **290 × 220**  (16:9 default; if `data.metadata.aspect_ratio` is present, scale accordingly)
    - `video_result`: **290 × 220**  (same caveat; check `data.aspect` or `data.metadata.aspect_ratio`)
@@ -97,23 +106,21 @@ Frames go through the HTTP API (`PUT /projects/:id/group-frames/:frameId`) — t
    width  = (maxX - minX) + 48
    height = (maxY - minY) + 48
    ```
-5. **Decide title + hue.** Default hue 200 if you have no signal.
-6. **PUT the new frame.** Read project id from `./meta.json`'s `id` field. Pick `frameId = frame_<unix_ms>`:
+6. **Decide title + hue.** Default hue 200 if you have no signal.
+7. **Apply one layout update.** Pick `frameId = frame_<unix_ms>`. Include every node move and frame change in one JSON body:
    ```
-   curl -X PUT \
-     -H "Content-Type: application/json" \
-     -d '{"memberIds":["image_3","video_1","note_2"],"x":120,"y":80,"width":540,"height":380,"hue":200,"title":"Scene 1 — Causeway"}' \
-     "http://localhost:7488/projects/<projectId>/group-frames/frame_<unix_ms>"
+   node "$PAI_REPO_ROOT/server/cli/canvas_layout.js" \
+     --layout-json '{"positions":{"note_2":{"x":120,"y":80},"image_3":{"x":440,"y":80},"video_1":{"x":760,"y":80}},"groupFrames":{"upsert":{"frame_1716579123456":{"memberIds":["note_2","image_3","video_1"],"x":96,"y":56,"width":978,"height":468,"hue":200,"title":"Scene 1 — Causeway"}},"delete":[]}}'
    ```
-   On success the server fans the update out via Socket.IO; the canvas updates within a frame.
-7. **Extending an existing frame** — same PUT, same frameId, full new `memberIds` list, recomputed bbox. PUT is idempotent overwrite.
-8. **Confirm to the user in one sentence.** Example: *"Grouped the three Morris reference shots under their own frame."*
+   The command prints one JSON line. On `ok:true`, the viewer fans the update out via Socket.IO; the canvas updates within a frame.
+8. **Extending an existing frame** — same layout CLI, same frameId, full new `memberIds` list, recomputed bbox, and any member position changes.
+9. **Confirm to the user in one sentence.** Example: *"Grouped the three Morris reference shots under their own frame."*
 
 ## What not to do
 
 - Don't propose groupings proactively when there's no clear semantic tie — wait until grouping earns the frame.
-- Don't group as a workaround for layout issues. Groups are for the reader; if the layout needs work, that's a system problem, not a grouping problem.
-- Don't modify the **member nodes'** `x` / `y` — the renderer positions them. The frame's own `x` / `y` / `width` / `height` is computed from the members' bounding box (recipe step 4).
-- Don't call `canvas_mutate.js --op addGroup` / `updateGroup` / `deleteGroup`. Those write to `workflow.json` → `groups[]`, which no frontend code reads. Use the HTTP `PUT /projects/:id/group-frames/:frameId` route instead (recipe step 6).
+- Don't use grouping as a generic tidy operation when there is no semantic tie.
+- Don't write `canvas_positions.json` directly. Use `canvas_layout.js` so positions and frames apply together.
+- Don't call removed workflow group ops (`addGroup`, `updateGroup`, `deleteGroup`).
 - Don't nest (put one frame's id inside another frame's `memberIds`).
-- Don't assign a node to two frames. Evict from the old frame first (recipe step 3).
+- Don't assign a node to two frames. Include any eviction in the same layout update.

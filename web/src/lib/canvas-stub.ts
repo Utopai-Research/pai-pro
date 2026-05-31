@@ -9,9 +9,7 @@
  *         state, then `canvas-positions` Socket.IO events deliver
  *         every disk change.
  *   WRITE: PATCH /projects/:id/positions
- *          PUT /projects/:id/group-frames/:frameId
- *          PATCH /projects/:id/group-frames/:frameId/position
- *          DELETE /projects/:id/group-frames/:frameId
+ *          POST /projects/:id/canvas-layout
  *
  * The server persists each mutation to projects/<id>/canvas_positions.json
  * and rebroadcasts the new full state to every subscribed socket.
@@ -33,6 +31,14 @@ export interface CanvasPositionsState {
   groupFrames: Record<string, CanvasGroupFrame>
 }
 
+export interface CanvasLayoutPatch {
+  positions?: Record<string, { x: number; y: number } | null>
+  groupFrames?: {
+    upsert?: Record<string, CanvasGroupFrame>
+    delete?: string[]
+  }
+}
+
 // ────────────────────────────────────────────────────────────────────
 // Writes — fire-and-forget HTTP. Server emits canvas-positions via
 // Socket.IO once the disk write lands; that updates every connected
@@ -49,18 +55,6 @@ async function patch(url: string, body: unknown): Promise<void> {
   if (!res.ok) {
     const txt = await res.text().catch(() => '')
     throw new Error(`PATCH ${url} → ${res.status} ${res.statusText} ${txt}`)
-  }
-}
-
-async function put(url: string, body: unknown): Promise<void> {
-  const res = await fetch(url, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  })
-  if (!res.ok) {
-    const txt = await res.text().catch(() => '')
-    throw new Error(`PUT ${url} → ${res.status} ${res.statusText} ${txt}`)
   }
 }
 
@@ -103,6 +97,23 @@ export async function setCanvasNodePositions(
     `${VIEWER_URL}/projects/${encodeURIComponent(projectId)}/positions`,
     body,
   )
+}
+
+export async function applyCanvasLayout(
+  projectId: string | null,
+  layout: CanvasLayoutPatch,
+): Promise<void> {
+  if (!projectId) return
+  const url = `${VIEWER_URL}/projects/${encodeURIComponent(projectId)}/canvas-layout`
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(layout),
+  })
+  if (!res.ok) {
+    const txt = await res.text().catch(() => '')
+    throw new Error(`POST ${url} → ${res.status} ${res.statusText} ${txt}`)
+  }
 }
 
 /**
@@ -203,30 +214,6 @@ export async function discardPendingDraft(
   )
 }
 
-export async function setCanvasGroupFrame(
-  projectId: string | null,
-  frameId: string,
-  frame: CanvasGroupFrame,
-): Promise<void> {
-  if (!projectId) return
-  await put(
-    `${VIEWER_URL}/projects/${encodeURIComponent(projectId)}/group-frames/${encodeURIComponent(frameId)}`,
-    frame,
-  )
-}
-
-export async function setCanvasGroupFramePosition(
-  projectId: string | null,
-  frameId: string,
-  pos: { x: number; y: number },
-): Promise<void> {
-  if (!projectId) return
-  await patch(
-    `${VIEWER_URL}/projects/${encodeURIComponent(projectId)}/group-frames/${encodeURIComponent(frameId)}/position`,
-    pos,
-  )
-}
-
 // ────────────────────────────────────────────────────────────────────
 // User-dropped / pasted file upload. POSTs multipart/form-data to
 // /projects/:id/upload. Server builds the canvas node + appends it
@@ -289,16 +276,6 @@ export async function apiUploadAttachment(
   const first = nodes[0]
   if (!first) throw new Error('upload failed: server returned no node')
   return first
-}
-
-export async function deleteCanvasGroupFrame(
-  projectId: string | null,
-  frameId: string,
-): Promise<void> {
-  if (!projectId) return
-  await del(
-    `${VIEWER_URL}/projects/${encodeURIComponent(projectId)}/group-frames/${encodeURIComponent(frameId)}`,
-  )
 }
 
 // ────────────────────────────────────────────────────────────────────

@@ -10,7 +10,7 @@ Each skill is a standard `SKILL.md` with YAML frontmatter. Claude Code auto-disc
 | `image-compose` | "Design a character", "Edit this image", "Storyboard mosaic" | Wraps `generate_image.js` (~10–30s) and `generate_image_pro.js` for storyboard mosaics and video-bound character sheets (~3–6 min). |
 | `video-compose` | "Animate this", "Continue the clip", "Restyle the shot" | Wraps `generate_video.js`. Handles I2V, V2V continuation, voice-locked dubs, narrative sequencing. |
 | `voice-compose` | "Give the detective a voice" | Wraps `generate_voice.js`. Attaches to the character node in place. |
-| `groups-compose` | "Group these as Scene 2", "Frame the character refs" | Maintains semantic groupings (scenes, ref sets, act beats) on the canvas. |
+| `groups-compose` | "Group these as Scene 2", "Frame the character refs" | Arranges related nodes and wraps them in visible canvas frames. |
 
 Two more primitives — taking a note ("take a note", "jot down", "remember that") and summarizing the canvas ("what do we have?", "show the graph") — are tiny enough that they live inline in `agent-templates/PROJECT_AGENT.md` instead of as separate skill folders.
 

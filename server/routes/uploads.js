@@ -134,7 +134,7 @@ export function registerUploadRoutes({ app, io, projects, mutatorHooks }) {
         {
           request_id: `viewer-upload-${id}-${crypto.randomUUID()}`,
           op: "addBatch",
-          payload: { nodes: nodePayloads, edges: [], groups: [] },
+          payload: { nodes: nodePayloads, edges: [] },
           actor: "viewer:upload",
         },
         mutatorHooks,
