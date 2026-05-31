@@ -188,7 +188,8 @@ export async function findLatestCodexSession(
 // Mark a project directory trusted so `codex` launches without its "Do you
 // trust the contents of this directory?" prompt. Appends to config.toml only
 // when absent, so it respects an existing decision; auth lives in a separate
-// auth.json, so login is untouched.
+// auth.json, so login is untouched. Gated by the same PAI_AGENT_BYPASS switch
+// as the launch flags.
 async function ensureCodexTrust(projectDir, env = process.env) {
   let abs;
   try { abs = await fsp.realpath(projectDir); }
