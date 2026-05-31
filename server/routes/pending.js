@@ -15,7 +15,13 @@ import { spawn } from "node:child_process";
 import fsp from "node:fs/promises";
 import path from "node:path";
 
+import { getProvider, resolveAgentIdForMeta } from "../agents/index.js";
 import { getCost } from "../model_registry.js";
+import {
+  AGENT_RESULT_CONSUMER_HEADER,
+  WAITING_CLI_RESULT_CONSUMER,
+  enqueueGenerationResultNotification,
+} from "../lib/agent_result_notifications.js";
 import { PAI_REPO_ROOT, pendingDir, projectDir } from "../lib/paths.js";
 import {
   normalizeResultEntry,
@@ -47,6 +53,16 @@ const IMAGE_PRO_DISPLAY_ONLY_PATCH_KEYS = new Set(["aspect_ratio", "image_size"]
 
 function pendingPath(id, jobId) {
   return path.join(pendingDir(id), `${jobId}.json`);
+}
+
+function hasWaitingCliConsumer(req) {
+  return String(req.get(AGENT_RESULT_CONSUMER_HEADER) || "").toLowerCase()
+    === WAITING_CLI_RESULT_CONSUMER;
+}
+
+function supportsSyntheticResultWake(project) {
+  const provider = getProvider(resolveAgentIdForMeta(project?.meta));
+  return provider?.supportsSyntheticResultWake === true;
 }
 
 function isImageProSidecar(entry) {
@@ -135,7 +151,7 @@ function pendingContext(entry) {
 }
 
 export function registerPendingRoutes({ app, projects, broadcasters }) {
-  async function writeResultAndBroadcast(id, jobId, result) {
+  async function writeResultAndBroadcast(id, jobId, result, { notifyAgent = false } = {}) {
     const wrote = await writeResult(id, jobId, result);
     if (!wrote) return false;
     const raw = await readResultEntry(id, jobId);
@@ -145,6 +161,13 @@ export function registerPendingRoutes({ app, projects, broadcasters }) {
       if (!p.generationResults) p.generationResults = new Map();
       p.generationResults.set(jobId, summary);
       broadcasters?.broadcastGenerationResults?.(id);
+      if (notifyAgent && supportsSyntheticResultWake(p)) {
+        try {
+          await enqueueGenerationResultNotification(id, summary);
+        } catch (notifyErr) {
+          console.warn(`[viewer] agent notification enqueue failed for ${id}/${jobId}:`, notifyErr);
+        }
+      }
     }
     return true;
   }
@@ -231,6 +254,7 @@ export function registerPendingRoutes({ app, projects, broadcasters }) {
     if (!entry.script || !ALLOWED_SCRIPTS.has(entry.script)) {
       return res.status(400).json({ error: `unknown script: ${entry.script}` });
     }
+    const notifyAgent = !hasWaitingCliConsumer(req);
     try {
       const child = spawn(
         "node",
@@ -264,7 +288,7 @@ export function registerPendingRoutes({ app, projects, broadcasters }) {
           kind: entry.kind,
         };
         try {
-          await writeResultAndBroadcast(id, jobId, result);
+          await writeResultAndBroadcast(id, jobId, result, { notifyAgent });
           await removePendingSidecar(id, jobId);
         } catch (e) {
           console.warn(`[viewer] result finalize failed for ${id}/${jobId}:`, e);
@@ -297,7 +321,7 @@ export function registerPendingRoutes({ app, projects, broadcasters }) {
           kind: entry.kind,
           klass: "cancelled",
           message: "cancelled by user",
-        });
+        }, { notifyAgent: true });
       }
       await removePendingSidecar(id, jobId);
     } catch (e) {

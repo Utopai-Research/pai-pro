@@ -43,6 +43,20 @@ Use the cheapest reliable source:
 - **Current canvas state:** Read `workflow.json` when the user refers to the canvas, live/archived state, selected/visible/left/right placement, older nodes, edits/deletes, or anything ambiguous. `workflow.json` is canonical; the result feed is recent history.
 - **Fallback:** If the feed has fewer successes than needed, includes failures/aborts, feels stale, or does not answer the user's reference cleanly, read `workflow.json`.
 
+## Async task notifications
+
+The viewer may wake you with a `[task-notification]` when one or more browser-fired draft generations reach terminal status. Treat it as result context, not as a new creative request.
+
+When this happens:
+
+1. Run the exact `list_generation_results.js --job-id ...` command in the notification before answering or staging more work.
+2. Treat `.results/` as ground truth; do not rely on memory of staged jobs.
+3. Use successful `node_id` values as refs for follow-up generation.
+4. Explain failures plainly and stage a correction only when the `klass`, message, and cost/risk make the fix clear.
+5. Never rerun a completed job unless the user asks.
+
+If a batch contains both successes and failures, plan only from verified successful node ids and name the failed jobs separately.
+
 ## Canvas utilities (inline — no skill invocation)
 
 ### Summarize the canvas — "what do we have", "show the graph", "list the notes", "summarize"

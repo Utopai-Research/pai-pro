@@ -28,16 +28,29 @@ import {
 
 interface TerminalPanelProps {
   projectId: string | null
+  inputDisabled?: boolean
 }
 
-export function TerminalPanel({ projectId }: TerminalPanelProps): JSX.Element {
+export function TerminalPanel({
+  projectId,
+  inputDisabled = false,
+}: TerminalPanelProps): JSX.Element {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const termRef = useRef<Terminal | null>(null)
+  const inputDisabledRef = useRef(inputDisabled)
+
+  useEffect(() => {
+    inputDisabledRef.current = inputDisabled
+    if (termRef.current !== null) {
+      termRef.current.options.disableStdin = inputDisabled
+    }
+  }, [inputDisabled])
 
   // Stable handle so the registration effect only fires once.
   const composerHandle = useMemo<ChatComposerHandle>(
     () => ({
       insertAtCursor(text) {
+        if (inputDisabledRef.current) return
         getSocket().emit('pty:input', text)
         termRef.current?.focus()
       },
@@ -66,6 +79,7 @@ export function TerminalPanel({ projectId }: TerminalPanelProps): JSX.Element {
       },
       scrollback: 5000,
       allowProposedApi: true,
+      disableStdin: inputDisabledRef.current,
     })
     const fit = new FitAddon()
     term.loadAddon(fit)
@@ -103,6 +117,7 @@ export function TerminalPanel({ projectId }: TerminalPanelProps): JSX.Element {
     )
 
     const dataDisp = term.onData((data) => {
+      if (inputDisabledRef.current) return
       socket.emit('pty:input', data)
     })
 
