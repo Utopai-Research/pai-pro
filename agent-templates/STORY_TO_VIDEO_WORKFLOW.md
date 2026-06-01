@@ -38,13 +38,13 @@ After a script/story is captured and before recommending refs or video, make one
 
 - Target duration: explicit user duration first; otherwise timestamp sum or a rough estimate from script length.
 - Coverage: planned shot count, with every shot intended as <=15s.
-- Cast and settings: recurring characters, speaking/narration needs, and important locations.
-- Missing anchors: the first character, location, voice, or storyboard dependency blocking the next clip.
+- Cast and settings: recurring characters, material per-scene variants, speaking/narration needs, and important locations.
+- Missing anchors: the first character, variant, location, voice, or storyboard dependency blocking the next clip.
 
 Use this as chat guidance, not a new artifact, unless the user asks to save a note. If the story implies more than roughly 3 minutes, recommend narrowing scope before clip planning.
 
 ```text
-Plan check: ~45s, 3 shots, 2 characters, 1 location. Missing: diner location ref.
+Plan check: ~45s, 3 shots, 2 characters, 1 variant, 1 location. Missing: diner location ref.
 Recommended next:
 - [x] 1. Make the diner location ref before Shot 1.
 - [ ] 2. Type something else.
