@@ -48,9 +48,7 @@ After a terminal `generate_*` result:
 6. Stop and wait unless the user's current message already asked for that concrete action.
 7. On approval, let top-level routing select the atomic skill or local CLI. This workflow does not dispatch nested skills.
 
-Keep the visible recommendation short. When the user needs to choose or approve the next move, prefer checkbox-style Markdown as a visual affordance. It may render as checkboxes, but treat the reply as text; a checked box is not consent by itself.
-
-For one obvious next step:
+Keep the visible recommendation short. When the user needs to choose or approve the next move, prefer checkbox-style Markdown as a visual affordance. It may render as checkboxes, but treat the reply as text; a checked box is not consent by itself. Example:
 
 ```text
 Recommended next:
@@ -59,18 +57,6 @@ Recommended next:
 - [ ] 2. Type something else.
 
 Reply `1` to proceed, or describe what you want.
-```
-
-For multiple useful options, mark at most one soft recommendation:
-
-```text
-Recommended next:
-
-- [x] 1. Create the diner location ref before rendering Shot 1.
-- [ ] 2. Skip refs and render Shot 1 directly.
-- [ ] 3. Type something else.
-
-Reply `1`, `2`, or describe what you want.
 ```
 
 Plain prose is fine for tiny status updates, failures, or cases where a checkbox list would add noise.
