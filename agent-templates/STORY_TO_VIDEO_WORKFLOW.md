@@ -32,6 +32,24 @@ Default story-to-video order:
 
 The workflow recommends the next step; it does not auto-run the pipeline.
 
+## Planning checkpoint
+
+After a script/story is captured and before recommending refs or video, make one compact checkpoint when it helps the next decision:
+
+- Target duration: explicit user duration first; otherwise timestamp sum or a rough estimate from script length.
+- Coverage: planned shot count, with every shot intended as <=15s.
+- Cast and settings: recurring characters, speaking/narration needs, and important locations.
+- Missing anchors: the first character, location, voice, or storyboard dependency blocking the next clip.
+
+Use this as chat guidance, not a new artifact, unless the user asks to save a note. If the story implies more than roughly 3 minutes, recommend narrowing scope before clip planning.
+
+```text
+Plan check: ~45s, 3 shots, 2 characters, 1 location. Missing: diner location ref.
+Recommended next:
+- [x] 1. Make the diner location ref before Shot 1.
+- [ ] 2. Type something else.
+```
+
 ## Recommendation contract
 
 After a terminal `generate_*` result:
@@ -97,7 +115,7 @@ Both paths work here: direct video gets to motion faster; storyboard-first gives
 
 Avoid directive phrasing like "I will choose X" unless the user explicitly delegated the choice.
 
-## Planning checkpoints
+## Pre-render checks
 
 Before recommending clip rendering from a story, inspect `workflow.json` and verify:
 
