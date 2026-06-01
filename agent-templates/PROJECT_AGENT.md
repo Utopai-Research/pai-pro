@@ -53,7 +53,7 @@ For "what do we have", "show the graph", "list the notes", or "summarize":
 For "take a note", "annotate", "jot down", "save this", or "remember that":
 
 1. Read `./workflow.json` to find the newest `note_*`, then add one `note` through the mutator. If there is a previous note, add an edge from it to the new note.
-3. Payload shape:
+2. Payload shape:
    ```json
    {
      "nodes": [{
@@ -67,7 +67,7 @@ For "take a note", "annotate", "jot down", "save this", or "remember that":
      "edges": [{ "from": "<previous note id>", "to": "$0" }]
    }
    ```
-4. Call `canvas_mutate.js --op addBatch --payload-json '<one-line JSON>'`. Confirm in one short sentence. Never write `workflow.json` directly.
+3. Call `canvas_mutate.js --op addBatch --payload-json '<one-line JSON>'`. Confirm in one short sentence. Never write `workflow.json` directly.
 
 ## Media CLIs (`server/cli/`)
 
