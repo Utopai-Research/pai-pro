@@ -8,8 +8,8 @@ Codex CLI can run inside the embedded browser terminal.
 
 | Goal | Mode | Agent | Use |
 |---|---|---|---|
-| Try PAI-Pro or use it for daily filmmaking | Docker | Claude Code default | `docker compose up --build` |
-| Try PAI-Pro or use it for daily filmmaking | Docker | Codex CLI | `PAI_DEFAULT_AGENT_ID=codex docker compose up --build` |
+| Try PAI-Pro or use it for daily filmmaking | Docker | Claude Code default | `./scripts/docker-start.sh` |
+| Try PAI-Pro or use it for daily filmmaking | Docker | Codex CLI | `PAI_DEFAULT_AGENT_ID=codex ./scripts/docker-start.sh` |
 | Hack on the web or server source | Host mode | Claude Code default | `./scripts/setup --agent claude` then `./scripts/start.sh` |
 | Hack on the web or server source | Host mode | Codex CLI | `./scripts/setup --agent codex` then `PAI_DEFAULT_AGENT_ID=codex ./scripts/start.sh` |
 
@@ -44,7 +44,7 @@ printf "Paste your PAI_KEY: " && read -r key && sed -i.bak "s|^PAI_KEY=.*|PAI_KE
 
 | Mode | Claude Code | Codex CLI | Open |
 |---|---|---|---|
-| Docker | `docker compose up --build` | `PAI_DEFAULT_AGENT_ID=codex docker compose up --build` | <http://localhost:7588> |
+| Docker | `./scripts/docker-start.sh` | `PAI_DEFAULT_AGENT_ID=codex ./scripts/docker-start.sh` | <http://localhost:7588> |
 | Host | `./scripts/setup --agent claude && npm --prefix server install && npm --prefix web install && ./scripts/start.sh` | `./scripts/setup --agent codex && npm --prefix server install && npm --prefix web install && PAI_DEFAULT_AGENT_ID=codex ./scripts/start.sh` | <http://localhost:7443> |
 
 In the embedded terminal, sign in to the selected CLI if prompted. Claude users
@@ -70,6 +70,11 @@ setup, and stdin behavior.
 Docker is the recommended path for trying PAI-Pro and for day-to-day filmmaking.
 It bundles the runtime dependencies and keeps the unattended agent inside a
 container boundary.
+
+Use `./scripts/docker-start.sh` to launch Docker. It pulls the latest git state
+with `git pull --ff-only`, rebuilds the Docker image, and force-recreates the
+container while preserving the named Docker volumes that store projects and
+agent auth/session state.
 
 Prerequisite: Docker Desktop on macOS/Windows, or Docker Engine plus Compose v2
 on Linux. On Windows, use PowerShell or WSL2 rather than `cmd.exe`; WSL2 users
@@ -102,8 +107,8 @@ and use your own public viewer URL for provider reference fetching. Set
 To reset Docker project data:
 
 ```bash
-docker compose down -v
-docker compose up --build
+COMPOSE_PROJECT_NAME=pai-pro docker compose down -v
+./scripts/docker-start.sh
 ```
 
 `down -v` permanently deletes every project and generated asset in the Docker
@@ -157,7 +162,7 @@ agent untrusted prompts:
 
 ```bash
 PAI_AGENT_BYPASS=0 ./scripts/start.sh
-PAI_AGENT_BYPASS=0 docker compose up --build
+PAI_AGENT_BYPASS=0 ./scripts/docker-start.sh
 ```
 
 Any value other than `0`, `false`, `no`, or `off` keeps the bypass enabled.

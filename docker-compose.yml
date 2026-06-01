@@ -2,7 +2,7 @@
 #
 # Quickstart:
 #   cp .env.example .env && $EDITOR .env
-#   docker compose up --build
+#   ./scripts/docker-start.sh
 #   → http://localhost:7588
 
 services:
