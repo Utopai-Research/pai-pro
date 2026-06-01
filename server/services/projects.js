@@ -59,6 +59,11 @@ Codex-specific notes:
 `;
 
 const AGENT_TEMPLATE_PATH = path.join(PAI_REPO_ROOT, "agent-templates", "PROJECT_AGENT.md");
+const STORY_TO_VIDEO_WORKFLOW_TEMPLATE_PATH = path.join(
+  PAI_REPO_ROOT,
+  "agent-templates",
+  "STORY_TO_VIDEO_WORKFLOW.md",
+);
 const SKILLS_ROOT = path.join(PAI_REPO_ROOT, "skills");
 
 // Per-project settings.local.json — excludes the root dev CLAUDE.md from
@@ -96,6 +101,15 @@ export async function ensureProjectStructure(id, { agentId = "claude" } = {}) {
   if (!(await fileExists(projectAgentPath))) {
     const template = await fsp.readFile(AGENT_TEMPLATE_PATH, "utf8");
     await fsp.writeFile(projectAgentPath, template);
+  }
+
+  // STORY_TO_VIDEO_WORKFLOW.md — on-demand recommendation manual for projects
+  // that are driving a story/script toward a finished reel. It is copied
+  // beside PROJECT_AGENT.md but intentionally not imported by provider wrappers.
+  const storyToVideoWorkflowPath = path.join(dir, "STORY_TO_VIDEO_WORKFLOW.md");
+  if (!(await fileExists(storyToVideoWorkflowPath))) {
+    const template = await fsp.readFile(STORY_TO_VIDEO_WORKFLOW_TEMPLATE_PATH, "utf8");
+    await fsp.writeFile(storyToVideoWorkflowPath, template);
   }
 
   if (resolvedAgentId === "codex") {

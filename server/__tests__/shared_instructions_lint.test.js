@@ -26,7 +26,10 @@ const FORBIDDEN = [
 ];
 
 async function sharedInstructionFiles() {
-  const files = [join(REPO_ROOT, "agent-templates", "PROJECT_AGENT.md")];
+  const files = [
+    join(REPO_ROOT, "agent-templates", "PROJECT_AGENT.md"),
+    join(REPO_ROOT, "agent-templates", "STORY_TO_VIDEO_WORKFLOW.md"),
+  ];
   const skillsRoot = join(REPO_ROOT, "skills");
   const entries = await readdir(skillsRoot, { withFileTypes: true });
   for (const entry of entries) {
