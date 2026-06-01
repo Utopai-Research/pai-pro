@@ -49,7 +49,7 @@ printf "Paste your PAI_KEY: " && read -r key && sed -i.bak "s|^PAI_KEY=.*|PAI_KE
 
 In the embedded terminal, sign in to the selected CLI if prompted. Claude users
 can run `/login`; Codex users can complete the Codex login prompt. In Docker,
-you can also run `docker compose exec pai-pro codex login` if host Codex auth
+you can also run `docker exec -it pai-pro codex login` if host Codex auth
 was not imported.
 
 ## Agent support
@@ -82,7 +82,7 @@ should clone into the WSL2 home directory for better file-system performance.
 
 The image includes:
 
-- ffmpeg, poppler, cloudflared, Claude Code, and pinned Codex CLI.
+- ffmpeg, poppler, cloudflared, Claude Code, and Codex CLI.
 - Native Node modules rebuilt for Linux.
 - Bubblewrap for Codex's normal Linux sandbox path.
 - `/healthz` checks for media tools, volume writability, and the selected

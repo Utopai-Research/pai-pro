@@ -216,7 +216,7 @@ fi
 verify_tunnel_reachable
 stop_probe_server
 
-# 5. PAI_KEY warn-but-don't-block. `docker compose up` has no TTY for an
+# 5. PAI_KEY warn-but-don't-block. Docker startup has no TTY for an
 #    interactive prompt; the next-best onboarding hint is a loud message
 #    before the viewer boots so the user knows why generation later
 #    fails. Canvas, terminal, project switching all work without a key —
@@ -230,7 +230,7 @@ if [ -z "${PAI_KEY:-}" ]; then
     echo "  .env (next to docker-compose.yml) and restart:"
     echo ""
     echo "    echo \"PAI_KEY=PAI_yourkey\" >> .env"
-    echo "    docker compose restart"
+    echo "    ./scripts/docker-start.sh"
     echo ""
     echo "  Get a key: https://pai-pro.utopaistudios.com/keys"
     echo "════════════════════════════════════════════════════════════════"
