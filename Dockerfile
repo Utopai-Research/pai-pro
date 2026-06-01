@@ -14,7 +14,7 @@ ARG NODE_TAG=22-slim
 # build. Bump via
 # `docker compose build --build-arg CLOUDFLARED_VERSION=<x>` to test.
 ARG CLOUDFLARED_VERSION=2026.5.0
-ARG CODEX_VERSION=0.134.0
+ARG CODEX_VERSION=latest
 
 # ─── builder ──────────────────────────────────────────────────────────
 FROM node:${NODE_TAG} AS builder
@@ -124,9 +124,13 @@ USER node
 RUN curl -fsSL https://claude.ai/install.sh | bash || \
     echo "[build] claude CLI install failed — PTY tab will be degraded"
 
-# Codex CLI — pin the npm package so Docker's supported-agent surface is
-# reproducible. Install as node into /home/node/.local/bin, which is on PATH.
-RUN npm config set prefix /home/node/.local && \
+# Codex CLI — default to npm's latest dist-tag so fresh Docker builds pick
+# up Codex updates. Override CODEX_VERSION to reproduce a specific release.
+# CODEX_INSTALL_REFRESH lets scripts invalidate only this install layer.
+# Install as node into /home/node/.local/bin, which is on PATH.
+ARG CODEX_INSTALL_REFRESH=manual
+RUN echo "[build] codex install refresh ${CODEX_INSTALL_REFRESH}" >/dev/null && \
+    npm config set prefix /home/node/.local && \
     (npm install -g "@openai/codex@${CODEX_VERSION}" --no-audit --no-fund && \
      codex --version || \
      echo "[build] codex CLI install failed - Codex PTY will be degraded")

@@ -68,7 +68,10 @@ start_docker() {
     export COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-pai-pro}"
 
     echo "Building Docker image..."
-    docker compose build --pull
+    local codex_install_refresh="${CODEX_INSTALL_REFRESH:-$(date -u +%Y%m%d%H%M%S)}"
+    docker compose build --pull \
+        --build-arg CODEX_VERSION="${CODEX_VERSION:-latest}" \
+        --build-arg CODEX_INSTALL_REFRESH="$codex_install_refresh"
 
     echo "Recreating Docker container..."
     docker compose up -d --force-recreate --remove-orphans

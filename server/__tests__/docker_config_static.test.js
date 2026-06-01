@@ -7,13 +7,21 @@ import { fileURLToPath } from "node:url";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, "..", "..");
 
-test("Docker image installs Codex CLI with a pinned build arg", async () => {
+test("Docker image installs Codex CLI with an overridable latest build arg", async () => {
   const dockerfile = await readFile(join(REPO_ROOT, "Dockerfile"), "utf8");
   assert.match(dockerfile, /bubblewrap/);
-  assert.match(dockerfile, /ARG CODEX_VERSION=0\.134\.0/);
+  assert.match(dockerfile, /ARG CODEX_VERSION=latest/);
+  assert.match(dockerfile, /ARG CODEX_INSTALL_REFRESH=manual/);
   assert.match(dockerfile, /npm install -g "@openai\/codex@\$\{CODEX_VERSION\}"/);
   assert.match(dockerfile, /codex --version/);
   assert.match(dockerfile, /codex CLI install failed - Codex PTY will be degraded/);
+});
+
+test("Docker launcher refreshes the Codex latest install layer", async () => {
+  const script = await readFile(join(REPO_ROOT, "scripts", "docker-start.sh"), "utf8");
+  assert.match(script, /CODEX_INSTALL_REFRESH:-\$\(date -u \+%Y%m%d%H%M%S\)/);
+  assert.match(script, /--build-arg CODEX_VERSION="\$\{CODEX_VERSION:-latest\}"/);
+  assert.match(script, /--build-arg CODEX_INSTALL_REFRESH="\$codex_install_refresh"/);
 });
 
 test("docker compose passes default agent and isolates Docker Codex state", async () => {
