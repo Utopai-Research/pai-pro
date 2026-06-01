@@ -17,10 +17,12 @@ import { tmpdir } from "node:os";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { writePending } from "../cli/_pending.js";
+import { markSidecarRunning, runningTimeoutMsForEntry } from "../routes/pending.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const VIEWER_PATH = resolve(__dirname, "..", "local_viewer.js");
 const TEST_PROJECT_ID = "test_pending";
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 let viewerProc = null;
 let projectsDir = null;
@@ -107,6 +109,17 @@ async function waitForResult(jobId, timeoutMs = 5000) {
   throw new Error(`result sidecar did not appear for ${jobId}`);
 }
 
+async function waitForPendingInBundle(jobId, timeoutMs = 5000) {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    const bundle = await fetch(`${baseUrl}/projects/${TEST_PROJECT_ID}`).then((res) => res.json());
+    const found = bundle.pending_generations?.find((p) => p.id === jobId);
+    if (found) return found;
+    await new Promise((r) => setTimeout(r, 50));
+  }
+  throw new Error(`pending entry did not appear in bundle for ${jobId}`);
+}
+
 async function seedDraft({ jobId, overrides = {} } = {}) {
   const id = jobId || `pending_${Math.random().toString(36).slice(2, 10)}`;
   const payload = {
@@ -171,6 +184,58 @@ function parseReplies(stdout) {
 
 test.before(async () => { await startViewer(); });
 test.after(async () => { await stopViewer(); });
+
+test("markSidecarRunning refreshes the running clock", () => {
+  const prior = "2026-01-01T00:00:00.000Z";
+  const now = "2026-01-02T03:04:05.000Z";
+  const running = markSidecarRunning({
+    id: "pending_old",
+    kind: "image",
+    stage: "draft",
+    prompt: "x",
+    created_at: prior,
+  }, now);
+  assert.equal(running.stage, "running");
+  assert.equal(running.created_at, now);
+});
+
+test("runningTimeoutMsForEntry keeps worker timeouts separate from 24h pending visibility", () => {
+  assert.equal(runningTimeoutMsForEntry({ kind: "image", script: "generate_image.js" }), 10 * 60 * 1000);
+  assert.equal(runningTimeoutMsForEntry({ kind: "image", script: "generate_image_pro.js" }), 30 * 60 * 1000);
+  assert.equal(runningTimeoutMsForEntry({ kind: "audio", script: "generate_voice.js" }), 5 * 60 * 1000);
+  assert.equal(runningTimeoutMsForEntry({ kind: "video", script: "generate_video.js" }), 40 * 60 * 1000);
+});
+
+test("running pending sidecars remain visible for nearly 24h", async () => {
+  const createdAt = new Date(Date.now() - 23 * 60 * 60 * 1000).toISOString();
+  const { jobId } = await seedDraft({
+    overrides: {
+      stage: "running",
+      created_at: createdAt,
+    },
+  });
+
+  const pending = await waitForPendingInBundle(jobId);
+  assert.equal(pending.stage, "running");
+  assert.equal(pending.created_at, createdAt);
+  await rm(sidecarPath(jobId), { force: true });
+});
+
+test("POST /generate rejects drafts older than the 24h pending window", async () => {
+  const { jobId } = await seedDraft({
+    overrides: {
+      created_at: new Date(Date.now() - DAY_MS - 1000).toISOString(),
+    },
+  });
+  const r = await fetch(`${baseUrl}/projects/${TEST_PROJECT_ID}/pending/${jobId}/generate`, {
+    method: "POST",
+  });
+  assert.equal(r.status, 404);
+  const body = await r.json();
+  assert.equal(body.error, "draft not found");
+  const sidecar = await readSidecar(jobId);
+  assert.equal(sidecar.stage, "draft");
+});
 
 test("PATCH prompt-only updates sidecar + argv; cost_usd untouched", async () => {
   const { jobId } = await seedDraft();

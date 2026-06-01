@@ -6,9 +6,9 @@
 // The viewer chokidar-watches `projects/<id>/.pending/` and re-broadcasts
 // to every browser tab.
 //
-// Draft sidecars can live across a review session. Running sidecars
-// should track an active CLI; the viewer hides stale running sidecars
-// after 15 minutes when a crashed CLI never reaches finally.
+// Draft/running sidecars can live across a review session. The viewer
+// hides them after the project-level stale window if no result sidecar
+// arrives.
 //
 // The CLI's cwd is `projects/<active>/` (set by the agent's pty), so we
 // resolve the sidecar relative to that. If the CLI is run from elsewhere,
