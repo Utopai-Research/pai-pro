@@ -14,11 +14,13 @@ Do not copy upstream state paths or tool names into project work. This file is t
 
 Read this file when:
 
-- The user gives a story/script and wants to drive toward a video.
+- The user gives a story/script, uploads one and asks you to work with it, or asks you to write/adapt one.
 - The user asks "what next?" or "how do we finish this?"
 - A terminal media generation result lands during story-to-video work.
 - A decision spans more than one generation step, such as refs plus voices plus clips, or clip render strategy.
 - The project has multiple planned shots and the next move affects reel completion.
+
+Loading this file at script/story intake is for context and next-step judgment. It does not authorize automatic script splitting, reference generation, or paid media generation; the user still has to approve those steps.
 
 ## When not to read this
 
