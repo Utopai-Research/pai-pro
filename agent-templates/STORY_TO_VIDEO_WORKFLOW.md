@@ -2,9 +2,9 @@
 
 This manual gives the project agent a local, workable recommendation loop for moving from story/script to final reel. It is on-demand context, not a skill. The atomic skills still own how to generate scripts, images, voices, videos, and layouts.
 
-## When to read this
+## Scope
 
-Read this file when:
+Use this workflow for story-to-video sequencing when:
 
 - The user gives a story/script, uploads one and asks you to work with it, or asks you to write/adapt one.
 - The user asks "what next?" or "how do we finish this?"
@@ -12,11 +12,9 @@ Read this file when:
 - A decision spans more than one generation step, such as refs plus voices plus clips, or clip render strategy.
 - The project has multiple planned shots and the next move affects reel completion.
 
-Loading this file at script/story intake is for context and next-step judgment. It does not authorize automatic script splitting, reference generation, or paid media generation; the user still has to approve those steps.
+Use it for context, sequencing, and next-step judgment. It does not authorize automatic script splitting, reference generation, or paid media generation; the user still has to approve those steps.
 
-## When not to read this
-
-Do not load this workflow for ad-hoc one-off images, one-off videos, simple edits, standalone voice tests, or isolated canvas organization. The capability skills are enough for those.
+Do not use this workflow for ad-hoc one-off images, one-off videos, simple edits, standalone voice tests, or isolated canvas organization. The capability skills are enough for those.
 
 Every stage has an off-ramp. If the user asks to skip ahead, redo a ref, make a poster, or generate one clip outside the story pipeline, follow the user's request with the matching atomic skill.
 
