@@ -1,9 +1,9 @@
 #!/bin/bash
 # pai-pro — Docker launcher/update path.
 #
-# Pulls the latest repo state, rebuilds the Docker image, and recreates the
-# container while preserving the named Docker volumes that hold projects and
-# Codex auth/session state.
+# Pulls the latest repo state, rebuilds this checkout's Docker image, and
+# recreates the container while preserving the named Docker volumes that hold
+# projects and agent auth/session state.
 
 set -euo pipefail
 
@@ -67,11 +67,13 @@ start_docker() {
     # docker-compose.yml and preserves existing pai-pro_pai_projects data.
     export COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-pai-pro}"
 
-    echo "Building Docker image..."
-    local codex_install_refresh="${CODEX_INSTALL_REFRESH:-$(date -u +%Y%m%d%H%M%S)}"
-    docker compose build --pull \
-        --build-arg CODEX_VERSION="${CODEX_VERSION:-latest}" \
-        --build-arg CODEX_INSTALL_REFRESH="$codex_install_refresh"
+    echo "Building Docker image from ${PAI_REPO_ROOT}..."
+    local build_args=(--pull --build-arg CODEX_VERSION="${CODEX_VERSION:-latest}")
+    if [ "$PAI_DEFAULT_AGENT_ID" = "codex" ]; then
+        local codex_install_refresh="${CODEX_INSTALL_REFRESH:-$(date -u +%Y%m%d%H%M%S)}"
+        build_args+=(--build-arg CODEX_INSTALL_REFRESH="$codex_install_refresh")
+    fi
+    docker compose build "${build_args[@]}"
 
     echo "Recreating Docker container..."
     docker compose up -d --force-recreate --remove-orphans

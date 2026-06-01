@@ -72,9 +72,10 @@ It bundles the runtime dependencies and keeps the unattended agent inside a
 container boundary.
 
 Use `./scripts/docker-start.sh` to launch Docker. It pulls the latest git state
-with `git pull --ff-only`, rebuilds the Docker image, and force-recreates the
-container while preserving the named Docker volumes that store projects and
-agent auth/session state.
+with `git pull --ff-only`, rebuilds the Docker image from this checkout, and
+force-recreates the container while preserving the named Docker volumes that
+store projects and agent auth/session state. When Codex is selected, it also
+refreshes the Codex npm `latest` install layer during the rebuild.
 
 Prerequisite: Docker Desktop on macOS/Windows, or Docker Engine plus Compose v2
 on Linux. On Windows, use PowerShell or WSL2 rather than `cmd.exe`; WSL2 users

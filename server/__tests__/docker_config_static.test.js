@@ -19,9 +19,21 @@ test("Docker image installs Codex CLI with an overridable latest build arg", asy
 
 test("Docker launcher refreshes the Codex latest install layer", async () => {
   const script = await readFile(join(REPO_ROOT, "scripts", "docker-start.sh"), "utf8");
-  assert.match(script, /CODEX_INSTALL_REFRESH:-\$\(date -u \+%Y%m%d%H%M%S\)/);
+  assert.match(script, /docker compose build "\$\{build_args\[@\]\}"/);
   assert.match(script, /--build-arg CODEX_VERSION="\$\{CODEX_VERSION:-latest\}"/);
-  assert.match(script, /--build-arg CODEX_INSTALL_REFRESH="\$codex_install_refresh"/);
+  assert.match(script, /if \[ "\$PAI_DEFAULT_AGENT_ID" = "codex" \]; then/);
+  assert.match(script, /CODEX_INSTALL_REFRESH:-\$\(date -u \+%Y%m%d%H%M%S\)/);
+  assert.match(script, /build_args\+=\(--build-arg CODEX_INSTALL_REFRESH="\$codex_install_refresh"\)/);
+});
+
+test("Docker launcher builds the current checkout and recreates the container", async () => {
+  const compose = await readFile(join(REPO_ROOT, "docker-compose.yml"), "utf8");
+  const script = await readFile(join(REPO_ROOT, "scripts", "docker-start.sh"), "utf8");
+  assert.match(compose, /context:\s+\./);
+  assert.match(script, /PAI_REPO_ROOT="\$\(cd "\$SCRIPT_DIR\/\.\." && pwd\)"/);
+  assert.match(script, /cd "\$PAI_REPO_ROOT"/);
+  assert.match(script, /git pull --ff-only/);
+  assert.match(script, /docker compose up -d --force-recreate --remove-orphans/);
 });
 
 test("docker compose passes default agent and isolates Docker Codex state", async () => {
