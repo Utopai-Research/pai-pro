@@ -28,7 +28,7 @@ After a terminal media generation result, close with one concrete next step. For
 
 Read `./workflow.json` when the recommendation depends on missing shots, references, voices, clips, or reel order. Draft-only, failed, and cancelled results do not advance the creative pipeline.
 
-Read `./STORY_TO_VIDEO_WORKFLOW.md` whenever the user brings a script/story, asks you to write or adapt one, asks "what next?", or the decision spans more than one generation step. Use it for sequencing and recommendations; `script-compose` still owns script drafting/capture/splitting. Keep each recommendation soft and concrete; wait for approval before running the next paid generation.
+Read `./STORY_TO_VIDEO_WORKFLOW.md` whenever the user brings a script/story, asks you to write or adapt one, asks "what next?", or the decision spans more than one generation step. Use it for sequencing and recommendations; `script-compose` still owns script drafting/capture/splitting. Keep each recommendation soft and concrete; wait for approval before running the next paid generation. For story-workflow choices, prefer its checkbox-style recommendation format so the user can reply with a short number or type their own direction.
 
 ## Choosing context
 
