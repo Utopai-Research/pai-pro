@@ -25,7 +25,9 @@ When script shot notes exist on canvas (from `script-compose`), the 4-section ti
 
 - The note's body is a verbatim screenplay slice (slug + action + dialogue).
 - Translate the action lines into Visuals + Action wording in the timeline.
-- Preserve dialogue verbatim — write as `[Character] says: "…"`. If a character image ref is also attached, use *"the character in @Image1 says: …"*.
+- Every dialogue/VO line from the shot note must appear in the video prompt verbatim.
+- Preserve dialogue verbatim — write as `[Character] says exactly: "…"`. If a character image ref is also attached, use *"the character in @Image1 says exactly: …"*.
+- If an audio ref exists for that line, still include the exact text and add: *"Use @Audio1 for timing, cadence, and voice. Keep the words unchanged."*
 - Preserve shot ordering — Shot 1 → SHOT 1 in the timeline, etc. Use the incoming `kind: "derived"` edge from the script note (`subtype === "script"`) to group shots that share a parent.
 
 ## Cross-skill source — storyboard mosaic
@@ -71,7 +73,7 @@ speed ramp ×2 (shots 1, 4) — energy punch-ins; whip pan ×1 (shot 3) — venu
 Pattern-specific notes (the role vocabulary itself is in SKILL.md):
 
 - **Character image refs:** identity locks across all shots in the timeline.
-- **Voice timbre:** assign to specific shots — *"SHOT 3: …; voice from @Audio1"*.
+- **Spoken audio:** assign to specific shots — *`SHOT 3: the character in @Image1 says exactly: "...". Use @Audio1 for timing, cadence, and voice.`*
 - **Camera-move source:** rare — borrow camera grammar into one specific shot.
 
 ## Worked examples

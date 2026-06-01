@@ -43,7 +43,7 @@ For ordinary single-shot polish (non-storyboard), use this scaffold. Fill each s
 
 Pattern-specific notes (the role vocabulary itself is in SKILL.md):
 
-- **Lip-sync:** combine character image ref + voice timbre. Use *"the character in @Image1 says: …"*; never `@Image1 says` (images don't talk).
+- **Lip-sync:** combine character image ref + spoken audio. Use *`The character in @Image1 says exactly: "...". Use @Audio1 for timing, cadence, and voice. Keep the words unchanged.`* Never `@Image1 says` (images don't talk).
 - **Camera-move source:** borrow camera grammar from `@Video1` without re-rendering the source.
 
 ## Worked examples

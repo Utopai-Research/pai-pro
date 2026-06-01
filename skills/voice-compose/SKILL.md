@@ -5,7 +5,7 @@ description: Designs and attaches voices to characters on the filmmaking canvas 
 
 **Stage by default.** Every `generate_voice.js` call goes through `--stage`; the command waits until the user fires or cancels the draft from the canvas, then prints the terminal result as its final JSON line.
 
-`--text` is the exact spoken text. Preserve user-provided dialogue and narration verbatim unless the user asked for a rewrite. After generation, `audio_result.data.text` is the speech source of truth for downstream `video-compose`; video prompts should reference that audio node instead of paraphrasing its words.
+`--text` is the exact spoken text. Preserve user-provided dialogue and narration verbatim unless the user asked for a rewrite. After generation, `audio_result.data.text` is the speech source of truth for downstream `video-compose`; video prompts should include that text verbatim and use the audio node for timing, cadence, and voice.
 
 ## Patterns
 

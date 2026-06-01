@@ -54,9 +54,9 @@ Capability skills own CLI flags, node grammar, reference flags, and failure reco
 - Spoken words live on script/shot notes and `audio_result.data.text`.
 - `voice-compose` owns generating or preserving the exact spoken text.
 - `audio_result.data.text` is the exact speech source of truth after voice generation.
-- `video-compose` should reference audio nodes for timing, cadence, and timbre. It should not rewrite, paraphrase, or invent dialogue in the video prompt when an audio node already carries the speech.
-- For off-screen narration, use wording like: `Use narration timing and cadence from @Audio1. Visuals should pace to the narration. Do not render captions or on-screen transcript text.`
-- For on-screen dialogue with a character image, use wording like: `The character in @Image1 performs to the spoken audio from @Audio1. Keep the spoken words from @Audio1 unchanged.`
+- `video-compose` should include spoken text verbatim in the video prompt and use audio nodes for timing, cadence, and voice. It should not rewrite, paraphrase, or invent dialogue when an audio node already carries the speech.
+- For off-screen narration, use wording like: `V.O. says exactly: "...". Use @Audio1 for narration timing, cadence, and voice. Visuals should pace to the narration. Do not render captions or on-screen transcript text.`
+- For on-screen dialogue with a character image, use wording like: `The character in @Image1 says exactly: "...". Use @Audio1 for timing, cadence, and voice. Keep the words unchanged.`
 
 ## Recommendation shape
 
