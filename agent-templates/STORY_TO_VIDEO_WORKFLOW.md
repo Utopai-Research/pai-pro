@@ -52,7 +52,6 @@ Keep the visible recommendation short. When the user needs to choose or approve 
 
 ```text
 Recommended next:
-
 - [x] 1. Split this script into <=15s shot notes.
 - [ ] 2. Type something else.
 
@@ -60,6 +59,8 @@ Reply `1` to proceed, or describe what you want.
 ```
 
 Plain prose is fine for tiny status updates, failures, or cases where a checkbox list would add noise.
+
+Later examples may omit the reply line for brevity; include it in real user prompts.
 
 ## Consent and gates
 
@@ -113,7 +114,10 @@ Before recommending clip rendering from a story, inspect `workflow.json` and ver
 If the state is ambiguous, recommend the checkpoint rather than dispatching video:
 
 ```text
-Before rendering, I need one checkpoint: we have Shot 1 and Shot 2, but only the detective ref. Recommended next: make the diner location ref so the first clip has a setting anchor.
+Before rendering, I need one checkpoint: Shot 1 and Shot 2 exist, but only the detective ref.
+Recommended next:
+- [x] 1. Make the diner location ref for Shot 1.
+- [ ] 2. Type something else.
 ```
 
 For scripts longer than roughly 3 minutes, call out scope before clip planning. For individual video clips, keep planned clip durations within the local video model's 15-second cap.
@@ -125,7 +129,10 @@ For scripts longer than roughly 3 minutes, call out scope before clip planning. 
 If a `note` with `data.subtype: "script"` lands, recommend splitting it into shot notes and extracting characters/locations.
 
 ```text
-Captured @note_3. Recommended next: split it into <=15s shot notes and pull the character/location list, because those become the anchors for references and clips.
+Captured @note_3.
+Recommended next:
+- [x] 1. Split it into <=15s shot notes and extract characters/locations.
+- [ ] 2. Type something else.
 ```
 
 On approval, route to `script-compose`.
@@ -135,7 +142,10 @@ On approval, route to `script-compose`.
 If shot notes exist but video-bound character references are missing, recommend a 4-panel character reference sheet for the next recurring character.
 
 ```text
-The shot notes are ready. Recommended next: make a 4-panel reference sheet for <Character>, so the video model has front/profile/back/closeup identity before we render clips.
+The shot notes are ready.
+Recommended next:
+- [x] 1. Make a 4-panel reference sheet for <Character>.
+- [ ] 2. Type something else.
 ```
 
 On approval, route to `image-compose`.
@@ -149,7 +159,10 @@ Priority:
 3. Refs are ready -> recommend storyboarding or rendering the first planned shot.
 
 ```text
-Generated @image_5 for <Character>. Recommended next: create the <Location> reference before rendering Shot 1, so the first video has both identity and setting anchors.
+Generated @image_5 for <Character>.
+Recommended next:
+- [x] 1. Create the <Location> reference before rendering Shot 1.
+- [ ] 2. Type something else.
 ```
 
 ### Location reference landed
@@ -161,7 +174,10 @@ Priority:
 3. User is optimizing for speed or already asked to render -> recommend direct video.
 
 ```text
-Generated @image_7 for <Location>. Recommended next: create a 2x2 storyboard for Shot 1, because the composition is still being decided before we spend on video.
+Generated @image_7 for <Location>.
+Recommended next:
+- [x] 1. Create a 2x2 storyboard for Shot 1.
+- [ ] 2. Type something else.
 ```
 
 ### Voice landed
@@ -169,7 +185,10 @@ Generated @image_7 for <Location>. Recommended next: create a 2x2 storyboard for
 Recommend using it with the matching character/image ref in the next dialogue or narration clip.
 
 ```text
-Generated @audio_2. Recommended next: render the dialogue shot with @image_5 as the character anchor and @audio_2 as the voice reference.
+Generated @audio_2.
+Recommended next:
+- [x] 1. Render the dialogue shot with @image_5 and @audio_2.
+- [ ] 2. Type something else.
 ```
 
 ### Storyboard landed
@@ -177,7 +196,10 @@ Generated @audio_2. Recommended next: render the dialogue shot with @image_5 as 
 Recommend animating it into the matching clip. Keep character/location refs attached when they authored the storyboard.
 
 ```text
-Generated @image_9 storyboard. Recommended next: animate it into the matching 15s clip, keeping the character/location references attached for continuity.
+Generated @image_9 storyboard.
+Recommended next:
+- [x] 1. Animate it into the matching 15s clip.
+- [ ] 2. Type something else.
 ```
 
 ### First video clip landed
@@ -189,7 +211,10 @@ If more shot notes remain:
 3. Usable final shot -> recommend adding it to the Timeline reel.
 
 ```text
-Generated @video_2. Recommended next: render Shot 3 as a continuation from @video_2, because it is the same scene and the character action should carry through.
+Generated @video_2.
+Recommended next:
+- [x] 1. Render Shot 3 as a continuation from @video_2.
+- [ ] 2. Type something else.
 ```
 
 ### Multiple clips exist
@@ -197,7 +222,10 @@ Generated @video_2. Recommended next: render Shot 3 as a continuation from @vide
 If several clips exist but few have numeric `shot_id`, recommend ordering the best clips in the Timeline before spending more.
 
 ```text
-You have three rendered clips now. Recommended next: put them on the Timeline in story order and preview the reel before generating alternates.
+You have three rendered clips now.
+Recommended next:
+- [x] 1. Put them on the Timeline in story order and preview the reel.
+- [ ] 2. Type something else.
 ```
 
 ### Reel is ordered
@@ -205,7 +233,10 @@ You have three rendered clips now. Recommended next: put them on the Timeline in
 If planned clips have numeric `shot_id` values and the user wants a final file, recommend local stitching.
 
 ```text
-The planned clips are on the reel. Recommended next: stitch the reel and review the exported MP4 for pacing before generating alternates.
+The planned clips are on the reel.
+Recommended next:
+- [x] 1. Stitch the reel and review the exported MP4.
+- [ ] 2. Type something else.
 ```
 
 On approval, run:
@@ -219,44 +250,42 @@ node "$PAI_REPO_ROOT/server/cli/reel_stitch.js"
 When a story has ready shots/refs and the user has not chosen the video path, ask:
 
 ```text
-How would you like to render the clips?
+Choose render path:
+- [ ] 1. Go straight to video for the fastest path to motion.
+- [ ] 2. Generate storyboard images first for composition control.
+- [ ] 3. Type something else.
 
-A. Go straight to video. Fastest path to motion; iterate through video generations.
-B. Generate storyboard images first. More visual control; iterate composition before video.
-Other: describe your own approach.
-
-Reply A, B, or describe what you want.
+Reply `1`, `2`, or describe what you want.
 ```
 
-Stop after asking. For single-clip work, this may be enough before video staging. For multi-clip work, ask Render dispatch after the user picks A or B unless they provided a combined answer.
+Stop after asking. For single-clip work, this may be enough before video staging. For multi-clip work, ask Render dispatch after the user picks option 1 or 2 unless they provided a combined answer.
 
 ## Render dispatch
 
 For multi-clip work, dispatch is separate from render approach:
 
 ```text
-How should the clips be rendered?
+Choose clip dispatch:
+- [ ] 1. Hybrid: chain within scenes; render separate scenes in parallel.
+- [ ] 2. Parallel: render all clips independently.
+- [ ] 3. Sequential: each clip continues from the previous one.
+- [ ] 4. Type something else.
 
-Hybrid - chain within scenes for continuity, render separate scenes in parallel for speed.
-Parallel - render all clips independently; fastest when clips do not depend on each other.
-Sequential - each clip continues from the previous one; slowest, strongest continuity.
-Other - describe your own approach.
-
-Reply Hybrid, Parallel, Sequential, or describe what you want.
+Reply `1`, `2`, `3`, or describe what you want.
 ```
 
-Append one soft hint based on observable state, then stop.
+Append one soft hint based on observable state, then stop. If the hint clearly recommends one row, mark that row `[x]`; otherwise leave all rows unchecked.
 
 Interpret combined replies gracefully:
 
 | Reply | Meaning |
 |---|---|
-| `A-Hybrid` | Direct video plus hybrid dispatch |
-| `A-Parallel` | Direct video plus parallel dispatch |
-| `A-Sequential` | Direct video plus sequential dispatch |
-| `B-Hybrid` | Storyboard-first plus hybrid dispatch |
-| `B-Parallel` | Storyboard-first plus parallel dispatch |
-| `B-Sequential` | Storyboard-first plus sequential dispatch |
+| `1-Hybrid` | Direct video plus hybrid dispatch |
+| `1-Parallel` | Direct video plus parallel dispatch |
+| `1-Sequential` | Direct video plus sequential dispatch |
+| `2-Hybrid` | Storyboard-first plus hybrid dispatch |
+| `2-Parallel` | Storyboard-first plus parallel dispatch |
+| `2-Sequential` | Storyboard-first plus sequential dispatch |
 
 Generic "continue" at this point is ambiguous; restate the choices briefly.
 
@@ -275,7 +304,9 @@ Do not chain across hard narrative boundaries:
 Hybrid means chain within clusters and render clusters in parallel. Before dispatching hybrid work, state the cluster plan in user-visible language and stop for confirmation:
 
 ```text
-I would render this as two timelines: A (diner confrontation) Shot 1 -> Shot 2, and B (alley escape) Shot 3 -> Shot 4. The two timelines render in parallel; shots within each timeline chain for continuity. OK to proceed?
+Recommended next:
+- [x] 1. Render two timelines: A Shot 1 -> Shot 2, and B Shot 3 -> Shot 4.
+- [ ] 2. Type something else.
 ```
 
 If the user chose Hybrid but there is only one continuous cluster, use Sequential and explain why. If every cluster has one clip, use Parallel and explain why.
@@ -289,7 +320,10 @@ If the user picks storyboard-first, generate one storyboard mosaic per planned c
 After storyboard generation completes, recommend review before video:
 
 ```text
-Generated four storyboards. Recommended next: review them on the canvas, then render the approved boards into videos.
+Generated four storyboards.
+Recommended next:
+- [x] 1. Review them on the canvas before rendering video.
+- [ ] 2. Type something else.
 ```
 
 ## Reel assembly
@@ -332,7 +366,11 @@ Stay provider-neutral in user-facing copy:
 Good:
 
 ```text
-Generated @image_8. Recommended next: storyboard Shot 1 before video if you want composition control. Faster alternative: render the clip directly from the character and location refs.
+Generated @image_8.
+Recommended next:
+- [x] 1. Storyboard Shot 1 for composition control.
+- [ ] 2. Render the clip directly from character/location refs.
+- [ ] 3. Type something else.
 ```
 
 Bad:
