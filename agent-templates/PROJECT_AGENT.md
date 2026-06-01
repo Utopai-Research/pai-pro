@@ -87,8 +87,8 @@ Do not use `node server/cli/...` from a project cwd or hardcode relative repo pa
 | `generate_image_pro.js` | `image-compose` | Pro image generation for exact `--size`, storyboards, and video-bound character sheets. |
 | `generate_video.js` | `video-compose` | Paid video generation. Only stage after explicit user ask. |
 | `generate_voice.js` | `voice-compose` | Creates `audio_result` voice nodes, optionally derived from a character or shot note. |
-| `mirror_url.js` | none | Mirrors an external media URL into a canvas reference node. |
-| `split_image.js` | none | Slices an image into a grid; emits split image nodes. |
+| `mirror_url.js` | none | Mirrors an external image/audio/video URL into a canvas reference node. Flags: `--url`, optional `--kind <image|audio|video>`, `--label`. |
+| `split_image.js` | none | Slices an image into grid tiles. Flags: `--url`, `--cols`, `--rows`, `--source-node-id`; `cols * rows <= 64`. |
 | `switch_project.js` | Projects | Lists or activates projects. |
 | `reel_stitch.js` | none | Local ffmpeg export. Orders every `video_result` with numeric `data.shot_id` and writes `reel.mp4` by default. Supports `--out` and `--workflow`; requires `ffmpeg` on PATH. |
 

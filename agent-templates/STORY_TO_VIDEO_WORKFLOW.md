@@ -2,14 +2,6 @@
 
 This manual gives the project agent a local, workable recommendation loop for moving from story/script to final reel. It is on-demand context, not a skill. The atomic skills still own how to generate scripts, images, voices, videos, and layouts.
 
-## Upstream reference
-
-Adapted from pai-next `workflow/default-story-to-video`, reread on 2026-06-01 at commit `a3b63d0e9b4c67027b9c2c6557405b63b6297a60`.
-
-For future changes, first reread the upstream source files listed in `docs/plans/default-story-to-video-recommendations-plan.md`, then translate the product behavior into this repo's local vocabulary: `workflow.json`, `note`, `image_result`, `audio_result`, `video_result`, Timeline `shot_id`, `script-compose`, `image-compose`, `voice-compose`, `video-compose`, `groups-compose`, and `reel_stitch.js`.
-
-Do not copy upstream state paths or tool names into project work. This file is the local operating version.
-
 ## When to read this
 
 Read this file when:
@@ -49,7 +41,7 @@ After a terminal `generate_*` result:
 
 1. Check whether it is terminal.
    - Draft-stage JSON only: report the staged price/status and stop.
-   - `ok:false`: use Failure and cancellation below; do not advance the pipeline.
+   - `ok:false`: use `PROJECT_AGENT.md` Failure handling; do not advance the pipeline.
    - `ok:true`: continue.
 2. Identify the landed node id from `canvas_mutation.assigned`, `node_id`, or the result feed.
 3. Read `./workflow.json` when the next step depends on missing shots, refs, voices, clips, or reel order.
@@ -316,19 +308,9 @@ It reads `workflow.json`, selects `video_result` nodes with numeric `shot_id`, o
 
 ## Failure and cancellation
 
-Failures and cancellations route to correction, not pipeline advancement.
+Failures and cancellations route to correction, not pipeline advancement. Use the canonical failure-class table in `PROJECT_AGENT.md` Failure handling.
 
-| `klass` | Recommendation |
-|---|---|
-| `cancelled` | Stop. Ask whether to revise the draft or leave it. |
-| `content_filtered` | Rewrite the prompt in safer, less charged language. |
-| `bad_args` | Compare `sent` vs `limits`; fix refs, duration, aspect, size, or missing args. |
-| `asset_rejected` | Replace, mirror, trim, or regenerate the rejected reference. |
-| `rate_limited` | Wait `retryAfterSec`; ask before retry. |
-| `transient_exhausted` | Ask before retry; do not auto-retry video. |
-| `infra` | Explain that it is infrastructure-side and do not retry blindly. |
-
-Never auto-retry paid video.
+Workflow-specific rule: after a failed or cancelled generation, do not recommend the next story stage. Explain the correction or ask whether to revise the draft, then wait. Preserve the project manual's paid-video rule: never auto-retry `generate_video.js`.
 
 ## Provider-neutral discipline
 
