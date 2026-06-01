@@ -1,6 +1,6 @@
 # Story-to-video workflow
 
-This manual gives the project agent a local, workable recommendation loop for moving from story/script to final reel. It is on-demand context, not a skill. The atomic skills still own how to generate scripts, images, voices, videos, and layouts.
+This manual gives the project agent a local, workable recommendation loop for moving from story/script to generated clips. It is on-demand context, not a skill. The atomic skills still own how to generate scripts, images, voices, videos, and layouts.
 
 ## Scope
 
@@ -10,7 +10,7 @@ Use this workflow for story-to-video sequencing when:
 - The user asks "what next?" or "how do we finish this?"
 - A terminal media generation result lands during story-to-video work.
 - A decision spans more than one generation step, such as refs plus voices plus clips, or clip render strategy.
-- The project has multiple planned shots and the next move affects reel completion.
+- The project has multiple planned shots and the next move affects clip completion.
 
 Use it for context, sequencing, and next-step judgment. It does not authorize automatic script splitting, reference generation, or paid media generation; the user still has to approve those steps.
 
@@ -28,8 +28,7 @@ Default story-to-video order:
 4. Voices for speaking characters or narration.
 5. Optional storyboards when composition needs a visual checkpoint.
 6. Video clips for each shot.
-7. Timeline reel order through numeric `video_result.data.shot_id`.
-8. Local reel stitch/export with `reel_stitch.js`.
+7. Handoff to the Timeline tab for reel ordering, preview, or export when the user asks.
 
 The workflow recommends the next step; it does not auto-run the pipeline.
 
@@ -42,7 +41,7 @@ After a terminal `generate_*` result:
    - `ok:false`: use `PROJECT_AGENT.md` Failure handling; do not advance the pipeline.
    - `ok:true`: continue.
 2. Identify the landed node id from `canvas_mutation.assigned`, `node_id`, or the result feed.
-3. Read `./workflow.json` when the next step depends on missing shots, refs, voices, clips, or reel order.
+3. Read `./workflow.json` when the next step depends on missing shots, refs, voices, or clips.
 4. Classify the landed node and current project state.
 5. Recommend exactly one next step. Add one alternative only when the trade-off is material.
 6. Stop and wait unless the user's current message already asked for that concrete action.
@@ -72,7 +71,7 @@ Ask and stop at these decision points:
 - After shot planning: ask before generating batches of refs or voices.
 - Before paid video generation: stage only after explicit user intent.
 - Before multi-clip render strategy: ask for render approach and dispatch unless the user already named both.
-- Before final reel export: ask before stitching if reel order is unclear.
+- Before final reel export: guide the user to the Timeline tab; do not stitch from this workflow.
 
 If the user responds with a revision, apply the revision and re-present the relevant checkpoint. Do not silently reconcile conflicting state.
 
@@ -109,7 +108,7 @@ Before recommending clip rendering from a story, inspect `workflow.json` and ver
 - Speaking characters or narration have `audio_result` voice nodes when voice matters.
 - Storyboard mosaics exist if the user picked storyboard-first.
 - Existing `video_result` clips align with remaining shots.
-- Timeline `shot_id` values are present only for clips the user wants in the reel.
+- If the user asks to order clips, preview the reel, export, or stitch, guide them to the Timeline tab instead of handling reel assembly here.
 
 If the state is ambiguous, recommend the checkpoint rather than dispatching video:
 
@@ -208,7 +207,7 @@ If more shot notes remain:
 
 1. Same scene, same character state, continuous action -> recommend continuing from the previous video.
 2. Scene/location/time jump -> recommend a fresh clip with refs rather than chaining.
-3. Usable final shot -> recommend adding it to the Timeline reel.
+3. Finished story coverage and user asks for ordering/export -> guide them to the Timeline tab.
 
 ```text
 Generated @video_2.
@@ -217,32 +216,14 @@ Recommended next:
 - [ ] 2. Type something else.
 ```
 
-### Multiple clips exist
+### Timeline handoff
 
-If several clips exist but few have numeric `shot_id`, recommend ordering the best clips in the Timeline before spending more.
-
-```text
-You have three rendered clips now.
-Recommended next:
-- [x] 1. Put them on the Timeline in story order and preview the reel.
-- [ ] 2. Type something else.
-```
-
-### Reel is ordered
-
-If planned clips have numeric `shot_id` values and the user wants a final file, recommend local stitching.
+When the user asks to order clips, preview the reel, export, or stitch the final video, guide them to the Timeline tab. This workflow does not set `shot_id` values or run local stitching.
 
 ```text
-The planned clips are on the reel.
 Recommended next:
-- [x] 1. Stitch the reel and review the exported MP4.
+- [x] 1. Open the Timeline tab to order clips, preview the reel, or export.
 - [ ] 2. Type something else.
-```
-
-On approval, run:
-
-```bash
-node "$PAI_REPO_ROOT/server/cli/reel_stitch.js"
 ```
 
 ## Render approach
@@ -325,25 +306,6 @@ Recommended next:
 - [x] 1. Review them on the canvas before rendering video.
 - [ ] 2. Type something else.
 ```
-
-## Reel assembly
-
-The Timeline owns final reel membership and order through numeric `video_result.data.shot_id`.
-
-Rules:
-
-- Do not set `shot_id` unless the user explicitly asks for reel positions or Timeline ordering.
-- If there are good clips without `shot_id`, recommend ordering them before stitching.
-- If order is ambiguous, ask for the order rather than guessing.
-- `reel_stitch.js` is local ffmpeg work, not paid generation.
-
-Stitch command:
-
-```bash
-node "$PAI_REPO_ROOT/server/cli/reel_stitch.js"
-```
-
-It reads `workflow.json`, selects `video_result` nodes with numeric `shot_id`, orders by `shot_id`, and writes `reel.mp4` by default.
 
 ## Failure and cancellation
 
