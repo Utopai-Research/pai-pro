@@ -21,7 +21,7 @@ For extending an existing canvas clip (Pattern 4). This file owns the continuity
 - **Forward extension (default)** — continue the action from the source clip's final frame.
 - **Backward extension (prequel beat)** — generate the moment that *led into* the source. Prompt-only — no API param. Phrase as *"leading into @Video1 from a moment N seconds earlier"*.
 - **Multi-clip chain (≥2 linked clips)** — triggers the sequencing rules below.
-- **Script-driven chain** — render shot notes from `script-compose` as dependent links when the story workflow/user chose Sequential/Hybrid or the dependency check below says the clips need continuity. Unrelated scenes can render independently. The shot note's body is the creative source; the prompt itself is built from the slot rules below.
+- **Script-driven chain** — render shot notes from `script-compose` as dependent links when the story workflow/user chose Sequential/Hybrid or the dependency check below says the clips need continuity. Unrelated scenes can render independently. The shot note's body is the creative source; the prompt itself is built from the slot rules below. Any dialogue/VO from the shot note must appear in the prompt verbatim.
 
 ## Slot-by-slot construction
 
@@ -32,6 +32,8 @@ Continue from @Video1 — start AFTER its final frame; do not include any frames
 ```
 
 Then write what happens next, in plain language.
+
+For script-driven links, copy dialogue/VO from the shot note exactly. If an audio ref is attached for the line, still include the exact text and add: *"Use @Audio1 for timing, cadence, and voice. Keep the words unchanged."*
 
 **Anti-pattern: re-describing the world.** The reference video provides composition, location, lighting, character pose; the prompt provides the *new action*.
 
@@ -45,7 +47,7 @@ Then write what happens next, in plain language.
 Pattern-specific notes (the role vocabulary itself is in SKILL.md):
 
 - **Character image ref:** locks identity across links — the source video may drift, the explicit ref reinforces.
-- **Voice timbre:** extend voice from the prior clip with the same `@Audio1`.
+- **Spoken audio:** include the exact continuing dialogue/VO text and use the same `@Audio1` for timing, cadence, and voice.
 - **Camera-move source:** rare — switch camera grammar mid-chain.
 
 ## What to lock vs. what to change

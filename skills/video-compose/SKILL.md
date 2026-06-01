@@ -62,11 +62,13 @@ The same CLI flag can serve different semantic roles depending on how the prompt
 | Camera-move source | `--ref-source-id` (video) | "camera moves match @Video1" |
 | Action source | `--ref-source-id` (video) | "action choreography matches @Video1" |
 | VFX template | `--ref-source-id` (video) | "use the visual-effects template from @Video1" |
-| Spoken audio / voice | `--ref-audio-source-id` | "spoken audio from @Audio1" |
+| Spoken audio / voice | `--ref-audio-source-id` | "Use @Audio1 for timing, cadence, and voice." |
 
 ## Prompt-language conventions
 
 - Reference syntax: `@Image1` / `@Video1` / `@Audio1`, positional, in `--ref-source-id` / `--ref-audio-source-id` order (image and video refs share the `@Image…` / `@Video…` slot per their source node type).
+- Spoken text rule: when a script note, shot note, user dialogue, or `audio_result.data.text` contains spoken words, include those words in the video prompt verbatim. Do not summarize, translate, shorten, polish, or invent dialogue/VO.
+- Spoken source priority: use `audio_result.data.text` when present; otherwise use the exact script/shot-note dialogue. If audio text and note text disagree, ask unless the audio node is clearly the approved final read. For audio uploads without text, reference the audio but do not invent transcript text.
 - Camera language is **rules, not adjectives** — *"one-take"*, *"steady follow shot"*, *"Iaijutsu draw"* not *"cinematic"*, *"fast"*, *"high-quality"*.
 - Avoid conflicting instructions ("static camera" + "orbit shot").
 - For brand / MV / ad work, end the prompt with a negative line: *"no captions, watermarks, distortion, stretching."*
@@ -122,11 +124,12 @@ Pick the one that fits. For source lookup, follow the project `PROJECT_AGENT.md`
 **Source:** any canvas `audio_result` node — agent-generated or user-uploaded.
 **Call:** `node "$PAI_REPO_ROOT/server/cli/generate_video.js" --prompt "..." --ref-audio-source-id <audio_id>`. Often combined with character image refs for face + voice — pass both `--ref-source-id <character_id>` (for the character image) and `--ref-audio-source-id <audio_id>` (for the voice).
 **Prompt — inline this iteration:**
-- If the audio node already contains speech (`audio_result.data.text`), do not duplicate, rewrite, or paraphrase those words in the video prompt. The audio node is the speech source of truth.
-- For off-screen narration: *"Use narration timing and cadence from @Audio1. Visuals should pace to the narration. Do not render captions or on-screen transcript text."*
-- For on-screen dialogue with a character image: *"The character in @Image1 performs to the spoken audio from @Audio1. Keep the spoken words from @Audio1 unchanged."*
-- If there is no audio node yet and the user wants the video model to generate speech directly, then preserve the requested dialogue verbatim in the prompt as `[Character] says: "..."`; prefer routing to `voice-compose` first when exact VO/dialogue matters.
-- Never treat an image as the speech source; images can identify the speaker, but the spoken words come from the audio node or the user-provided dialogue.
+- If the audio node contains speech (`audio_result.data.text`), include that exact text in the video prompt and bind `@Audio1` to timing/cadence/voice.
+- For off-screen narration: *`V.O. says exactly: "..." Use @Audio1 for narration timing, cadence, and voice. Visuals should pace to the narration. Do not render captions or on-screen transcript text.`*
+- For on-screen dialogue with a character image: *`The character in @Image1 says exactly: "...". Use @Audio1 for timing, cadence, and voice. Keep the words unchanged.`*
+- If there is no audio node yet and the user wants the video model to generate speech directly, preserve the requested dialogue verbatim in the prompt as `[Character] says exactly: "..."`; prefer routing to `voice-compose` first when exact VO/dialogue matters.
+- For audio uploads without `data.text`, reference the audio for sound/timing but do not invent transcript text.
+- Never treat an image as the speech source; images can identify the speaker, but the spoken words come from the audio node, script/shot note, or user-provided dialogue.
 
 **Edges:** depends on which character refs attach (one `kind: "derived"` per ref).
 
