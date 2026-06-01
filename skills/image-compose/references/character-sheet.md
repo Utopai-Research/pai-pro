@@ -13,13 +13,12 @@ node "$PAI_REPO_ROOT/server/cli/generate_image_pro.js" \
   --role "<role>" \
   --ref-source-id <ref1> \
   --ref-source-id <ref2> \
-  --ref-source-id <ref3> \
-  --source-node-id <ref1>
+  --ref-source-id <ref3>
 ```
 
 Pro tier accepts exact `--size` only. Do not pass `--aspect-ratio` or `--image-size` for this flow.
 
-For Mode B with no actor refs, use the same command but omit all `--ref-source-id` flags and omit `--source-node-id`.
+If a script or shot note authored the character design, add `--source-node-id <note_id>`. For Mode B with no actor refs, use the same command but omit all actor-photo `--ref-source-id` flags; still add `--source-node-id <note_id>` when a note authored the design.
 
 ## Contents
 
@@ -172,9 +171,9 @@ Template holds across character archetypes. If your character's costume looks dr
 
 3. **The "no text" rule has to be repeated 3×** in the prompt to be reliable — once at the top, once in the layout section, once at the end. Even then the model can sneak in panel labels at the bottom of the sheet ("FRONT VIEW" / "PROFILE VIEW" / etc.). Cosmetic only; doesn't affect downstream video performance. Crop them off post-hoc if they bother you.
 
-4. **Only include `--source-node-id` when there is a real parent ref.** Mode A passes `--source-node-id <ref1>` so the sheet has an authorship edge. Mode B has no parent ref, so omit `--source-node-id`.
+4. **Only include `--source-node-id` when a real canvas note authored the design.** Actor photos and base sheets belong in `--ref-source-id`; those flags already create provenance edges.
 
-5. **One sheet per character.** Don't try to put two characters in the same 4-panel sheet. Identity drift between halves of the canvas is a real failure mode; the 4-panel layout assumes a single subject.
+5. **One sheet per character or material variant.** Don't try to put two characters in the same 4-panel sheet. Identity drift between halves of the canvas is a real failure mode; the 4-panel layout assumes a single subject. For a persistent variant of an existing character, pass the base sheet as a `--ref-source-id` and describe only the wardrobe/state change.
 
 ## Optional verification with `pai_analyze.compare` (internal toolset only)
 

@@ -21,7 +21,7 @@ For extending an existing canvas clip (Pattern 4). This file owns the continuity
 - **Forward extension (default)** — continue the action from the source clip's final frame.
 - **Backward extension (prequel beat)** — generate the moment that *led into* the source. Prompt-only — no API param. Phrase as *"leading into @Video1 from a moment N seconds earlier"*.
 - **Multi-clip chain (≥2 linked clips)** — triggers the sequencing rules below.
-- **Script-driven chain** — render a script (with shot notes from `script-compose`) whose total duration >15s; each link renders one or more shot notes; sequencing rules below apply. The shot note's body is the creative source; the prompt itself is built from the slot rules below.
+- **Script-driven chain** — render shot notes from `script-compose` as dependent links when the story workflow/user chose Sequential/Hybrid or the dependency check below says the clips need continuity. Unrelated scenes can render independently. The shot note's body is the creative source; the prompt itself is built from the slot rules below.
 
 ## Slot-by-slot construction
 

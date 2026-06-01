@@ -13,7 +13,7 @@ description: >-
   one-off static portraits, posters, print art, or illustrations that will not
   feed video. Before generating video-bound characters, announce the 4-panel
   choice. Storyboard routing: use Pattern 6 with generate_image_pro.js, one
-  composite mosaic per location, not one CLI call per panel.
+  composite mosaic per clip or <=15s shot note, not one CLI call per panel.
 ---
 
 ## CLI shape
@@ -42,7 +42,7 @@ When references are passed, refer to them in the prompt positionally as `@Image1
 
 External URLs (a pasted CDN link, a moodboard image) must be mirrored onto the canvas first via `mirror_url.js --url <URL>` — the returned `node_id` then plugs into `--ref-source-id` like any other canvas source. There is no separate URL-passthrough flag.
 
-If a canvas note authored this image (a shot note rendered as a still, a script note designing a character / location), pass `--source-node-id <note_id>` — see the project `PROJECT_AGENT.md` § "Authorship edges".
+If a canvas note authored this image (a shot note rendered as a still, a script note designing a character / location), pass `--source-node-id <note_id>` — see the project `PROJECT_AGENT.md` § "Asset, ref, and edge rules".
 
 Do not attempt to invent images via ASCII art or markdown embedding — call the CLI.
 
@@ -75,12 +75,12 @@ If the character will appear in downstream video work, **use Pattern 7 instead**
 
 Triggers: "establish / design / picture [LOCATION]", or "yes" to a `script-compose` parse offer listing locations.
 
-- `node "$PAI_REPO_ROOT/server/cli/generate_image.js" --prompt "..." --aspect-ratio 16:9 --image-size 2K --subtype location --name "Causeway" --description "..."` — **no refs**. A location is a setting anchor, not a derivative.
+- `node "$PAI_REPO_ROOT/server/cli/generate_image.js" --prompt "..." --aspect-ratio 16:9 --image-size 2K --subtype location --name "Causeway" --description "..." [--source-node-id <script_or_shot_note_id>]` — **no refs**. A location is a setting anchor, not a derivative.
 - Prompt template:
   > `[style] establishing still of [LOCATION NAME]. [visual brief — architecture, lighting, atmosphere]. Wide shot, eye-level, no characters present.`
 - Keep the frame empty of characters — locations are reusable references for later scenes. Inherit project style if one exists.
-- No edges — locations are roots.
-- *Follow-on:* once you've designed **every** location identified by a `script-compose` parse offer (i.e. the last location in the run), offer the user one short line: "Locations are up — want me to lay out a storyboard per location?" Bridges into Pattern 6. Skip if locations were designed ad-hoc, not from a script offer.
+- No ref edges by default. If the location was derived from a script or shot note, use `--source-node-id` so the authorship edge lands.
+- *Follow-on:* once you've designed **every** location identified by a `script-compose` parse offer (i.e. the last location in the run), offer the user one short line: "Locations are up — want me to storyboard the next shot?" Bridges into Pattern 6. Skip if locations were designed ad-hoc, not from a script offer.
 
 ### 3. Edit / variation / turnaround of an existing image
 
@@ -112,35 +112,35 @@ Triggers: a fresh image unrelated to existing canvas content ("generate a mounta
 
 - Plain `node "$PAI_REPO_ROOT/server/cli/generate_image.js" --prompt "..."` with sensible defaults (16:9, 2K unless the user asks otherwise). No subtype, no refs.
 
-### 6. Storyboard mosaic — one composite per location
+### 6. Storyboard mosaic — one composite per clip / shot note
 
-Triggers: user asks for a storyboard, mosaic, NxN / N×M grid, shot list, coverage, keyframe sheet, shot planning, or image previs. The intent is **ONE composite image with N×M panels per location**, NOT one image per panel and NOT a video.
+Triggers: user asks for a storyboard, mosaic, NxN / N×M grid, shot list, coverage, keyframe sheet, shot planning, or image previs. The intent is **ONE composite image with N×M panels per clip or <=15s shot note**, NOT one image per panel and NOT a video.
 
 - **Tool**: `generate_image_pro.js` (pro tier). Use it for better rendered text, panel boundaries, and multi-cell layout fidelity.
-- **Single call per mosaic**: ONE `node "$PAI_REPO_ROOT/server/cli/generate_image_pro.js" --prompt "..." --size 2560x1440 --label "Storyboard — <location>"` per mosaic. The pattern's point is one composite image per location, not N×M small generations.
+- **Single call per mosaic**: ONE `node "$PAI_REPO_ROOT/server/cli/generate_image_pro.js" --prompt "..." --size 2560x1440 --label "Storyboard — Shot <N>" --source-node-id <shot_note_id>` per shot-note mosaic. The pattern's point is one composite image per clip/shot note, not N×M small generations.
 - **Exact size**: default to **`2560x1440`** — this is filmmaking. Each panel inside the mosaic is a 16:9 cinematic frame, and the overall sheet should also feel cinematic landscape. The grid shape (3×3, 4×2, etc.) describes cell layout, NOT canvas shape. Only override if the user explicitly says "portrait", "square", "vertical", or names a different ratio:
   - "3x3 storyboard" → `2560x1440` (default)
   - "3x3 square storyboard" → `1920x1920`
   - "3x3 portrait storyboard" → `1440x2560`
   - "vertical 2x4 mosaic" → `1440x2560`
-- **Default grid**: 2×2 unless the user specified another. Announce in chat one short line before each call ("Generating a 2×2 mosaic for <location>" or "Generating a 2×2 mosaic.") — don't paste the prompt.
-- **Optional refs**: if a character / location reference is on the canvas, pass it via `--ref-source-id` (≤32 for pro) so identity stays locked across cells and the provenance edges land. The script-analyzed case (shot notes + locations on the canvas) triggers one-mosaic-per-location iteration with required ref ordering — see `references/storyboard-mosaic.md`.
+- **Default grid**: 2×2 unless the user specified another. Announce in chat one short line before each call ("Generating a 2×2 mosaic for Shot <N>" or "Generating a 2×2 mosaic.") — don't paste the prompt.
+- **Optional refs**: if a character / location reference is on the canvas, pass it via `--ref-source-id` (≤32 for pro) so identity stays locked across cells and the provenance edges land. The script-analyzed case triggers one mosaic per shot note, with per-shot refs and `--source-node-id <shot_note_id>` — see `references/storyboard-mosaic.md`.
 - **Grid size limit**: default to 2×2. Larger grids are allowed, but if the user asks for `3×3` or larger, warn first: "larger storyboard grids are harder to keep clean — I can run it as one pro mosaic, or split into smaller sheets."
 
-**For the canvas pre-flight, per-location iteration logic, no-location nudge, verbatim prompt template, and default panel coverage when no script slice exists**: see [references/storyboard-mosaic.md](references/storyboard-mosaic.md).
+**For the canvas pre-flight, per-shot-note iteration logic, missing-anchor nudge, verbatim prompt template, and default panel coverage when no script slice exists**: see [references/storyboard-mosaic.md](references/storyboard-mosaic.md).
 
 #### Node fields the CLI sets
 
 - ONE `image_result` node PER mosaic.
-- The CLI uses your `--label` ("Storyboard — <location_name>" if per-location; "Storyboard" if location-less), and stamps `metadata.task_type: "storyboard_mosaic"`, `metadata.grid: "NxM"`, `metadata.location_id` / `metadata.shot_ids` if you pass them via additional metadata flags. (Storyboard-mosaic-specific extras: pass `--ref-source-id <location_id>` and one per shot reference; the CLI emits derived edges from each.)
+- The CLI uses your `--label` ("Storyboard — Shot <N>" if shot-specific; "Storyboard" if standalone) and stores the full prompt. Use the label, prompt sections, `source_id`, and incoming derived edges to identify storyboard mosaics later; do not assume custom storyboard metadata unless the CLI gains explicit flags for it.
 
 ### 7. Character reference sheet *(default for ANY video-bound character work — with or without actor refs)*
 
 **PROACTIVE TRIGGER — use this pattern WITHOUT being asked** whenever the user names one or more characters that will appear in downstream video work (script, scene brief, promo, 宣传片, 短片, 连续剧, "make a short film with X", "拍一段戏 with characters A and B"). This applies regardless of whether the canvas has uploaded actor photos — see the two modes below.
 
-**Mode A — with ≥3 uploaded actor reference photos.** Use the photos as `--ref-source-id` inputs; the model triangulates identity from the refs and the prompt's REFERENCE-PHOTO PRIORITY clause locks costume to what the refs show. Announce: *"You have [N] refs for [character] — generating a 4-panel reference sheet (front / profile / back / closeup) so the actor stays identity-consistent across video shots."*
+**Mode A — with ≥3 uploaded actor reference photos.** Use the photos as `--ref-source-id` inputs; the model triangulates identity from the refs and the prompt's REFERENCE-PHOTO PRIORITY clause locks costume to what the refs show. If a script or shot note authored the design, add `--source-node-id <note_id>`. Announce: *"You have [N] refs for [character] — generating a 4-panel reference sheet (front / profile / back / closeup) so the actor stays identity-consistent across video shots."*
 
-**Mode B — 0-2 refs, designing from scratch.** No refs to pass. Use a text-only variant of the 4-panel prompt that describes the character (age, build, wardrobe, distinguishing features) explicitly inside each panel block. The output is still a 4-panel sheet engineered for video-gen consumption — just generated from words instead of photos. Announce: *"Starting with a 4-panel reference sheet for [character] so the identity locks across video shots. Tell me if you'd rather have simple single portraits via Pattern 1."*
+**Mode B — 0-2 refs, designing from scratch.** No actor refs to pass. Use a text-only variant of the 4-panel prompt that describes the character (age, build, wardrobe, distinguishing features) explicitly inside each panel block. If a script or shot note authored the design, add `--source-node-id <note_id>`. The output is still a 4-panel sheet engineered for video-gen consumption — just generated from words instead of photos. Announce: *"Starting with a 4-panel reference sheet for [character] so the identity locks across video shots. Tell me if you'd rather have simple single portraits via Pattern 1."*
 
 Also fires on explicit asks: "design a character sheet / turnaround / reference sheet / character design for [character]", "make a 4-panel character design", "generate a production reference sheet for downstream video work".
 
@@ -149,9 +149,9 @@ The output is a single 4-panel sheet (Front-full / Profile-full / Back-full / Cl
 Distinct from Pattern 1: Pattern 1 produces a single static portrait (poster, print art, illustration) that will NOT be passed to video gen. Pattern 7 produces a multi-view sheet engineered for video-gen consumption. **For any character that will be referenced by a video gen call later, choose Pattern 7 — even without refs.** The 4-panel layout's value is the multi-angle data, not just the multi-ref triangulation; both modes deliver it.
 
 - Pre-flight: for current uploaded refs, follow the project `PROJECT_AGENT.md` § "Choosing context" and identify reference image nodes (`subtype: "reference"`, ideally ≥3 photos of the same actor from different angles or lighting). Confirm the ref count to the user in one short line before firing.
-- `node "$PAI_REPO_ROOT/server/cli/generate_image_pro.js" --prompt "..." --size 2560x1440 --subtype character --name "<character_name>" --role "..." --ref-source-id <ref1> --ref-source-id <ref2> --ref-source-id <ref3> --source-node-id <ref1>` — pro tier is the default for character sheets because panel layout, text suppression, and identity consistency are load-bearing. Do not pass `--aspect-ratio` or `--image-size`. Never fire Mode A with fewer than 3 refs (model overfits to the one angle it has).
-- With 0-2 actor refs, use the Mode B text-only command from `references/character-sheet.md`: same pro command, but omit every `--ref-source-id` and omit `--source-node-id`.
-- ONE call. ONE sheet per character.
+- `node "$PAI_REPO_ROOT/server/cli/generate_image_pro.js" --prompt "..." --size 2560x1440 --subtype character --name "<character_name>" --role "..." --ref-source-id <ref1> --ref-source-id <ref2> --ref-source-id <ref3> [--source-node-id <script_or_shot_note_id>]` — pro tier is the default for character sheets because panel layout, text suppression, and identity consistency are load-bearing. Do not pass `--aspect-ratio` or `--image-size`. Never fire Mode A with fewer than 3 refs (model overfits to the one angle it has).
+- With 0-2 actor refs, use the Mode B text-only command from `references/character-sheet.md`: same pro command, but omit every actor-photo `--ref-source-id`; include `--source-node-id` only when a script or shot note authored the design.
+- ONE call. ONE sheet per base character or material variant. For a variant that must preserve the same identity, pass the base character sheet as a `--ref-source-id` and describe only the persistent wardrobe/state change.
 - The sheet plugs into `generate_video.js` as `--ref-source-id <sheet_id>` for any downstream shot (front / back / profile) — no cropping needed for typical use.
 
 **For the verbatim 4-panel prompt template, the optional per-angle anchor crop sub-flow, cross-character validation evidence, and the gotchas (no-text rule, photo-priority, exact panel counts)**: see [references/character-sheet.md](references/character-sheet.md).
@@ -164,7 +164,7 @@ Distinct from Pattern 1: Pattern 1 produces a single static portrait (poster, pr
 
 ## After the CLI returns
 
-One sentence with the price — see the project `PROJECT_AGENT.md` § "Draft gate".
+For draft-stage JSON, one sentence with the price/status — see the project `PROJECT_AGENT.md` § "Draft gate". For terminal results, follow the project manual's next-step recommendation rule.
 
 ## On failure
 

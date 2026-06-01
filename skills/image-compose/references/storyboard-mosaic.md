@@ -1,11 +1,11 @@
 # NxN storyboard mosaic — prompt template
 
-Bracketed-section format for `node "$PAI_REPO_ROOT/server/cli/generate_image_pro.js"` (the pro image tier). Produces ONE composite image of N×M storyboard panels on a single sheet, with a per-cell number badge so downstream video-compose can crop each panel individually for I2V. Default to exact `--size 2560x1440`.
+Bracketed-section format for `node "$PAI_REPO_ROOT/server/cli/generate_image_pro.js"` (the pro image tier). Produces ONE composite image of N×M storyboard panels on a single sheet, with per-cell number badges so downstream video-compose can read panel order. Default to exact `--size 2560x1440`.
 
 ## Contents
 
 - Pre-flight: current canvas state
-- Per-location iteration
+- Per-shot-note iteration
 - Prompt template (use verbatim, fill the bracketed parts)
 - Style presets (pick one — paste into [STYLE])
 - Default per-panel coverage when the user didn't specify
@@ -14,22 +14,24 @@ Bracketed-section format for `node "$PAI_REPO_ROOT/server/cli/generate_image_pro
 
 This flow needs the current canvas, so per the project `PROJECT_AGENT.md` § "Choosing context", read `./workflow.json` and identify:
 
-- script note (id starts `note_`, label starts `"Script:"`)
-- shot notes (label matches `"Shot <N> (<a>–<b>s)"`)
+- script note (`data.subtype === "script"`; fall back to label starting `"Script:"` for legacy notes)
+- shot notes (`data.subtype === "shot"`; fall back to label matching `"Shot <N> (<a>–<b>s)"` for legacy notes)
 - location nodes (`image_result` with `data.subtype = "location"`)
 - character nodes (`image_result` with `data.subtype = "character"`)
 
 Decide how many mosaics to emit:
 
-- **No shot notes (script not analyzed yet).** Behave as the bare mosaic pattern: ONE 2×2 mosaic. Refs are optional — pass any characters / user-uploaded images on the canvas via repeated `--ref-source-id` flags (≤32 for pro) for identity lock; if the canvas is empty of refs, pass none.
-- **Shot notes exist + ≥1 location node.** ONE mosaic PER LOCATION. Group shots by which location they happen at (slug lines, body context, location names). For each group: refs = `[location.id, …each character.id appearing in the group's shots]` capped at 32; `[SCRIPT SLICE]` = verbatim shot-note bodies in shot-number order.
-- **Shot notes exist + 0 location nodes.** ONE mosaic. Say in chat first: `"Storyboard works best with location stills — want me to design them first? I can also storyboard from the script directly."` Unless the user accepts the offer, proceed with a single 2×2 mosaic using the script + character refs.
+- **Shot notes exist.** Emit ONE mosaic PER SHOT NOTE. Each shot note already represents one planned clip capped at <=15s. For each mosaic: pass `--source-node-id <shot_note_id>`, refs = `[location.id if the shot has one, ...each character.id appearing in the shot]` capped at 32, and `[SCRIPT SLICE]` = that one shot note body verbatim.
+- **No shot notes, but one <=15s script/story/clip brief exists.** Behave as a single planned clip: ONE 2×2 mosaic. Pass `--source-node-id <script_note_id>` if the brief is a canvas note. Refs are optional — pass any relevant characters / locations / user-uploaded images on the canvas via repeated `--ref-source-id` flags for identity lock.
+- **No shot notes and the script/story is longer than <=15s.** Recommend `script-compose` splitting first. Do not collapse a multi-clip script into one storyboard unless the user explicitly asks for an overview board.
 
-Default grid: 2×2 unless the user specified otherwise. Before each `generate_image_pro.js` call, announce in chat: `"Generating a 2×2 mosaic for <location_name>"` (per-location case) or `"Generating a 2×2 mosaic."` (single-mosaic case). Don't paste the prompt; one short line.
+Missing character/location anchors do not change the storyboard unit. If a shot clearly needs a missing anchor, say so and ask whether to make that anchor first or storyboard from text directly.
 
-## Per-location iteration
+Default grid: 2×2 unless the user specified otherwise. Before each `generate_image_pro.js` call, announce in chat: `"Generating a 2×2 mosaic for Shot <N>"` (shot-note case) or `"Generating a 2×2 mosaic."` (single-clip case). Don't paste the prompt; one short line.
 
-If the canvas has N locations and shot notes exist, fill the prompt template N times — once per location — and call `generate_image_pro.js` N times. Don't try to combine locations into one mosaic.
+## Per-shot-note iteration
+
+If the canvas has N shot notes, fill the prompt template N times — once per shot note — and call `generate_image_pro.js` N times. Don't combine multiple shot notes into one storyboard unless the user asks for an overview board.
 
 ## Prompt template (use verbatim, fill the bracketed parts)
 
@@ -52,7 +54,7 @@ Numbered LEFT-TO-RIGHT, ROW BY ROW: cell 1 = top-left, cell 2 = next-right, …,
 The same character(s) appear consistently across every panel where they appear — same face, same build, same age, same wardrobe, same hair, same accurate proportions. [If refs provided] every detail of identity matches the attached reference images. Identity does not drift between cells.
 
 [SCRIPT SLICE]
-[Only when shot notes feed this mosaic — paste verbatim shot-note bodies, in shot-number order, for the shots assigned to this location. The panels visualize this verbatim slice; do not paraphrase, do not embellish.]
+[Only when a shot/script note feeds this mosaic — paste that one note body verbatim. The panels visualize this verbatim slice; do not paraphrase, do not embellish.]
 
 [SHOT]
 [paste the user's scene description verbatim]

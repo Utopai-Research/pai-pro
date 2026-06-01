@@ -38,7 +38,7 @@ canvas first via `mirror_url.js --url <URL>` — the returned
 `node_id` plugs into `--ref-source-id` like any other canvas source.
 When a canvas note authored the clip (most commonly a shot note being
 rendered), pass `--source-node-id <note_id>` — see the project `PROJECT_AGENT.md` §
-"Authorship edges". Don't set `--shot-id` unless the user asked for a
+"Asset, ref, and edge rules". Don't set `--shot-id` unless the user asked for a
 specific reel position; the Timeline UI owns shot_id assignment.
 
 Each clip costs real money even after staging — only stage after the user has explicitly asked for a video.
@@ -147,13 +147,13 @@ Cross-pattern asks. Each combo routes to one primary reference — references do
 | Multi-clip chained sequence | `video-extension.md` | source video for each link |
 | Compose with camera-move from reference | `video-single-shot.md` | character images + camera-move video ref |
 | Render one script shot from canvas | Pattern 1, 2, or 3 by shot content (no dispatch — translate the shot note body to slot rules) | character / location refs if the shot involves them |
-| Render a script (>15s total) as a sequence | `video-extension.md` (script-driven chain) | source video for each link, character refs for identity continuity |
+| Render a continuous script span (>15s total) as a dependent sequence | `video-extension.md` (script-driven chain) | source video only for dependent links; character refs for identity continuity |
 | Render a short script (≤15s total) as one piece | `video-multi-shot.md` (cross-skill source) | character image refs locked across shots |
 | Render a storyboard mosaic as one 15s video (every panel becomes a shot block) | `video-multi-shot.md` (storyboard cross-skill source) | mosaic image + character / location image refs that authored the mosaic |
 
 ## After the CLI returns
 
-One sentence with the price — see the project `PROJECT_AGENT.md` § "Draft gate". `--ref-source-id` flags drive provenance edges; they're captured in the draft argv and materialize on the real `video_result` after the user fires.
+For draft-stage JSON, one sentence with the price/status — see the project `PROJECT_AGENT.md` § "Draft gate". For terminal results, follow the project manual's next-step recommendation rule. `--ref-source-id` flags drive provenance edges; they're captured in the draft argv and materialize on the real `video_result` after the user fires.
 
 ## On failure
 

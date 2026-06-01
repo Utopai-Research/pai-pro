@@ -30,7 +30,7 @@ When script shot notes exist on canvas (from `script-compose`), the 4-section ti
 
 ## Cross-skill source — storyboard mosaic
 
-When a storyboard mosaic exists on canvas (source `image_result` carries `metadata.task_type: "storyboard_mosaic"` and `metadata.grid: "NxM"`), render the entire mosaic as **one 15s video** — every panel becomes one SHOT block in the timeline. The mosaic itself is passed as a reference image (the video model reads the panels visually and follows their order); the mosaic is **not** cropped, and the render is never split into multiple videos per mosaic.
+When a storyboard mosaic exists on canvas (usually an `image_result` labeled `Storyboard` or `Storyboard — Shot <N>` whose prompt contains `[PANEL LIST]`), render the entire mosaic as **one 15s video** — every panel becomes one SHOT block in the prompt timeline. The mosaic itself is passed as a reference image (the video model reads the panels visually and follows their order); the mosaic is **not** cropped, and the render is never split into multiple videos per mosaic.
 
 - **Pass the mosaic via `--ref-source-id <mosaic.id>`** alongside the character / location refs originally used to author it. The corner number badges and grid layout make the panel sequence machine-legible.
 - **Open the prompt with an explicit directive.** *"Multi-shot sequence built from the storyboard panels in @Image1. Follow the storyboard sequence in panel-number order (cell 1 top-left → cell N×M bottom-right; left-to-right, row-by-row)."* Without this directive, the model may interpret panels out of order.

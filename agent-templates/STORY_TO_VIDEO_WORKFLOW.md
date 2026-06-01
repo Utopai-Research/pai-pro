@@ -85,7 +85,7 @@ Recommendations are not consent. Silence is not consent. The agent's own hint is
 
 Ask and stop at these decision points:
 
-- After script capture: ask whether to split into shots and extract characters/locations.
+- After script capture: ask whether to split into shots and extract characters/locations/voices.
 - After shot planning: ask before generating batches of refs or voices.
 - Before paid video generation: stage only after explicit user intent.
 - Before multi-clip render strategy: ask for render approach and dispatch unless the user already named both.
@@ -143,12 +143,12 @@ For scripts longer than roughly 3 minutes, call out scope before clip planning. 
 
 ### Script or story note landed
 
-If a `note` with `data.subtype: "script"` lands, recommend splitting it into shot notes and extracting characters/locations.
+If a `note` with `data.subtype: "script"` lands, recommend splitting it into shot notes and extracting characters/locations/voices.
 
 ```text
 Captured @note_3.
 Recommended next:
-- [x] 1. Split it into <=15s shot notes and extract characters/locations.
+- [x] 1. Split it into <=15s shot notes and extract characters/locations/voices.
 - [ ] 2. Type something else.
 ```
 
@@ -304,7 +304,7 @@ Hybrid means chain within clusters and render clusters in parallel. Before dispa
 
 ```text
 Recommended next:
-- [x] 1. Render two timelines: A Shot 1 -> Shot 2, and B Shot 3 -> Shot 4.
+- [x] 1. Render two clip chains: A Shot 1 -> Shot 2, and B Shot 3 -> Shot 4.
 - [ ] 2. Type something else.
 ```
 
@@ -314,7 +314,7 @@ Surface rough wall-clock when chaining matters: about one video-generation wait 
 
 ## Storyboard safeguards
 
-If the user picks storyboard-first, generate one storyboard mosaic per planned clip unless the user explicitly requests another grouping. Clip count, not scene count, is the default unit. Do not collapse three scenes with eight clips into three storyboards unless the user asks for scene-level boards.
+If the user picks storyboard-first, route to `image-compose` Pattern 6. The local default is one composite mosaic per planned clip or <=15s shot note. Do not generate one image per storyboard panel, and do not merge multiple planned clips into one storyboard unless the user asks.
 
 After storyboard generation completes, recommend review before video:
 
