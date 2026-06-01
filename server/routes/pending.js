@@ -16,7 +16,7 @@ import fsp from "node:fs/promises";
 import path from "node:path";
 
 import { getCost } from "../model_registry.js";
-import { PAI_REPO_ROOT, pendingDir, projectDir } from "../lib/paths.js";
+import { PAI_REPO_ROOT, PENDING_STALE_MS, pendingDir, projectDir } from "../lib/paths.js";
 import {
   normalizeResultEntry,
   readPendingEntry,
@@ -44,6 +44,13 @@ const PATCH_FLAGS = {
 };
 
 const IMAGE_PRO_DISPLAY_ONLY_PATCH_KEYS = new Set(["aspect_ratio", "image_size"]);
+const RUNNING_TIMEOUT_MS = {
+  image: 10 * 60 * 1000,
+  imagePro: 30 * 60 * 1000,
+  audio: 5 * 60 * 1000,
+  video: 40 * 60 * 1000,
+};
+const RUNNING_TIMEOUT_KILL_GRACE_MS = 5 * 1000;
 
 function pendingPath(id, jobId) {
   return path.join(pendingDir(id), `${jobId}.json`);
@@ -88,7 +95,26 @@ async function removePendingSidecar(id, jobId) {
   }
 }
 
-function fallbackResult({ jobId, code, signal, spawnError }) {
+export function runningTimeoutMsForEntry(entry) {
+  if (entry?.script === "generate_video.js" || entry?.kind === "video") {
+    return RUNNING_TIMEOUT_MS.video;
+  }
+  if (entry?.script === "generate_voice.js" || entry?.kind === "audio") {
+    return RUNNING_TIMEOUT_MS.audio;
+  }
+  if (isImageProSidecar(entry)) return RUNNING_TIMEOUT_MS.imagePro;
+  return RUNNING_TIMEOUT_MS.image;
+}
+
+function fallbackResult({ jobId, code, signal, spawnError, timedOut = false, timeoutMs }) {
+  if (timedOut) {
+    return {
+      ok: false,
+      job_id: jobId,
+      klass: "timeout",
+      message: `generation worker timed out after ${Math.round(timeoutMs / 1000)}s`,
+    };
+  }
   if (spawnError) {
     return {
       ok: false,
@@ -134,6 +160,17 @@ function pendingContext(entry) {
   return out;
 }
 
+export function markSidecarRunning(sidecar, nowIso = new Date().toISOString()) {
+  sidecar.stage = "running";
+  sidecar.created_at = nowIso;
+  return sidecar;
+}
+
+function isStalePendingSidecar(sidecar) {
+  const createdAt = Date.parse(sidecar?.created_at || "");
+  return Number.isFinite(createdAt) && Date.now() - createdAt > PENDING_STALE_MS;
+}
+
 export function registerPendingRoutes({ app, projects, broadcasters }) {
   async function claimDraftForGenerate(id, jobId) {
     let claimed = null;
@@ -152,10 +189,13 @@ export function registerPendingRoutes({ app, projects, broadcasters }) {
       if (stage !== "draft") {
         throw Object.assign(new Error(`already ${stage}`), { http: 409 });
       }
+      if (isStalePendingSidecar(sidecar)) {
+        throw Object.assign(new Error("draft not found"), { http: 404 });
+      }
       if (!sidecar.script || !ALLOWED_SCRIPTS.has(sidecar.script)) {
         throw Object.assign(new Error(`unknown script: ${sidecar.script}`), { http: 400 });
       }
-      sidecar.stage = "running";
+      sidecar = markSidecarRunning(sidecar);
       const tmp = target + ".tmp";
       await fsp.writeFile(tmp, JSON.stringify(sidecar) + "\n");
       await fsp.rename(tmp, target);
@@ -278,6 +318,9 @@ export function registerPendingRoutes({ app, projects, broadcasters }) {
       let outBuf = "";
       let spawnError = null;
       let finalized = false;
+      let timedOut = false;
+      const timeoutMs = runningTimeoutMsForEntry(entry);
+      let killTimer = null;
       const append = (b) => {
         outBuf += b.toString();
         if (outBuf.length > 65536) outBuf = outBuf.slice(-65536);
@@ -285,13 +328,15 @@ export function registerPendingRoutes({ app, projects, broadcasters }) {
       const finalize = async (code, signal) => {
         if (finalized) return;
         finalized = true;
-        const parsed = parseTailJson(outBuf);
+        clearTimeout(timeoutTimer);
+        if (killTimer) clearTimeout(killTimer);
+        const parsed = timedOut ? null : parseTailJson(outBuf);
         if (!parsed && code === 0) {
           console.warn(`[viewer] ${entry.script} for ${id}/${jobId} exited 0 without result JSON`);
         }
         const result = {
           ...pendingContext(entry),
-          ...(parsed || fallbackResult({ jobId, code, signal, spawnError })),
+          ...(parsed || fallbackResult({ jobId, code, signal, spawnError, timedOut, timeoutMs })),
           job_id: jobId,
           kind: entry.kind,
         };
@@ -302,6 +347,13 @@ export function registerPendingRoutes({ app, projects, broadcasters }) {
           console.warn(`[viewer] result finalize failed for ${id}/${jobId}:`, e);
         }
       };
+      const timeoutTimer = setTimeout(() => {
+        timedOut = true;
+        child.kill("SIGTERM");
+        killTimer = setTimeout(() => {
+          if (!finalized) child.kill("SIGKILL");
+        }, RUNNING_TIMEOUT_KILL_GRACE_MS);
+      }, timeoutMs);
       child.stdout.on("data", append);
       child.stderr.on("data", append);
       child.on("error", (err) => {

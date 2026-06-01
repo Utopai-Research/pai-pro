@@ -514,9 +514,8 @@
   border-color: rgba(255, 255, 255, 0.22);
   background: rgba(20, 20, 26, 0.88);
 }
-/* Draft chrome (PR #2 of the draft-gate). Textarea replaces the read-
-   only prompt; head carries model+resolution; foot pairs Cancel (left)
-   with Generate · $X.XX (right). */
+/* Draft chrome. Textarea replaces the read-only prompt; head carries
+   model+resolution; foot pairs Cancel (left) with Generate · $X.XX (right). */
 .node.pending[data-stage="draft"] .pending-shimmer { display: none; }
 .node.pending[data-stage="draft"] .node-foot {
   justify-content: space-between;

@@ -15,8 +15,7 @@ import {
   canvasPositionsPath,
   pendingDir,
   resultsDir,
-  PENDING_STALE_RUNNING_MS,
-  PENDING_STALE_DRAFT_MS,
+  PENDING_STALE_MS,
 } from "./paths.js";
 import { normalizeResultForRead } from "./generation_result_normalize.js";
 
@@ -63,9 +62,7 @@ export async function readCanvasPositions(id) {
 
 // Pending-generation sidecars: best-effort parse of a single .pending/<id>.json
 // file. Returns null on missing / unparsable / wrong-shape so the watcher
-// treats it as gone. Stale entries (older than the per-stage threshold)
-// are dropped: 15 min for running (crashed-CLI sweep), 24h for draft
-// (user-staged calls awaiting approval can live across a working session).
+// treats it as gone. Stale entries older than the 24h review window are dropped.
 export async function readPendingEntry(id, jobId) {
   try {
     const raw = await fsp.readFile(path.join(pendingDir(id), `${jobId}.json`), "utf8");
@@ -73,8 +70,7 @@ export async function readPendingEntry(id, jobId) {
     if (!parsed || typeof parsed !== "object") return null;
     const stage = parsed.stage === "draft" ? "draft" : "running";
     const createdAt = Date.parse(parsed.created_at || "");
-    const staleMs = stage === "draft" ? PENDING_STALE_DRAFT_MS : PENDING_STALE_RUNNING_MS;
-    if (Number.isFinite(createdAt) && Date.now() - createdAt > staleMs) return null;
+    if (Number.isFinite(createdAt) && Date.now() - createdAt > PENDING_STALE_MS) return null;
     const out = {
       id: parsed.id || jobId,
       kind:

@@ -442,8 +442,8 @@ export function useCanvasPositions({
       // Pending pads: per-job sidecar PATCHes. No batched endpoint
       // exists for /pending/:jobId, but `keepalive: true` on each call
       // keeps them alive across unload. Once these land, refresh sees
-      // the position in the sidecar and PR #112's server handoff has
-      // a position to copy onto the final node at addBatch time.
+      // the position in the sidecar and the server handoff can copy it
+      // onto the final node at addBatch time.
       // Through the queue so a late spiral PATCH can't clobber a drag.
       for (const pp of pendingPlacements) {
         const p = persistPendingSerialized(pp.id, pp.position)
