@@ -64,8 +64,7 @@ pai-pro/
 ├── projects/                      # gitignored — your work lives here
 ├── CLAUDE.md                      # repo maintainer guide (dev sessions auto-load this)
 ├── agent-templates/
-│   ├── PROJECT_AGENT.md             # compact project-agent kernel copied into each project
-│   └── STORY_TO_VIDEO_WORKFLOW.md   # on-demand story-to-video recommendation workflow
+│   └── PROJECT_AGENT.md           # compact project-agent kernel copied into each project
 ├── .claude-plugin/marketplace.json
 └── scripts/                       # tmux launcher (start.sh) + teardown (stop.sh) + agent setup
 ```
@@ -73,7 +72,7 @@ pai-pro/
 ## Where each layer is documented
 
 - **Project-agent kernel:** [agent-templates/PROJECT_AGENT.md](../agent-templates/PROJECT_AGENT.md) — the canonical always-read per-project operating manual. The viewer copies it into each project at create time as `projects/<id>/PROJECT_AGENT.md`.
-- **Story-to-video workflow:** [agent-templates/STORY_TO_VIDEO_WORKFLOW.md](../agent-templates/STORY_TO_VIDEO_WORKFLOW.md) — an on-demand manual copied into projects as `projects/<id>/STORY_TO_VIDEO_WORKFLOW.md`. `PROJECT_AGENT.md` tells the agent to read it for "what next?" guidance and multi-step story-to-video decisions.
+- **Story-to-video workflow:** [skills/story-to-video-workflow/SKILL.md](../skills/story-to-video-workflow/SKILL.md) — the workflow skill for multi-step story/script/promo-to-video decisions.
 - **Repo maintainer guide:** [CLAUDE.md](../CLAUDE.md) at the repo root — what you (the maintainer) auto-load when running `claude` at the repo root. Architecture overview, contributor recipes, debugging notes. Per-project agent sessions exclude it via `claudeMdExcludes`.
 - **Skill authoring:** [skills/CLAUDE.md](../skills/CLAUDE.md) — when to write a new skill, when to extend an existing one.
 - **Individual skill recipes:** [skills/<name>/SKILL.md](../skills/) — one file per skill; together they describe the entire skill surface.

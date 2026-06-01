@@ -92,6 +92,19 @@ async function skillNames() {
   return names.sort();
 }
 
+async function assertProjectSkillLinks(dir) {
+  const names = await skillNames();
+  assert.ok(names.length > 0);
+  assert.ok(names.includes("story-to-video-workflow"));
+  for (const name of names) {
+    const link = join(dir, ".agents", "skills", name);
+    const stat = await lstat(link);
+    assert.equal(stat.isSymbolicLink(), true);
+    assert.equal(await readlink(link), join(SKILLS_ROOT, name));
+    assert.equal(await pathExists(join(link, "SKILL.md")), true);
+  }
+}
+
 test("POST /projects stores claude agent_id when PAI_DEFAULT_AGENT_ID is unset", async () => {
   const handle = await startViewer();
   try {
@@ -103,13 +116,13 @@ test("POST /projects stores claude agent_id when PAI_DEFAULT_AGENT_ID is unset",
     assert.equal(bundle.agent_id, "claude");
     assert.equal(bundle.agent_label, "Claude");
     assert.equal(await pathExists(join(dir, "PROJECT_AGENT.md")), true);
-    assert.equal(await pathExists(join(dir, "STORY_TO_VIDEO_WORKFLOW.md")), true);
     assert.equal(await pathExists(join(dir, "CLAUDE.md")), true);
     const claudeMd = await readFile(join(dir, "CLAUDE.md"), "utf8");
     assert.match(claudeMd, /--stage/);
     assert.match(claudeMd, /run_in_background: true/);
     assert.match(claudeMd, /BashOutput/);
     assert.equal(await pathExists(join(dir, ".claude", "settings.local.json")), true);
+    await assertProjectSkillLinks(dir);
   } finally {
     await stopViewer(handle);
   }
@@ -138,7 +151,6 @@ test("POST /projects stores codex agent_id when PAI_DEFAULT_AGENT_ID=codex", asy
     assert.equal(bundle.agent_id, "codex");
     assert.equal(bundle.agent_label, "Codex");
     assert.equal(await pathExists(join(dir, "PROJECT_AGENT.md")), true);
-    assert.equal(await pathExists(join(dir, "STORY_TO_VIDEO_WORKFLOW.md")), true);
     const agentsMd = await readFile(join(dir, "AGENTS.md"), "utf8");
     assert.match(agentsMd, /read `\.\/PROJECT_AGENT\.md`/);
     assert.doesNotMatch(agentsMd, /@\.\/PROJECT_AGENT\.md/);
@@ -146,16 +158,7 @@ test("POST /projects stores codex agent_id when PAI_DEFAULT_AGENT_ID=codex", asy
     assert.match(agentsMd, /Do not use Codex background command execution/);
     assert.equal(await pathExists(join(dir, "CLAUDE.md")), false);
     assert.equal(await pathExists(join(dir, ".claude")), false);
-
-    const names = await skillNames();
-    assert.ok(names.length > 0);
-    for (const name of names) {
-      const link = join(dir, ".agents", "skills", name);
-      const stat = await lstat(link);
-      assert.equal(stat.isSymbolicLink(), true);
-      assert.equal(await readlink(link), join(SKILLS_ROOT, name));
-      assert.equal(await pathExists(join(link, "SKILL.md")), true);
-    }
+    await assertProjectSkillLinks(dir);
   } finally {
     await stopViewer(handle);
   }

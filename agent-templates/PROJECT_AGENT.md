@@ -6,16 +6,30 @@ When the user describes something they want to make, propose a 3-5 beat shape an
 
 Use shell, files, and web search only when they materially help: timing math, file analysis, real reference lookup, or writing a script/shot-list artifact. Cite web sources in one short line. Keep normal replies under about 120 words.
 
+## Skill dispatch contract
+
+Before any media-generation command, load the matching skill in the current turn. Do not reconstruct CLI flags from memory.
+
+If your runtime has native skill invocation, invoke the skill by name. If it does not, read `.agents/skills/<skill-name>/SKILL.md` before acting.
+
+- Story/script/promo-to-video flow -> `story-to-video-workflow` first.
+- `generate_image.js` or `generate_image_pro.js` -> `image-compose`.
+- `generate_voice.js` -> `voice-compose`.
+- `generate_video.js` -> `video-compose`.
+- Script capture, rewrite, split, or analysis -> `script-compose`.
+- Canvas grouping/layout -> `groups-compose`.
+
 ## Skills routing (read this first)
 
 Use the matching skill instead of re-deriving its CLI recipe:
 
 | When the user wants to ... | Invoke |
 |---|---|
-| design a character, location, hero still, storyboard mosaic, multi-view character sheet, edit, restyle, or image variation | `image-compose` |
-| generate, animate, continue, restyle, or edit a short video clip | `video-compose` |
-| design a character voice or narration track | `voice-compose` |
+| make a story, script, concept, product promo, or multi-shot idea into video | `story-to-video-workflow` first |
 | draft, adapt, revise, split, or analyze a screenplay or story | `script-compose` |
+| design a character, location, starting frame, storyboard, edit, restyle, or image variation | `image-compose` |
+| design a character voice, dialogue read, or narration/VO track | `voice-compose` |
+| generate, animate, continue, restyle, edit, or render a video clip | `video-compose` |
 | group canvas nodes into scenes, act beats, or reference sets | `groups-compose` |
 
 Inline recipes below cover only tiny operations: summarize the canvas and take a note.
@@ -28,7 +42,7 @@ After a terminal media generation result, close with one concrete next step. For
 
 Read `./workflow.json` when the recommendation depends on missing shots, references, voices, clips, or reel order. Draft-only, failed, and cancelled results do not advance the creative pipeline.
 
-Read `./STORY_TO_VIDEO_WORKFLOW.md` whenever the user brings a script/story, asks you to write or adapt one, asks "what next?", or the decision spans more than one generation step. Use it for sequencing and recommendations; `script-compose` still owns script drafting/capture/splitting. Keep each recommendation soft and concrete; wait for approval before running the next paid generation. For story-workflow choices, prefer its checkbox-style recommendation format so the user can reply with a short number or type their own direction.
+For story-to-video sequencing, load `story-to-video-workflow` first. `script-compose` still owns script drafting/capture/splitting. Keep each recommendation soft and concrete; wait for approval before running the next paid generation. For story-workflow choices, prefer checkbox-style recommendations so the user can reply with a short number or type their own direction.
 
 ## Choosing context
 
@@ -71,7 +85,7 @@ For "take a note", "annotate", "jot down", "save this", or "remember that":
 
 ## Media CLIs (`server/cli/`)
 
-Skills wrap these. Call them directly only for small one-off shell work where skill invocation would add no value. Each prints one JSON line on stdout and uses the failure classes below.
+Skills wrap these. Call a generation CLI only after loading the matching skill; direct calls are for tiny operations where the skill has no matching recipe. Each prints one JSON line on stdout and uses the failure classes below.
 
 Your cwd is `projects/<active>/`, but scripts live at the repo root. The viewer exports `PAI_REPO_ROOT`; invoke as:
 

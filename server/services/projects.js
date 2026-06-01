@@ -39,6 +39,7 @@ You are invoked as \`claude\` in this project's PTY. The \`@./PROJECT_AGENT.md\`
 
 Claude-specific notes:
 - Skill invocation syntax is \`/<skill-name>\` (slash-prefixed). The skills referenced in PROJECT_AGENT.md (\`image-compose\`, \`video-compose\`, etc.) live at \`~/.claude/skills/\` and auto-discover by description.
+- A provider-neutral fallback copy of the same skills also lives in \`.agents/skills/\`; use it only if native skill invocation is unavailable.
 - Every \`generate_image.js\`, \`generate_video.js\`, and \`generate_voice.js\` Bash call needs both the CLI flag \`--stage\` and the Bash tool option \`run_in_background: true\`; staged commands wait for the user's canvas Generate/Cancel decision before printing final JSON. This applies to every call in a parallel batch.
 - To wait on a backgrounded Bash call's final JSON, use the \`BashOutput\` tool against the bash id you got back. Never \`cat\`/\`grep\` \`/tmp/claude-*/.../tasks/<id>.output\`.
 `;
@@ -50,7 +51,7 @@ Before doing any pai-pro work, read \`./PROJECT_AGENT.md\` and treat it as the a
 You are invoked as \`codex\` in this project's PTY.
 
 Codex-specific notes:
-- Repo-local skills live in \`.agents/skills/\` and are discoverable by Codex.
+- Repo-local skills live in \`.agents/skills/\`. Use native skill invocation when available; otherwise read \`.agents/skills/<skill-name>/SKILL.md\` before acting.
 - Use staged media generation. Run generation commands in the foreground; the command waits for the user's canvas Generate/Cancel decision before printing final JSON.
 - Do not use Codex background command execution for \`generate_*\` calls.
 - For independent batches, stage each draft with \`--stage --draft-only\`, keep the returned job ids, then run one foreground waiter:
@@ -59,11 +60,6 @@ Codex-specific notes:
 `;
 
 const AGENT_TEMPLATE_PATH = path.join(PAI_REPO_ROOT, "agent-templates", "PROJECT_AGENT.md");
-const STORY_TO_VIDEO_WORKFLOW_TEMPLATE_PATH = path.join(
-  PAI_REPO_ROOT,
-  "agent-templates",
-  "STORY_TO_VIDEO_WORKFLOW.md",
-);
 const SKILLS_ROOT = path.join(PAI_REPO_ROOT, "skills");
 
 // Per-project settings.local.json — excludes the root dev CLAUDE.md from
@@ -103,14 +99,9 @@ export async function ensureProjectStructure(id, { agentId = "claude" } = {}) {
     await fsp.writeFile(projectAgentPath, template);
   }
 
-  // STORY_TO_VIDEO_WORKFLOW.md — on-demand recommendation manual for projects
-  // that are driving a story/script toward a finished reel. It is copied
-  // beside PROJECT_AGENT.md but intentionally not imported by provider wrappers.
-  const storyToVideoWorkflowPath = path.join(dir, "STORY_TO_VIDEO_WORKFLOW.md");
-  if (!(await fileExists(storyToVideoWorkflowPath))) {
-    const template = await fsp.readFile(STORY_TO_VIDEO_WORKFLOW_TEMPLATE_PATH, "utf8");
-    await fsp.writeFile(storyToVideoWorkflowPath, template);
-  }
+  // Provider-neutral skill fallback. Native skill loading differs by agent,
+  // so every project also gets .agents/skills/<name>/SKILL.md access.
+  await ensureProjectSkillLinks(dir);
 
   if (resolvedAgentId === "codex") {
     await ensureCodexProjectFiles(dir);
@@ -171,7 +162,9 @@ async function ensureCodexProjectFiles(dir) {
   if (!(await fileExists(agentsPath))) {
     await fsp.writeFile(agentsPath, PER_PROJECT_CODEX_AGENTS_MD);
   }
+}
 
+async function ensureProjectSkillLinks(dir) {
   const skillDestRoot = path.join(dir, ".agents", "skills");
   await fsp.mkdir(skillDestRoot, { recursive: true });
   let entries;

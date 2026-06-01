@@ -1,9 +1,11 @@
 ---
 name: voice-compose
-description: Designs and attaches voices to characters on the filmmaking canvas via the local generate_voice.js CLI, following canvas-aware conventions for voice description, sample text, and attachment to the target node. Use when the user asks to give a character a voice; design a voice, sample, or read; preview how a character sounds; or generate a standalone narration / voice-over track that isn't tied to a specific character.
+description: Designs and attaches voices to characters on the filmmaking canvas via the local generate_voice.js CLI. Use before calling generate_voice.js; when the user asks to give a character a voice; design a voice, sample, line read, dialogue read, narration, VO, or voice-over track; preview how a character sounds; preserve exact spoken text for later video; or create an audio_result voice node used as a video audio ref.
 ---
 
 **Stage by default.** Every `generate_voice.js` call goes through `--stage`; the command waits until the user fires or cancels the draft from the canvas, then prints the terminal result as its final JSON line.
+
+`--text` is the exact spoken text. Preserve user-provided dialogue and narration verbatim unless the user asked for a rewrite. After generation, `audio_result.data.text` is the speech source of truth for downstream `video-compose`; video prompts should reference that audio node instead of paraphrasing its words.
 
 ## Patterns
 
@@ -45,7 +47,7 @@ Triggers: "a narrator voice", "voice-over for the opener", "a voice that says X"
     --text "<the narration line>" \
     --prompt "<voice design brief>"
   ```
-- Same `prompt` and `text` conventions as Pattern 1.
+- Same `prompt` and `text` conventions as Pattern 1. For script-derived narration or dialogue, copy the line exactly into `--text`.
 - After the user fires, the audio lands as a standalone `audio_result` on the canvas — usable as a `--ref-audio-source-id` for a later video gen, or just to preview a tone.
 
 ### More patterns (future)

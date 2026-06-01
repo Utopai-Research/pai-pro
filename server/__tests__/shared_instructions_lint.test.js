@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile, readdir } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -28,7 +28,6 @@ const FORBIDDEN = [
 async function sharedInstructionFiles() {
   const files = [
     join(REPO_ROOT, "agent-templates", "PROJECT_AGENT.md"),
-    join(REPO_ROOT, "agent-templates", "STORY_TO_VIDEO_WORKFLOW.md"),
   ];
   const skillsRoot = join(REPO_ROOT, "skills");
   const entries = await readdir(skillsRoot, { withFileTypes: true });
@@ -37,6 +36,26 @@ async function sharedInstructionFiles() {
     files.push(join(skillsRoot, entry.name, "SKILL.md"));
   }
   return files;
+}
+
+function parseFrontmatter(text) {
+  const match = text.match(/^---\n([\s\S]*?)\n---\n/);
+  assert.ok(match, "missing YAML frontmatter");
+  const fields = {};
+  let currentKey = null;
+  for (const line of match[1].split("\n")) {
+    const topLevel = line.match(/^([A-Za-z0-9_-]+):(?:\s+(.*))?$/);
+    if (topLevel) {
+      currentKey = topLevel[1];
+      const rawValue = topLevel[2]?.trim() ?? "";
+      fields[currentKey] = [">", ">-", "|", "|-"].includes(rawValue) ? "" : rawValue;
+      continue;
+    }
+    if (currentKey && /^\s+/.test(line)) {
+      fields[currentKey] = `${fields[currentKey]} ${line.trim()}`.trim();
+    }
+  }
+  return fields;
 }
 
 test("shared project instructions and skills do not contain Claude-only phrases", async () => {
@@ -81,4 +100,27 @@ test("skill frontmatter avoids unquoted YAML colon traps", async () => {
       );
     }
   }
+});
+
+test("skill metadata and body stay within provider-neutral skill limits", async () => {
+  let sawStoryToVideo = false;
+  for (const file of await sharedInstructionFiles()) {
+    if (!file.endsWith("/SKILL.md")) continue;
+    const text = await readFile(file, "utf8");
+    const fields = parseFrontmatter(text);
+    const expectedName = basename(dirname(file));
+    if (expectedName === "story-to-video-workflow") sawStoryToVideo = true;
+    assert.equal(fields.name, expectedName, `${file} name must match directory`);
+    assert.ok(fields.description, `${file} must have a description`);
+    assert.ok(
+      fields.description.length <= 1024,
+      `${file} description is ${fields.description.length} chars`,
+    );
+    const body = text.replace(/^---\n[\s\S]*?\n---\n/, "");
+    assert.ok(
+      body.split("\n").length <= 500,
+      `${file} body must stay at or below 500 lines`,
+    );
+  }
+  assert.equal(sawStoryToVideo, true, "skills/story-to-video-workflow/SKILL.md is required");
 });

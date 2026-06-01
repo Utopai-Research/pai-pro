@@ -1,6 +1,6 @@
 ---
 name: video-compose
-description: Generates short videos on the filmmaking canvas via the local generate_video.js CLI, following canvas-aware conventions for prompt composition, reference attachment, and provenance edges. Use when the user asks to animate, film, shoot, or generate a video of a canvas character, scene, or image; continue or extend an existing clip; restyle, partially edit, replace, or re-plot an existing clip; attach a character voice as reference audio; borrow camera moves, action, or VFX from a reference clip; render a script or its shot notes as a video sequence; render a storyboard mosaic as a video; compose an ad, brand film, or music-video shot; or generate a standalone clip.
+description: Generates and prompts video clips on the filmmaking canvas. Use when the user asks to generate, render, animate, continue, restyle, edit, shoot, or compose a video clip; render script or shot notes as video; animate a storyboard, starting frame, image, character, location, or reference; use image, video, audio, storyboard, starting-frame, or voice refs; compose an ad, brand film, product promo, music-video shot, or video sequence; or before calling generate_video.js. Owns video CLI flags, refs, prompt construction, audio-ref handling, and video failure recovery.
 ---
 
 This file is the intent dispatcher. Each pattern below names triggers, the CLI invocation, edge / node rules, and which reference owns the prompt construction. References live in `references/`.
@@ -62,7 +62,7 @@ The same CLI flag can serve different semantic roles depending on how the prompt
 | Camera-move source | `--ref-source-id` (video) | "camera moves match @Video1" |
 | Action source | `--ref-source-id` (video) | "action choreography matches @Video1" |
 | VFX template | `--ref-source-id` (video) | "use the visual-effects template from @Video1" |
-| Voice timbre | `--ref-audio-source-id` | "voice timbre from @Audio1" |
+| Spoken audio / voice | `--ref-audio-source-id` | "spoken audio from @Audio1" |
 
 ## Prompt-language conventions
 
@@ -122,9 +122,11 @@ Pick the one that fits. For source lookup, follow the project `PROJECT_AGENT.md`
 **Source:** any canvas `audio_result` node — agent-generated or user-uploaded.
 **Call:** `node "$PAI_REPO_ROOT/server/cli/generate_video.js" --prompt "..." --ref-audio-source-id <audio_id>`. Often combined with character image refs for face + voice — pass both `--ref-source-id <character_id>` (for the character image) and `--ref-audio-source-id <audio_id>` (for the voice).
 **Prompt — inline this iteration:**
-- Mark the timbre: *"Use the voice timbre from @Audio1 for the dialogue."*
-- Preserve dialogue verbatim: write as `[Character] says: "…"`, or *"the character in @Image1 says: …"* when an image ref is also attached. For V.O. without an on-screen speaker, attribute to the voice track (*"V.O. from @Audio1: …"*) — never write `@Image1 says` (images don't talk).
-- Don't demote dialogue to on-screen captions — video-generation renders synced voice.
+- If the audio node already contains speech (`audio_result.data.text`), do not duplicate, rewrite, or paraphrase those words in the video prompt. The audio node is the speech source of truth.
+- For off-screen narration: *"Use narration timing and cadence from @Audio1. Visuals should pace to the narration. Do not render captions or on-screen transcript text."*
+- For on-screen dialogue with a character image: *"The character in @Image1 performs to the spoken audio from @Audio1. Keep the spoken words from @Audio1 unchanged."*
+- If there is no audio node yet and the user wants the video model to generate speech directly, then preserve the requested dialogue verbatim in the prompt as `[Character] says: "..."`; prefer routing to `voice-compose` first when exact VO/dialogue matters.
+- Never treat an image as the speech source; images can identify the speaker, but the spoken words come from the audio node or the user-provided dialogue.
 
 **Edges:** depends on which character refs attach (one `kind: "derived"` per ref).
 

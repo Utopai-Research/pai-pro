@@ -12,13 +12,16 @@ description: >-
   user asks to write, adapt, or rewrite a script, story, or screenplay; to
   split a script into shots or clips; to extract or design characters or
   locations from a script; or to analyze or break down a canvas script.
-  Preserves dialogue verbatim. Does NOT split or analyze without explicit user
-  intent.
+  Preserves dialogue verbatim and hands multi-stage story-to-video planning
+  back to story-to-video-workflow before image, voice, or video generation. Does NOT
+  split or analyze without explicit user intent.
 ---
 
 Run only on explicit user intent — never on a file drop. If the user just dropped a script, the bridge already wrote a filename-reference note; do nothing more until they ask.
 
 Director defaults: a 30s beat is ONE moment; trust silence; match the user's input language.
+
+For multi-stage story-to-video work, this skill stops at script capture, shot notes, and production anchor extraction. After that, route back to `story-to-video-workflow` for sequencing recommendations; then load `image-compose`, `voice-compose`, or `video-compose` for execution.
 
 Script intake should leave the next agent with enough planning context, not a full production plan. Capture the target duration when it is observable:
 

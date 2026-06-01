@@ -6,7 +6,7 @@ Auto-loaded by Claude Code when working under `.claude/skills/`. Canonical sourc
 
 Keep it tight. Add only rules that change author behavior. Don't restate Anthropic's docs at length — link them. State each rule once.
 
-Shared agent behavior belongs in `agent-templates/PROJECT_AGENT.md`, not in individual skills. Skills may point to generated project `PROJECT_AGENT.md` sections such as "Choosing context", "Draft gate", and "Failure handling", but should not duplicate or override those rules.
+Shared always-on agent behavior belongs in `agent-templates/PROJECT_AGENT.md`, not in individual skills. Workflow skills may hold longer multi-stage policies that would bloat the always-loaded manual; capability skills may point to generated project `PROJECT_AGENT.md` sections such as "Choosing context", "Draft gate", and "Failure handling", but should not duplicate or override those rules.
 
 ## What a skill is
 

@@ -3,17 +3,16 @@ name: image-compose
 description: >-
   Generates or edits images on the filmmaking canvas with generate_image.js and
   generate_image_pro.js, including subtype stamping, reference wiring,
-  provenance edges, and source selection. Use for character design, portraits,
-  actor/character reference sheets, locations, hero stills, scene shots, edits,
-  variations, standalone images, and storyboard or previs mosaics. Character
-  routing: if a character may appear in any downstream video, clip, promo, film,
-  scene, or shot, default to Pattern 7, a 4-panel
-  front/profile/back/closeup reference sheet, whether or not actor refs exist;
-  this gives the video model multi-view identity anchors. Use Pattern 1 only for
-  one-off static portraits, posters, print art, or illustrations that will not
-  feed video. Before generating video-bound characters, announce the 4-panel
-  choice. Storyboard routing: use Pattern 6 with generate_image_pro.js, one
-  composite mosaic per clip or <=15s shot note, not one CLI call per panel.
+  provenance edges, source selection, starting frames, storyboards, and visual
+  anchors for downstream video. Use before calling generate_image.js or
+  generate_image_pro.js; for character design, portraits, actor/character
+  reference sheets, locations, hero stills, scene shots, edits, variations,
+  standalone images, and storyboard or previs mosaics. For characters that may
+  appear in downstream video, clip, promo, film, scene, or shot, default to
+  Pattern 7, a 4-panel front/profile/back/closeup reference sheet. Use Pattern
+  1 only for one-off static portraits, posters, print art, or illustrations.
+  Storyboard routing: use Pattern 6 with generate_image_pro.js, one composite
+  mosaic per clip or <=15s shot note, not one CLI call per panel.
 ---
 
 ## CLI shape
