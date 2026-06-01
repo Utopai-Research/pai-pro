@@ -474,6 +474,9 @@
 .pending-dismiss-failure {
   flex: 0 0 auto;
 }
+.pending-dismiss-failure:only-child {
+  margin-inline: auto;
+}
 .pending-send-agent {
   flex: 1 1 auto;
   min-width: 0;
@@ -580,6 +583,19 @@
 }
 .btn-cancel:hover { background: rgba(255, 255, 255, 0.05); color: var(--ink-1); }
 .btn-cancel:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn-cancel.pending-dismiss-failure {
+  min-width: 92px;
+  background: oklch(0.91 0.018 35);
+  color: oklch(0.20 0.04 25);
+  border-color: oklch(0.68 0.16 25 / 0.45);
+  font-weight: 700;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.22);
+}
+.btn-cancel.pending-dismiss-failure:hover {
+  background: oklch(0.97 0.012 35);
+  border-color: oklch(0.72 0.18 25 / 0.7);
+  color: oklch(0.17 0.045 25);
+}
 .btn-generate-primary {
   background: oklch(0.6 0.15 145);
   color: white;
