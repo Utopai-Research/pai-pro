@@ -46,12 +46,18 @@ Claude-specific notes:
 
 const PER_PROJECT_CODEX_AGENTS_MD = `# Per-project filmmaking agent -- Codex
 
-Before doing any pai-pro work, read \`./PROJECT_AGENT.md\` and treat it as the authoritative operating manual for this project.
+Before doing any pai-pro work:
+
+1. Read \`./PROJECT_AGENT.md\` and treat it as the authoritative operating manual for this project.
+2. Classify the user's request into exactly one primary route before acting.
+3. If the request is a story/script/concept/product-promo/multi-shot idea intended to become video, first read \`.agents/skills/story-to-video-workflow/SKILL.md\`. Only then read the capability skill it routes to, such as \`script-compose\`, \`image-compose\`, \`voice-compose\`, or \`video-compose\`.
+4. If the request is a one-off action outside a story-to-video pipeline, read the matching capability skill directly.
 
 You are invoked as \`codex\` in this project's PTY.
 
 Codex-specific notes:
 - Repo-local skills live in \`.agents/skills/\`. Use native skill invocation when available; otherwise read \`.agents/skills/<skill-name>/SKILL.md\` before acting.
+- Codex does not get Claude's automatic project-agent import or guaranteed native Skill dispatch here; the explicit route classification above is the guardrail.
 - Use staged media generation. Run generation commands in the foreground; the command waits for the user's canvas Generate/Cancel decision before printing final JSON.
 - Do not use Codex background command execution for \`generate_*\` calls.
 - For independent batches, stage each draft with \`--stage --draft-only\`, keep the returned job ids, then run one foreground waiter:

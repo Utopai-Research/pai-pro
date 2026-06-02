@@ -152,7 +152,10 @@ test("POST /projects stores codex agent_id when PAI_DEFAULT_AGENT_ID=codex", asy
     assert.equal(bundle.agent_label, "Codex");
     assert.equal(await pathExists(join(dir, "PROJECT_AGENT.md")), true);
     const agentsMd = await readFile(join(dir, "AGENTS.md"), "utf8");
-    assert.match(agentsMd, /read `\.\/PROJECT_AGENT\.md`/);
+    assert.match(agentsMd, /Read `\.\/PROJECT_AGENT\.md`/);
+    assert.match(agentsMd, /Classify the user's request into exactly one primary route/);
+    assert.match(agentsMd, /story-to-video-workflow\/SKILL\.md/);
+    assert.match(agentsMd, /Codex does not get Claude's automatic project-agent import/);
     assert.doesNotMatch(agentsMd, /@\.\/PROJECT_AGENT\.md/);
     assert.doesNotMatch(agentsMd, /\[task-notification\]/);
     assert.match(agentsMd, /Do not use Codex background command execution/);
