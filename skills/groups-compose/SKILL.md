@@ -23,7 +23,7 @@ A group is a **visual frame** that wraps member nodes on the canvas. The frame a
 - The frame's geometry (`x`, `y`, `width`, `height`) is a bounding box computed from the final member positions.
 - A node may appear in at most one frame. If a proposed member is already in an existing frame, evict it in the same layout update (upsert the old frame with reduced `memberIds`, or delete the old frame if fewer than 2 members would remain).
 - No nested frames.
-- `frameId` format: `frame_<unix_ms>` (e.g. `frame_1716579123456`). Matches the frontend's convention. Titles are free-form (≤ 30 chars recommended).
+- `frameId`: any unique string of the form `frame_<suffix>`. Mint a fresh random suffix like the frontend does (e.g. `frame_a1b2c3d4`); never reuse an existing frame's id. Titles are free-form (≤ 30 chars recommended).
 
 ## Patterns
 
@@ -88,14 +88,14 @@ Frames and positions go through the layout CLI. The workflow mutator has no grou
 4. **Evict any member already in another frame.** For each id in your proposed `memberIds`, scan existing `groupFrames`. If you find a frame that contains it, include that old frame in the same layout JSON:
    - If the old frame would still have ≥ 2 members after eviction: include it under `groupFrames.upsert` with `memberIds` minus the evictee.
    - If the old frame would have < 2 members: include its id under `groupFrames.delete`.
-5. **Compute frame bboxes** from final member positions. Use 24px padding (matches the frontend's `FRAME_BBOX_PADDING`). Member widths/heights are determined by `pickSize` in `web/src/pages/CanvasPage/placement.ts`. Use these fallbacks per type:
-   - `note`: **280 × 420**  (width hardcoded; height = `NOTE_CARD_FALLBACK_HEIGHT` for first paint)
+5. **Compute frame bboxes** from final member positions. Use 24px padding. The frontend computes card sizes from aspect-ratio metadata; when you only have ids, use these per-type fallbacks:
+   - `note`: **280 × 420**  (width fixed; 420 is the max first-paint height)
    - `image_result`: **290 × 220**  (16:9 default; if `data.metadata.aspect_ratio` is present, scale accordingly)
    - `video_result`: **290 × 220**  (same caveat; check `data.aspect` or `data.metadata.aspect_ratio`)
    - `audio_result`: **240 × 64**
-   - `pending` / `pending_generation` / `pending_attachment`: **260 × 200**
+   - `pending`: **200 × 140**; `pending_generation` / `pending_attachment`: **260 × 200**
 
-   *Heads-up on dynamic heights*: React Flow measures each card's real rendered height after first paint and stores it in `measuredHeights` (see `useCanvasPositions.ts`). The 420 px fallback for `note` is the **maximum** initial height; short notes will measure smaller and the frame may end up taller than needed (harmless — user can drag-resize). If `measured_heights` ever surfaces in `canvas_positions.json`, prefer those values over the fallback.
+   *Heads-up on dynamic heights*: the renderer measures each card's real height after first paint, so a `note` shorter than 420 px ends up with a frame taller than needed (harmless — user can drag-resize).
    ```
    minX = min(node.x for each member)
    minY = min(node.y for each member)
@@ -107,10 +107,10 @@ Frames and positions go through the layout CLI. The workflow mutator has no grou
    height = (maxY - minY) + 48
    ```
 6. **Decide title + hue.** Default hue 200 if you have no signal.
-7. **Apply one layout update.** Pick `frameId = frame_<unix_ms>`. Include every node move and frame change in one JSON body:
+7. **Apply one layout update.** Mint a fresh `frameId` (`frame_<random-suffix>`). Include every node move and frame change in one JSON body:
    ```
    node "$PAI_REPO_ROOT/server/cli/canvas_layout.js" \
-     --layout-json '{"positions":{"note_2":{"x":120,"y":80},"image_3":{"x":440,"y":80},"video_1":{"x":760,"y":80}},"groupFrames":{"upsert":{"frame_1716579123456":{"memberIds":["note_2","image_3","video_1"],"x":96,"y":56,"width":978,"height":468,"hue":200,"title":"Scene 1 — Causeway"}},"delete":[]}}'
+     --layout-json '{"positions":{"note_2":{"x":120,"y":80},"image_3":{"x":440,"y":80},"video_1":{"x":760,"y":80}},"groupFrames":{"upsert":{"frame_a1b2c3d4":{"memberIds":["note_2","image_3","video_1"],"x":96,"y":56,"width":978,"height":468,"hue":200,"title":"Scene 1 — Causeway"}},"delete":[]}}'
    ```
    The command prints one JSON line. On `ok:true`, the viewer fans the update out via Socket.IO; the canvas updates within a frame.
 8. **Extending an existing frame** — same layout CLI, same frameId, full new `memberIds` list, recomputed bbox, and any member position changes.
