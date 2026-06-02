@@ -17,7 +17,7 @@ description: >-
   split or analyze without explicit user intent.
 ---
 
-Run only on explicit user intent — never on a file drop. If the user just dropped a script, the bridge already wrote a filename-reference note; do nothing more until they ask.
+Run only on explicit user intent — never on a file drop. A dropped text/PDF script is already a note in `workflow.json` with `data.body` as the source text and a derived mirror at `./assets/notes/<note_id>.md`; do nothing more until they ask.
 
 Director defaults: a 30s beat is ONE moment; trust silence; match the user's input language.
 
@@ -35,7 +35,7 @@ Store the result on the script note metadata as `target_duration_sec` and `durat
 
 Classify the input, then capture as in §2. Never skip straight to §3.
 
-- **Screenplay** (INT./EXT. + ALL-CAPS cues + dialogue) → use **verbatim**. For a dropped file, `read` `./uploads/<filename>` first. Pick a 2–5 word title in the user's language (use the script's own if present). Identify duration basis before capture; do not rewrite to fit it.
+- **Screenplay** (INT./EXT. + ALL-CAPS cues + dialogue) → use **verbatim**. For a dropped text/PDF file, read the upload note body from `./workflow.json` (`data.body`) or the derived mirror at `./assets/notes/<note_id>.md`. Pick a 2–5 word title in the user's language (use the script's own if present). Identify duration basis before capture; do not rewrite to fit it.
 - **Story / concept** (prose, pitch, logline) → sketch ONE paragraph back (setting, characters, conflict, target duration) and ask if it's the shape. Iterate. On "yes/go", rewrite using the rules below, then capture.
 - **Neither** → don't run; defer to `image-compose` / `video-compose`.
 

@@ -25,6 +25,11 @@ const FORBIDDEN = [
   "/groups-compose",
 ];
 
+const STALE_SHARED_GUIDANCE = [
+  "./uploads/",
+  "filename-reference",
+];
+
 async function sharedInstructionFiles() {
   const files = [
     join(REPO_ROOT, "agent-templates", "PROJECT_AGENT.md"),
@@ -66,6 +71,19 @@ test("shared project instructions and skills do not contain Claude-only phrases"
         text.includes(phrase),
         false,
         `${file} contains forbidden phrase ${JSON.stringify(phrase)}`,
+      );
+    }
+  }
+});
+
+test("shared project instructions and skills do not point agents at stale upload paths", async () => {
+  for (const file of await sharedInstructionFiles()) {
+    const text = await readFile(file, "utf8");
+    for (const phrase of STALE_SHARED_GUIDANCE) {
+      assert.equal(
+        text.includes(phrase),
+        false,
+        `${file} contains stale upload guidance ${JSON.stringify(phrase)}`,
       );
     }
   }
