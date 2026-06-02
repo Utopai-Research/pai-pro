@@ -3,7 +3,7 @@ name: voice-compose
 description: Designs and attaches voices to characters on the filmmaking canvas via the local generate_voice.js CLI. Use before calling generate_voice.js; when the user asks to give a character a voice; design a voice, sample, line read, dialogue read, narration, VO, or voice-over track; preview how a character sounds; preserve exact spoken text for later video; or create an audio_result voice node used as a video audio ref.
 ---
 
-**Stage by default.** Every `generate_voice.js` call goes through `--stage`; the command waits until the user fires or cancels the draft from the canvas, then prints the terminal result as its final JSON line.
+**Stage by default.** Every `generate_voice.js` call goes through `--stage`; see the project `PROJECT_AGENT.md` § "Draft gate" for draft and result handling.
 
 `--text` is the exact spoken text. Preserve user-provided dialogue and narration verbatim unless the user asked for a rewrite. After generation, `audio_result.data.text` is the speech source of truth for downstream `video-compose`; video prompts should include that text verbatim and use the audio node for timing, cadence, and voice.
 
@@ -34,7 +34,7 @@ Triggers: "give / design a voice for [character]", "what does [character] sound 
   - a characteristic line from an imagined scene,
   - a brief self-introduction in their voice ("I've been working this beat for twenty years…"),
   - or a catchphrase.
-- Calls go via `--stage` — see the project `PROJECT_AGENT.md` § "Draft gate". Bulk asks: one Bash call per target in a single turn, each becoming its own draft card.
+- Calls go via `--stage` — see the project `PROJECT_AGENT.md` § "Draft gate". Bulk asks: one call per target in a single turn, each becoming its own draft card.
 - The real `audio_result` (subtype `voice`, with `source_id` + derived edge to the source image) is minted only after the user fires the draft.
 
 ### 2. Standalone voice / narration / V.O.

@@ -34,7 +34,7 @@ Use the matching skill instead of re-deriving its CLI recipe:
 
 Inline recipes below cover only tiny operations: summarize the canvas and take a note.
 
-Use the skill when it matches; skills own canonical node grammar, refs, edges, metadata, and CLI shape. Stage generation by default: every `generate_*` call passes `--stage` and waits for the terminal JSON result.
+Use the skill when it matches; skills own canonical node grammar, refs, edges, metadata, and CLI shape. Stage generation by default: every `generate_*` call passes `--stage`. The active project wrapper owns output collection.
 
 ## Keep momentum - recommend the next step
 
@@ -137,11 +137,11 @@ Do not use `node server/cli/...` from a project cwd or hardcode relative repo pa
 
 ### Draft gate
 
-Every `generate_*` call passes `--stage`. The CLI writes a draft sidecar with price, prints a staged JSON line, and waits for the user to Generate or Cancel on the canvas.
+Every `generate_*` call passes `--stage`. The CLI writes a draft sidecar with price and prints a staged JSON line. The active project wrapper owns how the agent gets the terminal result.
 
 If the command returns only the draft JSON, reply in one short sentence naming the price/status. For chained calls, wait for A's terminal `ok:true` result and node id before staging B. If output fell out of context, resolve via `list_generation_results.js` first, then `workflow.json` if needed.
 
-If the canvas is in Run immediately mode, still pass `--stage`; the viewer fires the draft and the CLI waits for the final result. If the user asks you to bypass staging from chat, refuse and tell them to use the canvas control.
+If the canvas is in Run immediately mode, still pass `--stage`; the viewer fires the draft. If the user asks you to bypass staging from chat, refuse and tell them to use the canvas control.
 
 ### Failure handling
 

@@ -119,6 +119,7 @@ test("POST /projects stores claude agent_id when PAI_DEFAULT_AGENT_ID is unset",
     assert.equal(await pathExists(join(dir, "CLAUDE.md")), true);
     const claudeMd = await readFile(join(dir, "CLAUDE.md"), "utf8");
     assert.match(claudeMd, /--stage/);
+    assert.match(claudeMd, /generate_image_pro\.js/);
     assert.match(claudeMd, /run_in_background: true/);
     assert.match(claudeMd, /BashOutput/);
     assert.equal(await pathExists(join(dir, ".claude", "settings.local.json")), true);
@@ -156,6 +157,9 @@ test("POST /projects stores codex agent_id when PAI_DEFAULT_AGENT_ID=codex", asy
     assert.match(agentsMd, /Classify the user's request into exactly one primary route/);
     assert.match(agentsMd, /story-to-video-workflow\/SKILL\.md/);
     assert.match(agentsMd, /Codex does not get Claude's automatic project-agent import/);
+    assert.match(agentsMd, /generate_image_pro\.js/);
+    assert.match(agentsMd, /--draft-only/);
+    assert.match(agentsMd, /wait_for_generations\.js/);
     assert.doesNotMatch(agentsMd, /@\.\/PROJECT_AGENT\.md/);
     assert.doesNotMatch(agentsMd, /\[task-notification\]/);
     assert.match(agentsMd, /Do not use Codex background command execution/);

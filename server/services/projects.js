@@ -40,8 +40,8 @@ You are invoked as \`claude\` in this project's PTY. The \`@./PROJECT_AGENT.md\`
 Claude-specific notes:
 - Skill invocation syntax is \`/<skill-name>\` (slash-prefixed). The skills referenced in PROJECT_AGENT.md (\`image-compose\`, \`video-compose\`, etc.) live at \`~/.claude/skills/\` and auto-discover by description.
 - A provider-neutral fallback copy of the same skills also lives in \`.agents/skills/\`; use it only if native skill invocation is unavailable.
-- Every \`generate_image.js\`, \`generate_video.js\`, and \`generate_voice.js\` Bash call needs both the CLI flag \`--stage\` and the Bash tool option \`run_in_background: true\`; staged commands wait for the user's canvas Generate/Cancel decision before printing final JSON. This applies to every call in a parallel batch.
-- To wait on a backgrounded Bash call's final JSON, use the \`BashOutput\` tool against the bash id you got back. Never \`cat\`/\`grep\` \`/tmp/claude-*/.../tasks/<id>.output\`.
+- Every media-generation Bash call (\`generate_image.js\`, \`generate_image_pro.js\`, \`generate_video.js\`, and \`generate_voice.js\`) needs both the CLI flag \`--stage\` and the Bash tool option \`run_in_background: true\`. This applies to every call in a parallel batch.
+- To read backgrounded Bash output, use the \`BashOutput\` tool against the bash id you got back. Never \`cat\`/\`grep\` \`/tmp/claude-*/.../tasks/<id>.output\`.
 `;
 
 const PER_PROJECT_CODEX_AGENTS_MD = `# Per-project filmmaking agent -- Codex
@@ -58,11 +58,11 @@ You are invoked as \`codex\` in this project's PTY.
 Codex-specific notes:
 - Repo-local skills live in \`.agents/skills/\`. Use native skill invocation when available; otherwise read \`.agents/skills/<skill-name>/SKILL.md\` before acting.
 - Codex does not get Claude's automatic project-agent import or guaranteed native Skill dispatch here; the explicit route classification above is the guardrail.
-- Use staged media generation. Run generation commands in the foreground; the command waits for the user's canvas Generate/Cancel decision before printing final JSON.
-- Do not use Codex background command execution for \`generate_*\` calls.
-- For independent batches, stage each draft with \`--stage --draft-only\`, keep the returned job ids, then run one foreground waiter:
+- Media generation CLIs are \`generate_image.js\`, \`generate_image_pro.js\`, \`generate_video.js\`, and \`generate_voice.js\`. Always pass \`--stage\`.
+- For one call, or for dependent calls where B needs A's final node id, run the generation command in the foreground without \`--draft-only\`; it waits for the user's canvas Generate/Cancel decision before printing the terminal JSON result. Do not use Codex background command execution for \`generate_*\` calls.
+- For independent batches, run each generation command in the foreground with \`--stage --draft-only\`, keep the returned job ids, then run one foreground waiter:
   \`node "$PAI_REPO_ROOT/server/cli/wait_for_generations.js" --job-id <id> --job-id <id>\`
-  In Run immediately mode, \`--draft-only\` also asks the viewer to fire the draft before exiting. The waiter prints each completed job as it lands, then prints a final summary after every job has succeeded, failed, or been cancelled. If it times out with pending ids, recover them later with \`list_generation_results.js --job-id ...\`.
+  A draft-only generation call exits after staging and does not produce the final media result. In Run immediately mode, it also asks the viewer to fire the draft before exiting. The waiter prints each completed job as it lands, then prints a final summary after every job has succeeded, failed, or been cancelled. If it times out with pending ids, recover them later with \`list_generation_results.js --job-id ...\`.
 `;
 
 const AGENT_TEMPLATE_PATH = path.join(PAI_REPO_ROOT, "agent-templates", "PROJECT_AGENT.md");

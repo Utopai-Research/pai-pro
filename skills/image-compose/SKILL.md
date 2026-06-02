@@ -33,7 +33,7 @@ Pro tier accepts `--size` only. Do not pass `--aspect-ratio` or `--image-size` t
 
 `$PAI_REPO_ROOT` is exported by the viewer — see the project `PROJECT_AGENT.md` § "Media CLIs (server/cli/)".
 
-Calls go via `--stage` — see the project `PROJECT_AGENT.md` § "Draft gate". The command writes a draft job id, then waits for the user's Generate/Cancel decision and prints the terminal result as its final JSON line.
+Calls go via `--stage` — see the project `PROJECT_AGENT.md` § "Draft gate" for draft and result handling.
 
 `--label` defaults to the truncated prompt (≤30 chars) if omitted; pass an explicit one when you have a better caption.
 
