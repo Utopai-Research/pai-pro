@@ -42,7 +42,7 @@ When a storyboard mosaic exists on canvas (`image_result.data.subtype === "story
 - **Per-panel timeline content.** Read the mosaic node's `data.prompt` field — it carries the per-panel briefs in its `[PANEL LIST]` section. Each brief becomes one SHOT block; tag each block with `(panel N)` so the panel-to-shot mapping stays legible.
 - **Identity continuity.** Re-use the character / location image refs that authored the mosaic (read them from the mosaic node's incoming `kind: "derived"` edges). The mosaic locked identity across cells; the video inherits that lock.
 - **Grid ceiling.** 4×4 (16 panels at ~0.94s each) is the practical ceiling — past that, beats are too short to register. Warn the user before rendering a 5×5+ mosaic.
-- **Don't drop panels by default.** Use every panel. If the user wants only a subset, SUGGEST `split_image(mosaic, cols, rows)` so they can pick tiles by id and re-ask. Splitting is the explicit cherry-pick gesture — never something the agent does unprompted to make the math nicer.
+- **Don't drop panels by default.** Use every panel. If the user wants only a subset, SUGGEST splitting the mosaic into per-tile nodes so they can name the ones to keep and re-ask: `node "$PAI_REPO_ROOT/server/cli/split_image.js" --url <mosaic URL> --cols <C> --rows <R> --source-node-id <mosaic.id>`, with `--cols`/`--rows` set to the mosaic's own panel grid (each 1-8; 1x1 rejected). `--url` is an image URL, not a node id — pass the mosaic's `output_url` (from its generation result) or the viewer URL for its `local_path` (`/projects/<id>/<local_path>`). Splitting is the explicit cherry-pick gesture — never something the agent does unprompted to make the math nicer.
 
 ## The 4-section scaffold
 
