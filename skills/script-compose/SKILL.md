@@ -19,7 +19,7 @@ description: >-
 
 Run only on explicit user intent — never on a file drop. A dropped text/PDF script is already a note in `workflow.json` with `data.body` as the source text and a derived mirror at `./assets/notes/<note_id>.md`; do nothing more until they ask.
 
-Director defaults: a 30s beat is ONE moment; trust silence; match the user's input language.
+Director defaults: a 30s beat is ONE moment; let wordless action carry beats instead of packing every one with dialogue; match the user's input language.
 
 For multi-stage story-to-video work, this skill stops at script capture, shot notes, and production anchor extraction. After that, route back to `story-to-video-workflow` for sequencing recommendations; then load `image-compose`, `voice-compose`, or `video-compose` for execution.
 
@@ -66,15 +66,7 @@ blocks direct `Write` / `Edit` on `workflow.json`.
    ```
    node "$PAI_REPO_ROOT/server/cli/canvas_mutate.js" --op setTitle --payload-json '{"title":"<title>"}'
    ```
-4. Close with `Captured.` and the project `PROJECT_AGENT.md` § "Recommendation and choice shape":
-   ```
-   Captured.
-   Recommended next:
-   1. Split it into <=15s shots and extract characters/locations/voices. (recommended)
-   2. Type something else.
-
-   Reply `1` to proceed, or describe what you want.
-   ```
+4. Confirm with `Captured.`, then offer the next step as a choice rendered per the project `PROJECT_AGENT.md` § "Recommendation and choice shape". Recommended option: "Split it into <=15s shots and extract characters/locations/voices." Plus an escape to do something else.
 
 STOP. Do NOT proceed to §3 without an explicit user command.
 
@@ -110,14 +102,7 @@ When triggered:
    - **Missing anchors**: first character, variant, location, or voice that blocks rendering Shot 1.
 4. **Parse offer** — ONE compact planning line plus a soft next step:
    > `Plan check: ~<seconds>s, <shots> shots, <N> character(s), <V> variant(s), <M> location(s), <S> voice need(s). Missing: <first blocker>.`
-   If N>0, V>0, M>0, or S>0, ask with the project `PROJECT_AGENT.md` § "Recommendation and choice shape":
-   ```
-   Recommended next:
-   1. Design the character/location anchors, then voices. (recommended)
-   2. Type something else.
-
-   Reply `1` to proceed, or describe what you want.
-   ```
+   If N>0, V>0, M>0, or S>0, offer the next step as a choice rendered per the project `PROJECT_AGENT.md` § "Recommendation and choice shape". Recommended option: "Design the character/location anchors, then voices." Plus an escape to do something else.
    On approval, route to `image-compose` first (base character sheets, needed character variants, and location stills) with `--source-node-id <script_note_id>` so the new nodes wire back to the script. After image anchors land, route speaking/narration needs to `voice-compose`. Don't generate inside `script-compose`. Skip the offer if every count is 0.
 
 If the user's command was narrower ("just the shots", "only characters"), do only that sub-step and skip the offer.
