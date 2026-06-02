@@ -39,7 +39,7 @@ This flow needs current uploaded refs, so per the project `PROJECT_AGENT.md` § 
 - Skip archived nodes (`data.archived === true`)
 - Skip AI-generated images even if they share the `reference` subtype — only true uploaded photos belong in the ref set
 
-Confirm in one short line to the user before firing: *"Using image_X, image_Y, image_Z as reference photos for the sheet."* If only 1-2 refs are available, do not pass them by default; ask whether the user wants to upload more refs or continue with Mode B text-only generation.
+Confirm in one short line to the user before firing: *"Using image_X, image_Y, image_Z as reference photos for the sheet."* If only 1-2 refs are available, do not pass them by default; ask with the project `PROJECT_AGENT.md` § "Recommendation and choice shape". Recommend `Upload more refs`; offer `Continue text-only` as the alternative.
 
 ## The 4-panel sheet prompt — Mode A (with ≥3 actor reference photos)
 

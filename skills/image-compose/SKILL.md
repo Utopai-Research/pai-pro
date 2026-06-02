@@ -124,7 +124,7 @@ Triggers: user asks for a storyboard, mosaic, NxN / N×M grid, shot list, covera
   - "vertical 2x4 mosaic" → `1440x2560`
 - **Default grid**: 2×2 unless the user specified another. Announce in chat one short line before each call ("Generating a 2×2 mosaic for Shot <N>" or "Generating a 2×2 mosaic.") — don't paste the prompt.
 - **Optional refs**: if a character / location reference is on the canvas, pass it via `--ref-source-id` (≤32 for pro) so identity stays locked across cells and the provenance edges land. The script-analyzed case triggers one mosaic per shot note, with per-shot refs and `--source-node-id <shot_note_id>` — see `references/storyboard-mosaic.md`.
-- **Grid size limit**: default to 2×2. Larger grids are allowed, but if the user asks for `3×3` or larger, warn first: "larger storyboard grids are harder to keep clean — I can run it as one pro mosaic, or split into smaller sheets."
+- **Grid size limit**: default to 2×2. Larger grids are allowed, but if the user asks for `3×3` or larger, warn first using the project `PROJECT_AGENT.md` § "Recommendation and choice shape". Recommend `Split into smaller sheets`; offer `Run one pro mosaic` as the alternative.
 
 **For the canvas pre-flight, per-shot-note iteration logic, missing-anchor nudge, verbatim prompt template, and default panel coverage when no script slice exists**: see [references/storyboard-mosaic.md](references/storyboard-mosaic.md).
 

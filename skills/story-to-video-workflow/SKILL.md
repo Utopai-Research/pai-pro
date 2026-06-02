@@ -60,22 +60,7 @@ Capability skills own CLI flags, node grammar, reference flags, and failure reco
 
 ## Recommendation shape
 
-Recommend one concrete next step. Add a second option only when there is a real tradeoff. When the runtime exposes a native structured question tool, use it instead of printing Markdown checkboxes:
-
-- Anthropic runtime: use `AskUserQuestion`.
-- Codex: use `request_user_input` when it is listed in the available tools.
-
-Use 1 short question, a header <=12 characters, and 2-4 options with `label` plus `description`. Put the recommended option first and suffix its label with `(Recommended)`. Do not add a manual "type something else" option when the native UI already provides free-form/other input.
-
-If the native question tool is unavailable, use this plain numbered fallback and then stop:
-
-```text
-Recommended next:
-1. Split this script into <=15s shot notes and extract characters/locations/voices. (recommended)
-2. Type something else.
-
-Reply `1` to proceed, or describe what you want.
-```
+Follow the project `PROJECT_AGENT.md` § "Recommendation and choice shape". Recommend one concrete next step. Add a second option only when there is a real tradeoff.
 
 ## Planning checkpoint
 
@@ -92,7 +77,7 @@ If the story implies more than roughly 3 minutes, recommend narrowing scope befo
 
 When shots/refs are ready and the user has not picked a path, ask:
 
-Native structured question:
+Use the project manual's choice shape with:
 
 - header: `Render`
 - question: `Choose render path.`
@@ -102,7 +87,7 @@ Native structured question:
   - label: `Storyboard first`
     description: `Generate storyboard images first for composition control.`
 
-Fallback text:
+Fallback text if native UI is unavailable:
 
 ```text
 Choose render path:
@@ -117,9 +102,9 @@ For storyboard-first, load `image-compose` Pattern 6. Generate one composite mos
 
 ## Dispatch for multiple clips
 
-Ask dispatch separately from render path unless the user already chose both:
+Ask dispatch separately from render path unless the user already chose both.
 
-Native structured question:
+Use the project manual's choice shape with:
 
 - header: `Dispatch`
 - question: `Choose clip dispatch.`
@@ -131,14 +116,16 @@ Native structured question:
   - label: `Sequential`
     description: `Each clip continues from the previous one.`
 
-Fallback text:
+Fallback text if native UI is unavailable, after ordering the recommended option first:
 
 ```text
 Choose clip dispatch:
-1. Hybrid: chain within continuous scenes; render separate scenes independently.
+1. Hybrid: chain within continuous scenes; render separate scenes independently. (recommended)
 2. Parallel: render all clips independently.
 3. Sequential: each clip continues from the previous one.
 4. Type something else.
+
+Reply `1`, `2`, `3`, or describe what you want.
 ```
 
 Use observable story signals:

@@ -52,7 +52,7 @@ Triggers: "a narrator voice", "voice-over for the opener", "a voice that says X"
 
 ### More patterns (future)
 
-This skill will grow to cover dialogue line readings and singing samples. For now Patterns 1 + 2 cover both attached and standalone voice generation. If the user asks for something that doesn't fit, describe what you'd do and ask before calling the tool.
+This skill will grow to cover dialogue line readings and singing samples. For now Patterns 1 + 2 cover both attached and standalone voice generation. If the user asks for something that doesn't fit, describe what you'd do and ask before calling the tool; use the project `PROJECT_AGENT.md` § "Recommendation and choice shape" if you offer choices.
 
 ## On failure
 
