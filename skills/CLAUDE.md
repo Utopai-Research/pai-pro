@@ -1,6 +1,6 @@
-# Skill authoring — .claude/skills/
+# Skill authoring — skills/
 
-Auto-loaded by Claude Code when working under `.claude/skills/`. Canonical source for how to write or edit skills in this repo.
+Auto-loaded when working under the repo's `skills/` subtree (deployed via symlink to `~/.claude/skills/` and per-project `.agents/skills/`). Canonical source for how to write or edit skills in this repo.
 
 ## Editing this file
 
