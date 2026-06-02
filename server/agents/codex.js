@@ -12,6 +12,7 @@ const CODEX_SESSION_ORIGINATOR = "codex-tui";
 const DEFAULT_MAX_DATE_DIRS = 30;
 const DEFAULT_MAX_FILES = 500;
 const READ_CHUNK_BYTES = 64 * 1024;
+const REQUEST_USER_INPUT_FLAG = "default_mode_request_user_input";
 
 const EFFORT_VALUES = new Set(["low", "medium", "high", "xhigh"]);
 const SANDBOX_VALUES = new Set(["read-only", "workspace-write", "danger-full-access"]);
@@ -43,7 +44,7 @@ function codexSessionsRoot(env = process.env) {
 
 function optionSuffix(meta = {}, env) {
   const bypass = resolveAgentBypass(env);
-  const parts = ["--no-alt-screen"];
+  const parts = ["--no-alt-screen", "--enable", REQUEST_USER_INPUT_FLAG];
   if (bypass) {
     parts.push("--dangerously-bypass-approvals-and-sandbox");
   }
