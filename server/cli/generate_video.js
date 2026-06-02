@@ -40,12 +40,14 @@ import {
 import { VIDEO_LIMITS } from "./_limits.js";
 
 const rawArgv = process.argv.slice(2);
+const defaultVideoModel = getDefault("video");
+const defaultVideoParams = defaultVideoModel.default_params ?? {};
 
 const args = parseArgs({
   prompt:                  { type: "string", short: "p" },
   duration:                { type: "string", default: "15" },
   "aspect-ratio":          { type: "string", default: "16:9" },
-  resolution:              { type: "string", default: "1080p" },
+  resolution:              { type: "string", default: defaultVideoParams.resolution ?? "720p" },
   // Audio defaults ON (generate_audio: true). Pass --no-audio ONLY when
   // the user has explicitly asked for a silent clip. Trailer framing,
   // "I'll add SFX in post", or detail-SFX skepticism are NOT triggers —
@@ -106,7 +108,7 @@ if (audSrcIds.length > VIDEO_LIMITS.max_audio_refs) {
 const jobId = args["existing-job-id"] || newJobId();
 const routeOwnedPending = !!args["existing-job-id"];
 const durationPlanned = Number(args.duration) || 15;
-const plannedModel = getDefault("video").id;
+const plannedModel = defaultVideoModel.id;
 
 // Asset preupload through PAI's video-generation-assets costs ~$0.01 per
 // ref. Count canvas source-ids once each across image + video + audio refs.
