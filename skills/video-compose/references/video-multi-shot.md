@@ -32,9 +32,10 @@ When script shot notes exist on canvas (from `script-compose`), the 4-section ti
 
 ## Cross-skill source — storyboard mosaic
 
-When a storyboard mosaic exists on canvas (usually an `image_result` labeled `Storyboard` or `Storyboard — Shot <N>` whose prompt contains `[PANEL LIST]`), render the entire mosaic as **one 15s video** — every panel becomes one SHOT block in the prompt timeline. The mosaic itself is passed as a reference image (the video model reads the panels visually and follows their order); the mosaic is **not** cropped, and the render is never split into multiple videos per mosaic.
+When a storyboard mosaic exists on canvas (`image_result.data.subtype === "storyboard"`; legacy fallback: label `Storyboard` / `Storyboard — Shot <N>` or prompt panel-list evidence), render the entire mosaic as **one 15s video** — every panel becomes one SHOT block in the prompt timeline. The mosaic itself is passed as a reference image (the video model reads the panels visually and follows their order); the mosaic is **not** cropped, and the render is never split into multiple videos per mosaic.
 
 - **Pass the mosaic via `--ref-source-id <mosaic.id>`** alongside the character / location refs originally used to author it. The corner number badges and grid layout make the panel sequence machine-legible.
+- **Do not use opening-frame language.** A storyboard ref is a sequence source. Never start with `Opening frame @Image1`.
 - **Open the prompt with an explicit directive.** *"Multi-shot sequence built from the storyboard panels in @Image1. Follow the storyboard sequence in panel-number order (cell 1 top-left → cell N×M bottom-right; left-to-right, row-by-row)."* Without this directive, the model may interpret panels out of order.
 - **Beat length is constrained by panel count.** 2×2 ≈ 3.75s/panel, 3×3 ≈ 1.67s/panel, 4×4 ≈ 0.94s/panel. Distribute across the 15s budget — beats can vary slightly within the budget if the storyboard implies a rhythm (e.g. slower setup, faster action), but the total stays at 15s.
 - **Per-panel timeline content.** Read the mosaic node's `data.prompt` field — it carries the per-panel briefs in its `[PANEL LIST]` section. Each brief becomes one SHOT block; tag each block with `(panel N)` so the panel-to-shot mapping stays legible.

@@ -70,6 +70,7 @@ export type ImageSubtype =
   | 'edit'
   | 'reference'
   | 'split'
+  | 'storyboard'
 
 export interface ImageResultData {
   /** Optional subtype variant. Plain image when undefined. */

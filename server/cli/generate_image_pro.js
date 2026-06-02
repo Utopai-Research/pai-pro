@@ -49,7 +49,7 @@ const args = parseArgs({
   "output-format": { type: "string", default: "png" },
   // canvas-mutate integration
   label:           { type: "string" },
-  subtype:         { type: "string" }, // character | location | edit | reference | split
+  subtype:         { type: "string" }, // character | location | edit | reference | split | storyboard
   "source-node-id": { type: "string" },
   "ref-source-id": { type: "string", multiple: true, default: [] },
   "project-id":    { type: "string" },

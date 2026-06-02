@@ -682,7 +682,7 @@ function CanvasPageInner(): JSX.Element | null {
       listFrames: () => Record<string, CanvasGroupFrame>
       setImageSubtype: (
         nodeId: string,
-        subtype: 'image' | 'character' | 'location' | 'edit' | 'reference' | 'split',
+        subtype: 'image' | 'character' | 'location' | 'edit' | 'reference' | 'split' | 'storyboard',
       ) => { ok: boolean }
       setImageName: (nodeId: string, name: string) => { ok: boolean }
       injectImage: (

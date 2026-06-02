@@ -152,7 +152,7 @@ Generation CLIs usually mutate for you.
 ### Node grammar
 
 - `note`: `data: { label, body, metadata }`; optional `subtype: "script" | "shot"`.
-- `image_result`: `data: { label, local_path, prompt?, metadata, subtype? }`. Important subtypes: `character`, `location`, `edit`, `reference`, `split`.
+- `image_result`: `data: { label, local_path, prompt?, metadata, subtype? }`. Important subtypes: `character`, `location`, `edit`, `reference`, `split`, `storyboard`.
 - `video_result`: `data: { label, local_path, prompt, duration: int, aspect, shot_id: int|null, metadata }`. `shot_id` means Timeline/reel order; set it only when the user explicitly asks for reel positions.
 - `audio_result`: `data: { subtype: "voice" | "upload", label, local_path, prompt?, text?, source_id?, metadata }`.
 - Edges: `{ from, to, kind?: "derived" }`.

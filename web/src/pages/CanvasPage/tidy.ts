@@ -10,7 +10,7 @@
  *   2. locations (image_result.subtype === 'location').
  *   3. notes
  *   4. shot videos (video_result, sorted by shot_id then id)
- *   5. other images (image_result with edit/reference/split/plain
+ *   5. other images (image_result with edit/reference/split/storyboard/plain
  *      subtype or no subtype)
  *   6. orphan audios (audio_result not attached to any character)
  *
