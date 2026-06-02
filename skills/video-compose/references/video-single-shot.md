@@ -32,6 +32,7 @@ For ordinary single-shot polish (non-storyboard), use this scaffold. Fill each s
 [Negative] no captions, watermarks, distortion, stretching
 ```
 
+- **Duration** — also pass `--duration N`; split or chain >15s totals.
 - **Style** — concrete equipment cues land better than adjectives. *"Shot on a full-frame digital cinema camera, fast prime lens, shallow DOF, naturalistic palette, subtle grain"* beats *"cinematic, high-quality"*.
 - **Scene** — one paragraph; weather and time matter (fog, golden hour, dusk).
 - **Character** — name each character's face / build / wardrobe; if there's a canvas character, reference it as `@Image1` and bind by role.
