@@ -27,6 +27,8 @@ Pick the closest mode based on the user's ask. If none fit, use **Fallback**.
 
 Each mode has its own template. Preserve clauses differ — see "What to lock vs. what to change" below.
 
+**Dialogue survives the edit.** If the source clip carries dialogue/VO that the edit keeps, preserve the spoken words verbatim — write `[Character] says exactly: "…"` (or *"the character in @Image1 says exactly: …"* when a character ref is attached). If an audio ref is attached for the line, still include the exact text and add: *"Use @Audio1 for timing, cadence, and voice. Keep the words unchanged."* For Re-plot, the new action does not license new dialogue — preserve the existing lines or ask. Never rewrite, paraphrase, translate, or invent dialogue/VO.
+
 **Restyle:**
 
 ```
