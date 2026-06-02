@@ -21,13 +21,19 @@ description: >-
 
 ## Default arc
 
+Use this as the normal story-to-video ladder. It is a guide, not a lock; the user can skip, reorder, supply refs, or ask for a rough direct render.
+
 1. Capture or adapt the story/script.
-2. Split into shot notes, each intended to fit the local video duration cap.
-3. Create character and location anchors for video-bound shots.
+2. Split into <=15s shot notes and identify production anchors.
+3. Create character and location anchors for video-bound shots, unless the user supplied refs or explicitly chose rough direct render.
 4. Create voices for speaking characters or narration when voice matters.
-5. Optionally create storyboard mosaics when the user wants a visual checkpoint.
-6. Render video clips.
-7. Hand off clip order, preview, and local export to the Timeline/reel flow.
+5. Confirm the working clip plan: shot count, durations, continuity needs, and first missing dependency.
+6. Ask render path: straight to video vs storyboard first.
+7. Ask dispatch for multi-clip plans: hybrid, parallel, or sequential.
+8. Render video clips.
+9. Hand off clip order, preview, and local export to the Timeline/reel flow.
+
+Plan ahead internally, but only ask the next meaningful user-facing choice. Do not ask render path before the clip plan is real enough to discuss. Do not ask dispatch before multiple clips are planned and render path is chosen.
 
 ## Skill routing
 
@@ -46,8 +52,10 @@ Capability skills own CLI flags, node grammar, reference flags, and failure reco
 - A recommended option is not consent by itself; wait for the user to answer.
 - Paid video generation needs explicit user intent before staging.
 - Draft-only, failed, and cancelled generations do not advance the story pipeline.
-- Render path and multi-clip dispatch are separate choices when multiple clips are planned.
+- Render path and multi-clip dispatch are later choices when the story shape is meaningful enough to decide them.
 - If the user asks for a one-off generation outside the story pipeline, route directly to the matching capability skill.
+- These are soft gates, not bureaucracy. If the user explicitly asks to skip anchors, storyboards, or planning and make a rough direct render, honor that choice and carry it forward.
+- Do not ask render path or dispatch immediately after a rough beat plan, before script capture, or before shot notes exist.
 
 ## VO and dialogue invariants
 
@@ -73,9 +81,22 @@ Before recommending refs or video from a story, inspect `workflow.json` when nee
 
 If the story implies more than roughly 3 minutes, recommend narrowing scope before clip planning.
 
+After shot notes exist, if video-bound character/location anchors are missing, recommend anchors as the default next step. Include a rough-direct skip option when speed matters. Do not ask render path or dispatch until anchors exist, user-supplied refs exist, or the user explicitly chose to skip anchors.
+
+After anchors are present, offer a lightweight reference review or clip-plan confirmation before render choices when the next step is still ambiguous. Keep it short. For simple single-clip projects, user-supplied refs, or an explicit rough-direct choice, keep the checkpoint small and move on.
+
 ## Render path
 
-When shots/refs are ready and the user has not picked a path, ask:
+Ask this only after the script/shot plan is settled and either:
+
+- video-bound character/location anchors are present,
+- the user explicitly chose to skip anchors for a rough direct render,
+- the user supplied usable refs, or
+- the project is a simple one-off/single-clip render where anchors are not useful.
+
+If shot notes exist but anchors are still missing and the user has not chosen rough direct render, return to the Planning checkpoint instead.
+
+When ready and the user has not picked a path, ask:
 
 Use the project manual's choice shape with:
 
@@ -87,22 +108,13 @@ Use the project manual's choice shape with:
   - label: `Storyboard first`
     description: `Generate storyboard images first for composition control.`
 
-Fallback text if native UI is unavailable:
-
-```text
-Choose render path:
-1. Go straight to video for the fastest path to motion. (recommended)
-2. Generate storyboard images first for composition control.
-3. Type something else.
-
-Reply `1`, `2`, or describe what you want.
-```
-
 For storyboard-first, load `image-compose` Pattern 6. Generate one composite mosaic per clip or <=15s shot note, not one image per panel; each mosaic should be an `image_result` with `subtype: "storyboard"`.
 
 ## Dispatch for multiple clips
 
-Ask dispatch separately from render path unless the user already chose both.
+Ask dispatch only after render path is picked and a multi-clip plan exists. Skip for one clip. Ask separately from render path unless the user already chose both in one explicit reply.
+
+Stop after the render-path question. Do not surface dispatch in the same turn unless the user's reply already names a combined choice such as "straight to video + parallel".
 
 Use the project manual's choice shape with:
 
@@ -115,18 +127,6 @@ Use the project manual's choice shape with:
     description: `Render all clips independently.`
   - label: `Sequential`
     description: `Each clip continues from the previous one.`
-
-Fallback text if native UI is unavailable, after ordering the recommended option first:
-
-```text
-Choose clip dispatch:
-1. Hybrid: chain within continuous scenes; render separate scenes independently. (recommended)
-2. Parallel: render all clips independently.
-3. Sequential: each clip continues from the previous one.
-4. Type something else.
-
-Reply `1`, `2`, `3`, or describe what you want.
-```
 
 Use observable story signals:
 
@@ -149,8 +149,8 @@ After a terminal `generate_*` result:
 Typical priority:
 
 - Script note landed -> recommend splitting into <=15s shot notes and extracting anchors.
-- Shot notes exist but anchors are missing -> recommend the first missing character/location anchor.
-- Character/location ref landed -> recommend remaining anchors, voice, storyboard, or first clip.
+- Shot notes exist but anchors are missing -> recommend the first missing character/location anchor, with a rough-direct skip option. Do not ask render path or dispatch yet.
+- Character/location ref landed -> recommend remaining anchors first; when anchors are ready, recommend reference review, clip-plan confirmation, storyboard, or render path.
 - Voice landed -> recommend using it with the matching visual ref in the next dialogue/narration clip.
 - Storyboard landed -> recommend review or animating the matching clip.
 - Video clip landed -> recommend the next clip or Timeline handoff if story coverage is complete.
