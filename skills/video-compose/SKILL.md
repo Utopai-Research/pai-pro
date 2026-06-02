@@ -19,7 +19,7 @@ Before the first video generation in a project/session, ask once if no video mod
 ## CLI shape
 
 ```
-node "$PAI_REPO_ROOT/server/cli/generate_video.js" --prompt "..." [--duration 15] [--aspect-ratio 16:9]
+node "$PAI_REPO_ROOT/server/cli/generate_video.js" --prompt "..." [--duration <seconds>] [--aspect-ratio 16:9]
   [--resolution <480p|1080p>] [--no-audio]
   [--label "..."] [--ref-source-id <id> ...] [--ref-audio-source-id <audio_id> ...]
   [--source-node-id <id>] [--shot-id <N>]
@@ -44,6 +44,9 @@ When a canvas note authored the clip (most commonly a shot note being
 rendered), pass `--source-node-id <note_id>` — see the project `PROJECT_AGENT.md` §
 "Asset, ref, and edge rules". Don't set `--shot-id` unless the user asked for a
 specific reel position; the Timeline UI owns shot_id assignment.
+
+Match any stated single-clip duration with `--duration <seconds>`; omit only
+for the 15s default. Split or chain >15s totals.
 
 Each clip costs real money even after staging — only stage after the user has explicitly asked for a video.
 
@@ -87,7 +90,7 @@ Pick the one that fits. For source lookup, follow the project `PROJECT_AGENT.md`
 ### 1. Standalone T2V
 
 **Triggers:** a fresh clip unrelated to canvas content ("a noir alley at dawn, slow dolly-in", "a runner in a stadium, 10 seconds").
-**Call:** `node "$PAI_REPO_ROOT/server/cli/generate_video.js" --prompt "..."` with sensible defaults (15s, 16:9, 720p, audio on). Add `--resolution 480p` or `--resolution 1080p` only if the chosen video mode requires it.
+**Call:** `node "$PAI_REPO_ROOT/server/cli/generate_video.js" --prompt "..."`; omitted flags default to 15s, 16:9, 720p, audio on. Add `--resolution 480p` or `--resolution 1080p` only if the chosen video mode requires it.
 **Edges:** none.
 **For the bracket scaffold and slot-by-slot construction when the user wants polish:** see [`references/video-single-shot.md`](references/video-single-shot.md).
 
