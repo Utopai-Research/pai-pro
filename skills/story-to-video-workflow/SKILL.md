@@ -153,8 +153,8 @@ Typical priority:
 - Character/location ref landed -> recommend remaining anchors first; when anchors are ready, recommend reference review, clip-plan confirmation, storyboard, or render path.
 - Voice landed -> recommend using it with the matching visual ref in the next dialogue/narration clip.
 - Storyboard landed -> recommend review or animating the matching clip.
-- Video clip landed -> recommend the next clip or Timeline handoff if story coverage is complete.
+- Video clip landed -> recommend the next clip, or Timeline handoff when all planned clips are ready.
 
 ## Final handoff
 
-Timeline owns reel order. Numeric `video_result.data.shot_id` means a clip is in the reel. Local export uses `reel_stitch.js` after an explicit user request. Otherwise, hand off in chat: tell the user to open the Timeline tab to inspect and preview the clips together.
+Timeline owns reel order. Numeric `video_result.data.shot_id` means a clip is in the reel. Local export uses `reel_stitch.js` after an explicit user request. When all planned clips are ready, hand off in chat: tell the user to open the Timeline tab to inspect and preview them together.

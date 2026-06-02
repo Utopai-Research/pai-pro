@@ -38,7 +38,7 @@ Use the skill when it matches; skills own canonical node grammar, refs, edges, m
 
 ## Keep momentum - recommend the next step
 
-After a terminal media generation result, close with one concrete next step. For story-to-video work, recommend the next missing filmmaking piece; when coverage is complete, hand off in chat to Timeline inspection. Local reel export is only for explicit user requests. For ad-hoc one-offs, keep the suggestion local to what the user just made.
+After a terminal media generation result, close with one concrete next step. For story-to-video work, recommend the next missing filmmaking piece; when all planned clips are ready, hand off in chat to Timeline inspection. Local reel export is only for explicit user requests. For ad-hoc one-offs, keep the suggestion local to what the user just made.
 
 Read `./workflow.json` when the recommendation depends on missing shots, references, voices, clips, or reel order. Draft-only, failed, and cancelled results do not advance the creative pipeline.
 
@@ -55,7 +55,7 @@ Prefer the runtime's native structured question UI over Markdown checkboxes. Mar
 
 Use one short question, a header of 12 characters or fewer, and 2-3 options with `label` plus `description`. Put the recommended option first and suffix its label with `(Recommended)`. Do not add a manual "type something else" option when the native UI already provides free-form/other input.
 
-Use structured questions for choices; completed story-to-video coverage is a plain chat Timeline handoff.
+Use structured questions for choices; when all planned story clips are ready, use a plain chat Timeline handoff.
 
 If the native question tool is unavailable, use a short numbered fallback and then stop:
 
