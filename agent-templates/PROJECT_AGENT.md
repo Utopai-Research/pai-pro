@@ -38,7 +38,7 @@ Use the skill when it matches; skills own canonical node grammar, refs, edges, m
 
 ## Keep momentum - recommend the next step
 
-After a terminal media generation result, close with one concrete next step. For story-to-video work, bias the recommendation toward the finished reel. For ad-hoc one-offs, keep the suggestion local to what the user just made.
+After a terminal media generation result, close with one concrete next step. For story-to-video work, recommend the next missing filmmaking piece; when all planned clips are ready, hand off in chat to Timeline inspection. Local reel export is only for explicit user requests. For ad-hoc one-offs, keep the suggestion local to what the user just made.
 
 Read `./workflow.json` when the recommendation depends on missing shots, references, voices, clips, or reel order. Draft-only, failed, and cancelled results do not advance the creative pipeline.
 
@@ -54,6 +54,8 @@ Prefer the runtime's native structured question UI over Markdown checkboxes. Mar
 - Codex runtime: use `request_user_input` when it is listed in the available tools.
 
 Use one short question, a header of 12 characters or fewer, and 2-3 options with `label` plus `description`. Put the recommended option first and suffix its label with `(Recommended)`. Do not add a manual "type something else" option when the native UI already provides free-form/other input.
+
+Use structured questions for choices; when all planned story clips are ready, use a plain chat Timeline handoff.
 
 If the native question tool is unavailable, use a short numbered fallback and then stop:
 
@@ -125,7 +127,7 @@ Do not use `node server/cli/...` from a project cwd or hardcode relative repo pa
 | `mirror_url.js` | none | Mirrors an external image/audio/video URL into a canvas reference node. Flags: `--url`, optional `--kind <image|audio|video>`, `--label`. |
 | `split_image.js` | none | Slices an image into grid tiles. Flags: `--url`, `--cols`, `--rows`, `--source-node-id`; `cols * rows <= 64`. |
 | `switch_project.js` | Projects | Lists or activates projects. |
-| `reel_stitch.js` | none | Local ffmpeg export. Orders every `video_result` with numeric `data.shot_id` and writes `reel.mp4` by default. Supports `--out` and `--workflow`; requires `ffmpeg` on PATH. |
+| `reel_stitch.js` | none | Explicit local ffmpeg export. Orders every `video_result` with numeric `data.shot_id` and writes `reel.mp4` by default. Timeline handles normal inspection and preview. |
 
 ### Draft gate
 
