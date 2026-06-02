@@ -109,11 +109,11 @@ test("codex provider builds launch and resume commands with defaults", () => {
   const provider = getProvider("codex");
   assert.equal(
     provider.buildLaunchCommand({ meta: {}, env: {} }),
-    "codex --no-alt-screen --dangerously-bypass-approvals-and-sandbox\r",
+    "codex --no-alt-screen --enable default_mode_request_user_input --dangerously-bypass-approvals-and-sandbox\r",
   );
   assert.equal(
     provider.buildResumeCommand({ meta: {}, env: {} }),
-    "codex resume --last --no-alt-screen --dangerously-bypass-approvals-and-sandbox\r",
+    "codex resume --last --no-alt-screen --enable default_mode_request_user_input --dangerously-bypass-approvals-and-sandbox\r",
   );
 });
 
@@ -125,7 +125,7 @@ test("codex provider resumes the discovered project-scoped session id", () => {
       env: {},
       session: { sessionId: "payload-session-id" },
     }),
-    "codex resume --no-alt-screen --dangerously-bypass-approvals-and-sandbox payload-session-id\r",
+    "codex resume --no-alt-screen --enable default_mode_request_user_input --dangerously-bypass-approvals-and-sandbox payload-session-id\r",
   );
   assert.equal(
     provider.buildResumeCommand({
@@ -133,16 +133,19 @@ test("codex provider resumes the discovered project-scoped session id", () => {
       env: NO_BYPASS,
       session: { sessionId: "payload-session-id" },
     }),
-    "codex resume --no-alt-screen payload-session-id\r",
+    "codex resume --no-alt-screen --enable default_mode_request_user_input payload-session-id\r",
   );
 });
 
 test("codex provider drops the bypass flag when PAI_AGENT_BYPASS is off", () => {
   const provider = getProvider("codex");
-  assert.equal(provider.buildLaunchCommand({ meta: {}, env: NO_BYPASS }), "codex --no-alt-screen\r");
+  assert.equal(
+    provider.buildLaunchCommand({ meta: {}, env: NO_BYPASS }),
+    "codex --no-alt-screen --enable default_mode_request_user_input\r",
+  );
   assert.equal(
     provider.buildResumeCommand({ meta: {}, env: NO_BYPASS }),
-    "codex resume --last --no-alt-screen\r",
+    "codex resume --last --no-alt-screen --enable default_mode_request_user_input\r",
   );
 });
 
@@ -158,7 +161,7 @@ test("codex bypass suppresses sandbox and approval (codex refuses them together)
       },
       env: {},
     }),
-    'codex --no-alt-screen --dangerously-bypass-approvals-and-sandbox --model gpt-5.1-codex/max -c model_reasoning_effort="high"\r',
+    'codex --no-alt-screen --enable default_mode_request_user_input --dangerously-bypass-approvals-and-sandbox --model gpt-5.1-codex/max -c model_reasoning_effort="high"\r',
   );
 });
 
@@ -174,7 +177,7 @@ test("codex provider maps safe agent options to CLI flags", () => {
       },
       env: NO_BYPASS,
     }),
-    'codex --no-alt-screen --model gpt-5.1-codex/max -c model_reasoning_effort="high" --sandbox workspace-write --ask-for-approval on-request\r',
+    'codex --no-alt-screen --enable default_mode_request_user_input --model gpt-5.1-codex/max -c model_reasoning_effort="high" --sandbox workspace-write --ask-for-approval on-request\r',
   );
 });
 
@@ -190,7 +193,7 @@ test("codex provider ignores invalid agent options", () => {
       },
       env: NO_BYPASS,
     }),
-    "codex --no-alt-screen\r",
+    "codex --no-alt-screen --enable default_mode_request_user_input\r",
   );
 });
 

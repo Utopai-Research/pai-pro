@@ -25,7 +25,7 @@ Decide how many mosaics to emit:
 - **No shot notes, but one <=15s script/story/clip brief exists.** Behave as a single planned clip: ONE 2×2 mosaic. Pass `--source-node-id <script_note_id>` if the brief is a canvas note. Refs are optional — pass any relevant characters / locations / user-uploaded images on the canvas via repeated `--ref-source-id` flags for identity lock.
 - **No shot notes and the script/story is longer than <=15s.** Recommend `script-compose` splitting first. Do not collapse a multi-clip script into one storyboard unless the user explicitly asks for an overview board.
 
-Missing character/location anchors do not change the storyboard unit. If a shot clearly needs a missing anchor, say so and ask whether to make that anchor first or storyboard from text directly.
+Missing character/location anchors do not change the storyboard unit. If a shot clearly needs a missing anchor, say so and ask with the project `PROJECT_AGENT.md` § "Recommendation and choice shape". Recommend `Make the missing anchor first`; offer `Storyboard from text` as the alternative.
 
 Default grid: 2×2 unless the user specified otherwise. Before each `generate_image_pro.js` call, announce in chat: `"Generating a 2×2 mosaic for Shot <N>"` (shot-note case) or `"Generating a 2×2 mosaic."` (single-clip case). Don't paste the prompt; one short line.
 

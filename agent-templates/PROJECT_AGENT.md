@@ -42,7 +42,28 @@ After a terminal media generation result, close with one concrete next step. For
 
 Read `./workflow.json` when the recommendation depends on missing shots, references, voices, clips, or reel order. Draft-only, failed, and cancelled results do not advance the creative pipeline.
 
-For story-to-video sequencing, load `story-to-video-workflow` first. `script-compose` still owns script drafting/capture/splitting. Keep each recommendation soft and concrete; wait for approval before running the next paid generation. For story-workflow choices, prefer checkbox-style recommendations so the user can reply with a short number or type their own direction.
+For story-to-video sequencing, load `story-to-video-workflow` first. `script-compose` still owns script drafting/capture/splitting. Keep each recommendation soft and concrete; wait for approval before running the next paid generation.
+
+### Recommendation and choice shape
+
+This shape is global. Use it for every skill choice, after-result recommendation, or planning gate that asks the user what to do next.
+
+Prefer the runtime's native structured question UI over Markdown checkboxes. Markdown checkboxes render as raw text in common terminal agents.
+
+- Anthropic runtime: use `AskUserQuestion` when available.
+- Codex runtime: use `request_user_input` when it is listed in the available tools.
+
+Use one short question, a header of 12 characters or fewer, and 2-3 options with `label` plus `description`. Put the recommended option first and suffix its label with `(Recommended)`. Do not add a manual "type something else" option when the native UI already provides free-form/other input.
+
+If the native question tool is unavailable, use a short numbered fallback and then stop:
+
+```text
+Recommended next:
+1. Split this script into <=15s shot notes and extract characters/locations/voices. (recommended)
+2. Type something else.
+
+Reply `1` to proceed, or describe what you want.
+```
 
 ## Choosing context
 

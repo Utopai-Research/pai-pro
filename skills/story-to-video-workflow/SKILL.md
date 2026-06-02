@@ -43,7 +43,7 @@ Capability skills own CLI flags, node grammar, reference flags, and failure reco
 
 ## Consent and gates
 
-- A checked recommendation is not consent by itself; wait for the user to answer.
+- A recommended option is not consent by itself; wait for the user to answer.
 - Paid video generation needs explicit user intent before staging.
 - Draft-only, failed, and cancelled generations do not advance the story pipeline.
 - Render path and multi-clip dispatch are separate choices when multiple clips are planned.
@@ -60,15 +60,7 @@ Capability skills own CLI flags, node grammar, reference flags, and failure reco
 
 ## Recommendation shape
 
-Recommend one concrete next step. Add a second option only when there is a real tradeoff. Use checkbox-style options when the user needs to choose, then stop.
-
-```text
-Recommended next:
-- [x] 1. Split this script into <=15s shot notes and extract characters/locations/voices.
-- [ ] 2. Type something else.
-
-Reply `1` to proceed, or describe what you want.
-```
+Follow the project `PROJECT_AGENT.md` § "Recommendation and choice shape". Recommend one concrete next step. Add a second option only when there is a real tradeoff.
 
 ## Planning checkpoint
 
@@ -85,11 +77,23 @@ If the story implies more than roughly 3 minutes, recommend narrowing scope befo
 
 When shots/refs are ready and the user has not picked a path, ask:
 
+Use the project manual's choice shape with:
+
+- header: `Render`
+- question: `Choose render path.`
+- options:
+  - label: `Straight to video (Recommended)`
+    description: `Fastest path to motion.`
+  - label: `Storyboard first`
+    description: `Generate storyboard images first for composition control.`
+
+Fallback text if native UI is unavailable:
+
 ```text
 Choose render path:
-- [ ] 1. Go straight to video for the fastest path to motion.
-- [ ] 2. Generate storyboard images first for composition control.
-- [ ] 3. Type something else.
+1. Go straight to video for the fastest path to motion. (recommended)
+2. Generate storyboard images first for composition control.
+3. Type something else.
 
 Reply `1`, `2`, or describe what you want.
 ```
@@ -98,14 +102,30 @@ For storyboard-first, load `image-compose` Pattern 6. Generate one composite mos
 
 ## Dispatch for multiple clips
 
-Ask dispatch separately from render path unless the user already chose both:
+Ask dispatch separately from render path unless the user already chose both.
+
+Use the project manual's choice shape with:
+
+- header: `Dispatch`
+- question: `Choose clip dispatch.`
+- options: order these by the observable story signals below; suffix the first label with `(Recommended)`.
+  - label: `Hybrid`
+    description: `Chain within continuous scenes; render separate scenes independently.`
+  - label: `Parallel`
+    description: `Render all clips independently.`
+  - label: `Sequential`
+    description: `Each clip continues from the previous one.`
+
+Fallback text if native UI is unavailable, after ordering the recommended option first:
 
 ```text
 Choose clip dispatch:
-- [ ] 1. Hybrid: chain within continuous scenes; render separate scenes independently.
-- [ ] 2. Parallel: render all clips independently.
-- [ ] 3. Sequential: each clip continues from the previous one.
-- [ ] 4. Type something else.
+1. Hybrid: chain within continuous scenes; render separate scenes independently. (recommended)
+2. Parallel: render all clips independently.
+3. Sequential: each clip continues from the previous one.
+4. Type something else.
+
+Reply `1`, `2`, `3`, or describe what you want.
 ```
 
 Use observable story signals:
