@@ -5,7 +5,7 @@ description: >-
   multi-shot idea work into finished video. Use first when the user asks to
   make a video from a story or script; asks what next in a story video project;
   or needs a decision spanning script splitting, image refs, voices or VO,
-  video clips, render strategy, Timeline ordering, or final reel handoff.
+  video clips, render strategy, Timeline ordering, or final Timeline handoff.
   Routes execution to script-compose, image-compose, voice-compose, and
   video-compose before those skills' CLIs are used.
 ---
@@ -31,7 +31,7 @@ Use this as the normal story-to-video ladder. It is a guide, not a lock; the use
 6. Ask render path: straight to video vs storyboard first.
 7. Ask dispatch for multi-clip plans: hybrid, parallel, or sequential.
 8. Render video clips.
-9. Hand off clip order, preview, and local export to the Timeline/reel flow.
+9. Hand off clip order and preview to the Timeline flow.
 
 Plan ahead internally, but only ask the next meaningful user-facing choice. Do not ask render path before the clip plan is real enough to discuss. Do not ask dispatch before multiple clips are planned and render path is chosen.
 
@@ -157,4 +157,4 @@ Typical priority:
 
 ## Final handoff
 
-Timeline owns reel order. Numeric `video_result.data.shot_id` means a clip is in the reel. Use `reel_stitch.js` only after explicit user request for local export; otherwise guide the user to the Timeline tab for ordering, preview, and export.
+Timeline owns reel order. Numeric `video_result.data.shot_id` means a clip is in the reel. Local export uses `reel_stitch.js` after an explicit user request. Otherwise, hand off in chat: tell the user to open the Timeline tab to inspect and preview the clips together.
