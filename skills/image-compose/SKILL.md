@@ -66,9 +66,7 @@ This pre-flight is non-negotiable. Pattern 1's single front portrait gives the v
 
 ### 1. Character portrait (one-off static stills only)
 
-Triggers: "design / create / introduce / cast a character / protagonist / antagonist / hero / villain / lead / portrait / headshot" **AND** the output is a one-off static still (poster, print art, single illustration) — NOT character work that will feed video gen.
-
-If the character will appear in downstream video work, **use Pattern 7 instead** — see the pre-flight above. Do not fall through to Pattern 1 for video-bound character work, even when starting from scratch without reference photos.
+Triggers: "design / create / introduce / cast a character / protagonist / antagonist / hero / villain / lead / portrait / headshot" **AND** the output is a one-off static still (poster, print art, single illustration) — NOT character work that will feed video gen. (Video-bound character work → Pattern 7; see the pre-flight above.)
 
 - `node "$PAI_REPO_ROOT/server/cli/generate_image.js" --prompt "..." --aspect-ratio 9:16 --image-size 2K --subtype character --name "Detective Morris" --role "..." --description "..."` — **no refs**. A character is an identity anchor, not a derivative.
 - Prompt template:
@@ -124,9 +122,9 @@ Triggers: user asks for a storyboard, mosaic, NxN / N×M grid, shot list, covera
 - **Tool**: `generate_image_pro.js` (pro tier). Use it for better rendered text, panel boundaries, and multi-cell layout fidelity.
 - **Single call per mosaic**: ONE `node "$PAI_REPO_ROOT/server/cli/generate_image_pro.js" --prompt "..." --size 2560x1440 --subtype storyboard --label "Storyboard — Shot <N>" --source-node-id <shot_note_id>` per shot-note mosaic. The pattern's point is one composite image per clip/shot note, not N×M small generations.
 - **Exact size**: default to **`2560x1440`** — this is filmmaking. Each panel inside the mosaic is a 16:9 cinematic frame, and the overall sheet should also feel cinematic landscape. The grid shape (3×3, 4×2, etc.) describes cell layout, NOT canvas shape. Only override if the user explicitly says "portrait", "square", "vertical", or names a different ratio:
-  - "3x3 storyboard" → `2560x1440` (default)
-  - "3x3 square storyboard" → `1920x1920`
-  - "3x3 portrait storyboard" → `1440x2560`
+  - "2x2 storyboard" → `2560x1440` (default)
+  - "2x2 square storyboard" → `1920x1920`
+  - "2x2 portrait storyboard" → `1440x2560`
   - "vertical 2x4 mosaic" → `1440x2560`
 - **Default grid**: 2×2 unless the user specified another. Announce in chat one short line before each call ("Generating a 2×2 mosaic for Shot <N>" or "Generating a 2×2 mosaic.") — don't paste the prompt.
 - **Optional refs**: if a character / location reference is on the canvas, pass it via `--ref-source-id` (≤32 for pro) so identity stays locked across cells and the provenance edges land. The script-analyzed case triggers one mosaic per shot note, with per-shot refs and `--source-node-id <shot_note_id>` — see `references/storyboard-mosaic.md`.
@@ -138,7 +136,7 @@ Triggers: user asks for a storyboard, mosaic, NxN / N×M grid, shot list, covera
 
 - ONE `image_result` node PER mosaic.
 - Set `data.subtype = "storyboard"` by passing `--subtype storyboard`.
-- The CLI uses your `--label` ("Storyboard — Shot <N>" if shot-specific; "Storyboard" if standalone) and stores the full prompt. Use `subtype: "storyboard"` first, with the label, prompt sections, `source_id`, and incoming derived edges as legacy fallback signals for older projects.
+- The CLI uses your `--label` ("Storyboard — Shot <N>" if shot-specific; "Storyboard" if standalone) and stores the full prompt.
 
 ### 7. Character reference sheet *(default for ANY video-bound character work — with or without actor refs)*
 
@@ -150,9 +148,9 @@ Triggers: user asks for a storyboard, mosaic, NxN / N×M grid, shot list, covera
 
 Also fires on explicit asks: "design a character sheet / turnaround / reference sheet / character design for [character]", "make a 4-panel character design", "generate a production reference sheet for downstream video work".
 
-The output is a single 4-panel sheet (Front-full / Profile-full / Back-full / Closeup-bust) that downstream video gen consumes directly as `--ref-source-id` without further cropping — validated to outperform single portraits by 11+ points on Gemini-judged video identity consistency.
+The output is a single 4-panel sheet (Front-full / Profile-full / Back-full / Closeup-bust) that downstream video gen consumes directly as `--ref-source-id` without further cropping — validated to outperform single portraits on Gemini-judged video identity consistency. The layout's value is the multi-angle data, not just the multi-ref triangulation, so both modes deliver it.
 
-Distinct from Pattern 1: Pattern 1 produces a single static portrait (poster, print art, illustration) that will NOT be passed to video gen. Pattern 7 produces a multi-view sheet engineered for video-gen consumption. **For any character that will be referenced by a video gen call later, choose Pattern 7 — even without refs.** The 4-panel layout's value is the multi-angle data, not just the multi-ref triangulation; both modes deliver it.
+Distinct from Pattern 1: Pattern 1 is a single static portrait that will NOT feed video gen (see the pre-flight for the routing rule).
 
 - Pre-flight: for current uploaded refs, follow the project `PROJECT_AGENT.md` § "Choosing context" and identify reference image nodes (`subtype: "reference"`, ideally ≥3 photos of the same actor from different angles or lighting). Confirm the ref count to the user in one short line before firing.
 - `node "$PAI_REPO_ROOT/server/cli/generate_image_pro.js" --prompt "..." --size 2560x1440 --subtype character --name "<character_name>" --role "..." --ref-source-id <ref1> --ref-source-id <ref2> --ref-source-id <ref3> [--source-node-id <script_or_shot_note_id>]` — pro tier is the default for character sheets because panel layout, text suppression, and identity consistency are load-bearing. Do not pass `--aspect-ratio` or `--image-size`. Never fire Mode A with fewer than 3 refs (model overfits to the one angle it has).
