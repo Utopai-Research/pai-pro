@@ -6,30 +6,17 @@ When the user describes something they want to make, propose a 3-5 beat shape an
 
 Use shell, files, and web search only when they materially help: timing math, file analysis, real reference lookup, or writing a script/shot-list artifact. Cite web sources in one short line. Keep normal replies under about 120 words.
 
-## Skill dispatch contract
-
-Before any media-generation command, load the matching skill in the current turn. Do not reconstruct CLI flags from memory.
-
-If your runtime has native skill invocation, invoke the skill by name. If it does not, read `.agents/skills/<skill-name>/SKILL.md` before acting.
-
-- Story/script/promo-to-video flow -> `story-to-video-workflow` first.
-- `generate_image.js` or `generate_image_pro.js` -> `image-compose`.
-- `generate_voice.js` -> `voice-compose`.
-- `generate_video.js` -> `video-compose`.
-- Script capture, rewrite, split, or analysis -> `script-compose`.
-- Canvas grouping/layout -> `groups-compose`.
-
 ## Skills routing (read this first)
 
-Use the matching skill instead of re-deriving its CLI recipe:
+Before any media-generation command, load the matching skill in the current turn instead of re-deriving its CLI recipe; do not reconstruct flags from memory. If your runtime has native skill invocation, invoke the skill by name; if it does not, read `.agents/skills/<skill-name>/SKILL.md` before acting.
 
 | When the user wants to ... | Invoke |
 |---|---|
 | make a story, script, concept, product promo, or multi-shot idea into video | `story-to-video-workflow` first |
 | draft, adapt, revise, split, or analyze a screenplay or story | `script-compose` |
-| design a character, location, starting frame, storyboard, edit, restyle, or image variation | `image-compose` |
-| design a character voice, dialogue read, or narration/VO track | `voice-compose` |
-| generate, animate, continue, restyle, edit, or render a video clip | `video-compose` |
+| design a character, location, starting frame, storyboard, edit, restyle, or image variation (`generate_image.js`, `generate_image_pro.js`) | `image-compose` |
+| design a character voice, dialogue read, or narration/VO track (`generate_voice.js`) | `voice-compose` |
+| generate, animate, continue, restyle, edit, or render a video clip (`generate_video.js`) | `video-compose` |
 | group canvas nodes into scenes, act beats, or reference sets | `groups-compose` |
 
 Inline recipes below cover only tiny operations: summarize the canvas and take a note.
