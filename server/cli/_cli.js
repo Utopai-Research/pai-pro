@@ -3,9 +3,8 @@
 //   2. parse argv,
 //   3. emit a single JSON line on stdout (success or failure).
 //
-// Convention for skills: read the JSON line, branch on `ok`. On `ok: false`
-// the `klass` field maps 1:1 to the failure-class taxonomy in PROJECT_AGENT.md
-// (rate_limited, content_filtered, bad_args, transient_exhausted, infra).
+// Convention for skills: read the JSON line, branch on `ok`. On `ok: false`,
+// handle `klass` via the canonical taxonomy in agent-templates/PROJECT_AGENT.md.
 
 import { parseArgs as nodeParseArgs } from "node:util";
 import { PAI_REPO_ROOT } from "../lib/paths.js";

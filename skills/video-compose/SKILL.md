@@ -1,6 +1,6 @@
 ---
 name: video-compose
-description: Generates and prompts video clips on the filmmaking canvas. Use when the user asks to generate, render, animate, continue, restyle, edit, shoot, or compose a video clip; render script or shot notes as video; animate a storyboard, starting frame, image, character, location, or reference; use image, video, audio, storyboard, starting-frame, or voice refs; compose an ad, brand film, product promo, music-video shot, or video sequence; or before calling generate_video.js. Owns video CLI flags, refs, prompt construction, audio-ref handling, and video failure recovery.
+description: Generates and prompts video clips on the filmmaking canvas. Use when the user asks to generate, render, animate, continue, restyle, edit, shoot, or compose a video clip; render script or shot notes as video; animate a storyboard, starting frame, image, character, location, or reference; use image, video, audio, storyboard, starting-frame, or voice refs; compose an ad, brand film, product promo, music-video shot, or video sequence; or before calling generate_video.js. Owns video CLI flags, refs, prompt construction, audio-ref handling, and video-specific failure hints.
 ---
 
 This file is the intent dispatcher. Each pattern below names triggers, the CLI invocation, edge / node rules, and which reference owns the prompt construction. References live in `references/`.
@@ -166,14 +166,11 @@ Cross-pattern asks. Each combo routes to one primary reference — references do
 
 For draft-stage JSON, one sentence with the price/status — see the project `PROJECT_AGENT.md` § "Draft gate". For terminal results, follow the project manual's next-step recommendation rule. `--ref-source-id` flags drive provenance edges; they're captured in the draft argv and materialize on the real `video_result` after the user fires.
 
-## On failure
+## Failure hints
 
-Shape and class taxonomy: see the project `PROJECT_AGENT.md` § "Failure handling". Video-specific:
+Video-specific message hints:
 
 - `asset_rejected` with *"DownloadFailed"* — `failed_url` was unreachable; swap.
 - `asset_rejected` with *"DurationTooLong"* / *"DurationTooShort"* — `failed_url`'s duration is outside 1.8s–15.2s. Swap it or trim with ffmpeg.
 - `bad_args` with *"reference_audio cannot be the only reference input"* — add an image or video ref alongside the audio.
-- `generation_failed` with *"invalid video duration, exceeds 15s"* — sum of `sent.video_urls` durations breached `limits.max_total_video_sec`. Read each video_result's `data.duration` from canvas (or ffprobe external URLs) and drop refs until the sum is ≤15s.
-- `generation_failed` (other) — upstream non-policy failure. Paraphrase and ask.
-
-**Never auto-retry.** Each call is real money.
+- `bad_args` with *"invalid video duration, exceeds 15s"* — sum of video refs breached `limits.max_total_video_sec`. Read each `video_result.data.duration` from canvas and drop refs until the sum is ≤15s.

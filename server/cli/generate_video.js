@@ -247,10 +247,10 @@ try {
         videos: resolvedVideos,
       });
     } catch (e) {
-      fail("asset_rejected", e.message, {
-        failed_url: e.failedUrl || null,
-        kind: e.kind || null,
-      });
+      const extra = e.assetRejected
+        ? { failed_url: e.failedUrl || null, kind: e.kind || null }
+        : (e.retryAfterSec ? { retryAfterSec: e.retryAfterSec } : {});
+      fail(e.assetRejected ? "asset_rejected" : classify(e), e.message, extra);
       exitCode = 1;
       throw e;
     }

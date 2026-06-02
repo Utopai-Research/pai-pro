@@ -171,7 +171,3 @@ Distinct from Pattern 1: Pattern 1 produces a single static portrait (poster, pr
 ## After the CLI returns
 
 For draft-stage JSON, one sentence with the price/status — see the project `PROJECT_AGENT.md` § "Draft gate". For terminal results, follow the project manual's next-step recommendation rule.
-
-## On failure
-
-See the project `PROJECT_AGENT.md` § "Failure handling". `limits.max_image_refs` is 16 for standard image and 32 for image pro. For `content_filtered`, propose softer wording.
