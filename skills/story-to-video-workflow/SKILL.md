@@ -33,7 +33,7 @@ Use this as the normal story-to-video ladder. It is a guide, not a lock; the use
 8. Render video clips.
 9. Hand off clip order and preview to the Timeline flow.
 
-Plan ahead internally, but only ask the next meaningful user-facing choice. Do not ask render path before the clip plan is real enough to discuss. Do not ask dispatch before multiple clips are planned and render path is chosen.
+Plan ahead internally, but only ask the next meaningful user-facing choice; the Consent and gates ladder fixes when render path and dispatch become askable.
 
 ## Skill routing
 
@@ -55,7 +55,7 @@ Capability skills own CLI flags, node grammar, reference flags, and domain-speci
 - Render path and multi-clip dispatch are later choices when the story shape is meaningful enough to decide them.
 - If the user asks for a one-off generation outside the story pipeline, route directly to the matching capability skill.
 - These are soft gates, not bureaucracy. If the user explicitly asks to skip anchors, storyboards, or planning and make a rough direct render, honor that choice and carry it forward.
-- Do not ask render path or dispatch immediately after a rough beat plan, before script capture, or before shot notes exist.
+- Gating ladder. Ask each rung only once the prior one is real, never off a rough beat plan: script captured, then <=15s shot notes -> anchors, user refs, or an explicit rough-direct skip -> a clip plan real enough to discuss (shot count, durations, continuity) -> render path (full askability in the Render path section) -> dispatch (multi-clip plan only). Stop after the render-path question; surface dispatch only in a later turn unless the user's reply already names a combined choice such as "straight to video + parallel".
 
 ## VO and dialogue invariants
 
@@ -81,7 +81,7 @@ Before recommending refs or video from a story, inspect `workflow.json` when nee
 
 If the story implies more than roughly 3 minutes, recommend narrowing scope before clip planning.
 
-After shot notes exist, if video-bound character/location anchors are missing, recommend anchors as the default next step. Include a rough-direct skip option when speed matters. Do not ask render path or dispatch until anchors exist, user-supplied refs exist, or the user explicitly chose to skip anchors.
+After shot notes exist, if video-bound character/location anchors are missing, recommend anchors as the default next step. Include a rough-direct skip option when speed matters.
 
 After anchors are present, offer a lightweight reference review or clip-plan confirmation before render choices when the next step is still ambiguous. Keep it short. For simple single-clip projects, user-supplied refs, or an explicit rough-direct choice, keep the checkpoint small and move on.
 
@@ -112,9 +112,7 @@ For storyboard-first, load `image-compose` Pattern 6. Generate one composite mos
 
 ## Dispatch for multiple clips
 
-Ask dispatch only after render path is picked and a multi-clip plan exists. Skip for one clip. Ask separately from render path unless the user already chose both in one explicit reply.
-
-Stop after the render-path question. Do not surface dispatch in the same turn unless the user's reply already names a combined choice such as "straight to video + parallel".
+Last rung of the Consent and gates ladder: render path picked and a multi-clip plan exists. Skip for one clip.
 
 Use the project manual's choice shape with:
 
