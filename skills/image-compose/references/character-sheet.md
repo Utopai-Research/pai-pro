@@ -160,7 +160,7 @@ The 4-panel template was validated 2026-05-25 across two distinct character arch
 | Middle-aged ruler (light-colored silk robe, decorated hairpiece) | 37/40 | 40/40 |
 | Elderly official (dark robe with embroidered chest panel, winged ceremonial cap) | 36/40 | ~32-35/40 |
 
-The elderly-official back-walking video scored 26/40 on the first judge pass but the judge made errors (penalizing out-of-frame elements as missing; flagging faithful-to-source embroidery as hallucination). Re-judged with the correct angle reference, the score is ~32-35/40 — see the `pai_analyze.compare` README in `pai-pro-toolset` for the judge-trust caveats.
+The elderly-official back-walking video's corrected score is ~32-35/40 — see the `pai_analyze.compare` README in `pai-pro-toolset` for the judge-trust caveats.
 
 Template holds across character archetypes. If your character's costume looks dramatically different from the period dramas this was validated on (e.g., contemporary, sci-fi, animated-style), the photo-priority clause still ensures the refs drive the look — the template doesn't assume any particular period.
 
