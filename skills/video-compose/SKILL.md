@@ -132,7 +132,7 @@ Pick the one that fits. For source lookup, follow the project `PROJECT_AGENT.md`
 **Triggers:** "have [character] say this", "make a video where [character] says / narrates …", "use [character]'s voice in this clip".
 **Source:** any canvas `audio_result` node — agent-generated or user-uploaded.
 **Call:** `node "$PAI_REPO_ROOT/server/cli/generate_video.js" --prompt "..." --ref-audio-source-id <audio_id>`. Often combined with character image refs for face + voice — pass both `--ref-source-id <character_id>` (for the character image) and `--ref-audio-source-id <audio_id>` (for the voice).
-**Prompt — inline this iteration:**
+**Prompt:**
 - If the audio node contains speech (`audio_result.data.text`), include that exact text in the video prompt and bind `@Audio1` to timing/cadence/voice.
 - For off-screen narration: *`V.O. says exactly: "..." Use @Audio1 for narration timing, cadence, and voice. Visuals should pace to the narration. Do not render captions or on-screen transcript text.`*
 - For on-screen dialogue with a character image: *`The character in @Image1 says exactly: "...". Use @Audio1 for timing, cadence, and voice. Keep the words unchanged.`*

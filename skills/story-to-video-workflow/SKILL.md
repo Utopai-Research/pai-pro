@@ -63,8 +63,7 @@ Capability skills own CLI flags, node grammar, reference flags, and domain-speci
 - `voice-compose` owns generating or preserving the exact spoken text.
 - `audio_result.data.text` is the exact speech source of truth after voice generation.
 - `video-compose` should include spoken text verbatim in the video prompt and use audio nodes for timing, cadence, and voice. It should not rewrite, paraphrase, or invent dialogue when an audio node already carries the speech.
-- For off-screen narration, use wording like: `V.O. says exactly: "...". Use @Audio1 for narration timing, cadence, and voice. Visuals should pace to the narration. Do not render captions or on-screen transcript text.`
-- For on-screen dialogue with a character image, use wording like: `The character in @Image1 says exactly: "...". Use @Audio1 for timing, cadence, and voice. Keep the words unchanged.`
+- `video-compose` Pattern 6 owns the narration and on-screen dialogue prompt wording; defer to it for exact templates.
 
 ## Recommendation shape
 
