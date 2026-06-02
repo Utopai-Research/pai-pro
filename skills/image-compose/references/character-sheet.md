@@ -134,8 +134,8 @@ Workflow:
 1. **Crop** the relevant panel out of the sheet using `sips`:
    ```
    sips --cropToHeightWidth <H> <W> --cropOffset <Y> <X> \
-     projects/<id>/assets/images/<sheet>.jpg \
-     --out projects/<id>/assets/.tmp/back_crop_$(date +%s).jpg
+     ./assets/images/<sheet>.jpg \
+     --out ./assets/.tmp/back_crop_$(date +%s).jpg
    ```
    For the default pro 16:9 sheet (`--size 2560x1440`) with 4 equal panels: each panel is ~640px wide × 1440px tall. Front panel `--cropOffset 0 0`, profile `--cropOffset 0 640`, back `--cropOffset 0 1280`, closeup `--cropOffset 0 1920`. Tighten to the figure as needed.
 
