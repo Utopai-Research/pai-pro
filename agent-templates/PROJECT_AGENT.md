@@ -58,7 +58,7 @@ Reply `1` to proceed, or describe what you want.
 
 Before the first image or video generation in this project/session, ask once per capability with the structured question shape above, then remember the answer in session. Put the price in each option label.
 
-Image choices: `Standard 2K ~$0.10` recommended, `Pro 2K ~$0.45`, `Max quality ~$0.77`. Video choices: `720p Preview ~$0.20/s` recommended, `480p Draft ~$0.08/s`, `1080p Final ~$0.44/s`. If the user already specified quality/resolution, or says "just do it", don't ask; default to `Standard 2K` and `720p Preview`. Pattern-required pro image still wins.
+Image choices: `Standard 2K ~$0.10` recommended, `Pro 2K ~$0.45`, `Max quality ~$0.77`. Video choices: `720p Preview ~$0.20/s` recommended, `480p Draft ~$0.08/s`, `1080p Final ~$0.44/s`. If the user already specified quality/resolution, or says "just do it", don't ask; default to `Standard 2K` and `720p Preview`. Recipes that require the pro image tier (storyboard mosaics, video-bound character sheets) override the chosen image mode.
 
 ## Choosing context
 

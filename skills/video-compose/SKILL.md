@@ -14,7 +14,7 @@ Behaviors that production-judgment instinct will silently flip when they aren't 
 
 ## First-use video mode
 
-Before the first video generation in a project/session, ask once if no video mode is known: `720p Preview ~$0.20/s` recommended, `480p Draft ~$0.08/s`, or `1080p Final ~$0.44/s`. Put the price in each option label. If the user skips, use `720p Preview`. Pass `--resolution` only for `480p Draft` or `1080p Final`.
+For the ask-once flow and per-mode prices, see the project `PROJECT_AGENT.md` § "First-use generation choices". Pass `--resolution` only for `480p Draft` or `1080p Final`.
 
 ## CLI shape
 

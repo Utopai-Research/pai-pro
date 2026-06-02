@@ -141,6 +141,22 @@ test("PROJECT_AGENT.md section citations resolve", async () => {
   }
 });
 
+test("dollar prices live only in PROJECT_AGENT.md, not in skills", async () => {
+  // First-use generation pricing is single-sourced to PROJECT_AGENT.md §
+  // "First-use generation choices"; skills cite it rather than restating
+  // figures that drift when server/model_registry.js costs change. Match a
+  // decimal dollar amount ($0.10) so node-id placeholders ($0, $1) don't trip.
+  const skillFiles = await skillMarkdownFiles(join(REPO_ROOT, "skills"));
+  for (const file of skillFiles) {
+    const text = await readFile(file, "utf8");
+    assert.equal(
+      /\$\d+\.\d/.test(text),
+      false,
+      `${file} hardcodes a dollar price; cite PROJECT_AGENT.md § "First-use generation choices" instead`,
+    );
+  }
+});
+
 test("skill frontmatter avoids unquoted YAML colon traps", async () => {
   for (const file of await sharedInstructionFiles()) {
     if (!file.endsWith("/SKILL.md")) continue;
