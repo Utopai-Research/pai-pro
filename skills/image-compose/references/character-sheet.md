@@ -119,9 +119,10 @@ The sheet's node id (returned in `canvas_mutation.node_id` on the success JSON) 
 node "$PAI_REPO_ROOT/server/cli/generate_video.js" \
   --prompt "<shot brief>" \
   --ref-source-id <sheet_node_id> \
-  --source-node-id <sheet_node_id> \
   [...other shot flags...]
 ```
+
+The sheet is a byte ref, so it goes in `--ref-source-id`; reserve `--source-node-id` for a shot note that authored the clip, if one exists.
 
 Front close-ups, back-walking shots, 3/4 profile pauses — all use the same `--ref-source-id`. The closeup panel anchors face identity; the 3 turnaround panels supply costume / silhouette / back-of-head detail.
 
