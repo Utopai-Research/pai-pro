@@ -129,5 +129,5 @@ try {
   emitSuccess(payload);
 } catch (e) {
   emitFailure(classify(e), e.message);
-  process.exit(1);
+  process.exit(e?.klass === "bad_args" ? 2 : 1);
 }

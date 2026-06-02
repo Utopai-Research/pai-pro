@@ -5,10 +5,23 @@
 import sharp from "sharp";
 import { writeBytesToTmp, readActiveProject } from "./local_mirror.js";
 
-const MAX_CELLS = 64;          // 8×8 hard cap — bigger isn't useful
-const MAX_DIM   = 8;           // each side ≤ 8
-const MIN_DIM   = 1;
+const MAX_DIM = 8;
+const MIN_DIM = 1;
 const FETCH_TIMEOUT_MS = 30_000;
+
+function badArgs(message) {
+  const e = new Error(message);
+  e.klass = "bad_args";
+  return e;
+}
+
+function parseDimension(name, value) {
+  const n = Number(value);
+  if (!Number.isInteger(n) || n < MIN_DIM || n > MAX_DIM) {
+    throw badArgs(`${name} must be an integer in [${MIN_DIM},${MAX_DIM}]`);
+  }
+  return n;
+}
 
 function gcd(a, b) { return b === 0 ? a : gcd(b, a % b); }
 function reducedAspect(w, h) {
@@ -29,13 +42,10 @@ async function fetchBytes(url) {
 }
 
 export async function splitImage({ url, cols, rows, projectId }) {
-  if (!url) throw new Error("splitImage: url required");
-  cols = Math.floor(Number(cols));
-  rows = Math.floor(Number(rows));
-  if (!(cols >= MIN_DIM && cols <= MAX_DIM)) throw new Error(`cols must be in [${MIN_DIM},${MAX_DIM}]`);
-  if (!(rows >= MIN_DIM && rows <= MAX_DIM)) throw new Error(`rows must be in [${MIN_DIM},${MAX_DIM}]`);
-  if (cols * rows > MAX_CELLS) throw new Error(`cols×rows must be ≤ ${MAX_CELLS}`);
-  if (cols === 1 && rows === 1) throw new Error("a 1×1 split is a no-op");
+  if (!url) throw badArgs("splitImage: url required");
+  cols = parseDimension("cols", cols);
+  rows = parseDimension("rows", rows);
+  if (cols === 1 && rows === 1) throw badArgs("a 1x1 split is a no-op");
 
   const proj = projectId || await readActiveProject();
   const srcBytes = await fetchBytes(url);
