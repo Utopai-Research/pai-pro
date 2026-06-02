@@ -31,7 +31,7 @@ node "$PAI_REPO_ROOT/server/cli/generate_image_pro.js" --prompt "..." --size 256
 
 Pro tier accepts `--size` only. Do not pass `--aspect-ratio` or `--image-size` to `generate_image_pro.js`. Common exact sizes: `1024x1024`, `1280x720`, `720x1280`, `1920x1920`, `2560x1440`, `1440x2560`, `3840x2160`, `2160x3840`.
 
-`$PAI_REPO_ROOT` is exported by the viewer — see the project `PROJECT_AGENT.md` § "Media CLIs / Invocation path".
+`$PAI_REPO_ROOT` is exported by the viewer — see the project `PROJECT_AGENT.md` § "Media CLIs (server/cli/)".
 
 Calls go via `--stage` — see the project `PROJECT_AGENT.md` § "Draft gate". The command writes a draft job id, then waits for the user's Generate/Cancel decision and prints the terminal result as its final JSON line.
 

@@ -25,7 +25,7 @@ node "$PAI_REPO_ROOT/server/cli/generate_video.js" --prompt "..." [--duration 15
   [--source-node-id <id>] [--shot-id <N>]
 ```
 
-`$PAI_REPO_ROOT` is exported by the viewer — see the project `PROJECT_AGENT.md` § "Media CLIs / Invocation path".
+`$PAI_REPO_ROOT` is exported by the viewer — see the project `PROJECT_AGENT.md` § "Media CLIs (server/cli/)".
 
 Calls go via `--stage` — see the project `PROJECT_AGENT.md` § "Draft gate".
 

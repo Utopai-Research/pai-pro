@@ -34,13 +34,29 @@ async function sharedInstructionFiles() {
   const files = [
     join(REPO_ROOT, "agent-templates", "PROJECT_AGENT.md"),
   ];
-  const skillsRoot = join(REPO_ROOT, "skills");
-  const entries = await readdir(skillsRoot, { withFileTypes: true });
-  for (const entry of entries) {
-    if (!entry.isDirectory()) continue;
-    files.push(join(skillsRoot, entry.name, "SKILL.md"));
-  }
+  files.push(...await skillMarkdownFiles(join(REPO_ROOT, "skills")));
   return files;
+}
+
+async function skillMarkdownFiles(dir) {
+  const files = [];
+  await collectSkillMarkdownFiles(dir, files);
+  return files;
+}
+
+async function collectSkillMarkdownFiles(dir, files) {
+  const skillsRoot = join(REPO_ROOT, "skills");
+  const entries = await readdir(dir, { withFileTypes: true });
+  for (const entry of entries) {
+    const fullPath = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      await collectSkillMarkdownFiles(fullPath, files);
+      continue;
+    }
+    if (!entry.isFile() || !entry.name.endsWith(".md")) continue;
+    if (fullPath === join(skillsRoot, "CLAUDE.md")) continue;
+    files.push(fullPath);
+  }
 }
 
 function parseFrontmatter(text) {
@@ -61,6 +77,22 @@ function parseFrontmatter(text) {
     }
   }
   return fields;
+}
+
+function normalizeSectionTitle(title) {
+  return title
+    .replace(/`([^`]*)`/g, "$1")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function projectAgentSections(text) {
+  const sections = new Set();
+  for (const line of text.split("\n")) {
+    const heading = line.match(/^#{2,6}\s+(.+?)\s*#*$/);
+    if (heading) sections.add(normalizeSectionTitle(heading[1]));
+  }
+  return sections;
 }
 
 test("shared project instructions and skills do not contain Claude-only phrases", async () => {
@@ -84,6 +116,22 @@ test("shared project instructions and skills do not point agents at stale upload
         text.includes(phrase),
         false,
         `${file} contains stale upload guidance ${JSON.stringify(phrase)}`,
+      );
+    }
+  }
+});
+
+test("PROJECT_AGENT.md section citations resolve", async () => {
+  const projectAgentPath = join(REPO_ROOT, "agent-templates", "PROJECT_AGENT.md");
+  const sections = projectAgentSections(await readFile(projectAgentPath, "utf8"));
+  for (const file of await sharedInstructionFiles()) {
+    const text = await readFile(file, "utf8");
+    for (const match of text.matchAll(/§\s*"([^"]+)"/g)) {
+      const citation = match[1];
+      assert.equal(
+        sections.has(normalizeSectionTitle(citation)),
+        true,
+        `${file} cites missing PROJECT_AGENT.md section ${JSON.stringify(citation)}`,
       );
     }
   }

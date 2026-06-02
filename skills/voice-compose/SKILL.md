@@ -17,7 +17,7 @@ Triggers: "give / design a voice for [character]", "what does [character] sound 
 
 - Identify the target — any `image_result` of the person you want to voice. Don't gate on `data.subtype`.
 - Read the image first. Open `data.local_path` before composing the prompt — voice description is grounded in what you see. Any `data.name` / `role` / `description` on the node layers on top, doesn't replace.
-- Run via Bash (`$PAI_REPO_ROOT` is exported by the viewer — see the project `PROJECT_AGENT.md` § "Media CLIs / Invocation path"):
+- Run via Bash (`$PAI_REPO_ROOT` is exported by the viewer — see the project `PROJECT_AGENT.md` § "Media CLIs (server/cli/)"):
   ```
   node "$PAI_REPO_ROOT/server/cli/generate_voice.js" \
     --text "<line>" \
