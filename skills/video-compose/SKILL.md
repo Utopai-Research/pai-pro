@@ -12,11 +12,15 @@ Behaviors that production-judgment instinct will silently flip when they aren't 
 - **STAGE BY DEFAULT** — every `generate_video.js` call goes through `--stage`; the command waits until the user fires or cancels the draft from the canvas, then prints the terminal result as its final JSON line.
 - **AUDIO ON BY DEFAULT** — every `generate_video.js` call generates an audio track (`generate_audio: true`). Pass `--no-audio` ONLY when the user has explicitly asked for a silent clip ("silent", "no audio", "I'll add sound in post"). Trailer / portrait / cinematic framing is NOT a trigger; audio is the baseline, not optional polish.
 
+## First-use video mode
+
+Before the first video generation in a project/session, ask once if no video mode is known: `720p Preview ~$0.20/s` recommended, `480p Draft ~$0.08/s`, or `1080p Final ~$0.44/s`. Put the price in each option label. If the user skips, use `720p Preview`. Pass `--resolution` only for `480p Draft` or `1080p Final`.
+
 ## CLI shape
 
 ```
 node "$PAI_REPO_ROOT/server/cli/generate_video.js" --prompt "..." [--duration 15] [--aspect-ratio 16:9]
-  [--resolution 720p] [--no-audio]
+  [--resolution <480p|1080p>] [--no-audio]
   [--label "..."] [--ref-source-id <id> ...] [--ref-audio-source-id <audio_id> ...]
   [--source-node-id <id>] [--shot-id <N>]
 ```
@@ -83,7 +87,7 @@ Pick the one that fits. For source lookup, follow the project `PROJECT_AGENT.md`
 ### 1. Standalone T2V
 
 **Triggers:** a fresh clip unrelated to canvas content ("a noir alley at dawn, slow dolly-in", "a runner in a stadium, 10 seconds").
-**Call:** `node "$PAI_REPO_ROOT/server/cli/generate_video.js" --prompt "..."` with sensible defaults (15s, 16:9, 720p, audio on).
+**Call:** `node "$PAI_REPO_ROOT/server/cli/generate_video.js" --prompt "..."` with sensible defaults (15s, 16:9, 720p, audio on). Add `--resolution 480p` or `--resolution 1080p` only if the chosen video mode requires it.
 **Edges:** none.
 **For the bracket scaffold and slot-by-slot construction when the user wants polish:** see [`references/video-single-shot.md`](references/video-single-shot.md).
 
