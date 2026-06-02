@@ -132,8 +132,9 @@ Do not use `node server/cli/...` from a project cwd or hardcode relative repo pa
 | `generate_voice.js` | `voice-compose` | Creates `audio_result` voice nodes, optionally derived from a character or shot note. |
 | `mirror_url.js` | none | Mirrors an external image/audio/video URL into a canvas reference node. Flags: `--url`, optional `--kind <image|audio|video>`, `--label`. |
 | `split_image.js` | none | Slices an image into grid tiles. Flags: `--url`, `--cols`, `--rows`, `--source-node-id`; `cols` and `rows` each integer 1-8; `1x1` rejected. |
-| `switch_project.js` | Projects | Lists or activates projects. |
+| `switch_project.js` | none | Lists or activates projects. See § Projects. |
 | `reel_stitch.js` | none | Explicit local ffmpeg export. Orders every `video_result` with numeric `data.shot_id` and writes `reel.mp4` by default. Timeline handles normal inspection and preview. |
+| `list_generation_results.js` | none | Lists durable terminal results from `.results/` sidecars (no polling). Flags: `--job-id <id>` (repeatable), `--recent N` (default 10), `--since <ISO>`, `--failed`. |
 
 ### Draft gate
 
@@ -181,8 +182,8 @@ Generation CLIs usually mutate for you.
 ### Node grammar
 
 - `note`: `data: { label, body, metadata }`; optional `subtype: "script" | "shot"`.
-- `image_result`: `data: { label, local_path, prompt?, metadata, subtype? }`. Important subtypes: `character`, `location`, `edit`, `reference`, `split`, `storyboard`.
-- `video_result`: `data: { label, local_path, prompt, duration: int, aspect, shot_id: int|null, metadata }`. `shot_id` means Timeline/reel order; set it only when the user explicitly asks for reel positions.
+- `image_result`: `data: { label, local_path, prompt?, metadata, subtype? }`. Subtypes: `character`, `location`, `edit`, `reference`, `split`, `storyboard`.
+- `video_result`: `data: { label, local_path, prompt?, duration: int, aspect, shot_id: int|null, metadata }`. `shot_id` means Timeline/reel order; set it only when the user explicitly asks for reel positions.
 - `audio_result`: `data: { subtype: "voice" | "upload", label, local_path, prompt?, text?, source_id?, metadata }`.
 - Edges: `{ from, to, kind?: "derived" }`.
 
