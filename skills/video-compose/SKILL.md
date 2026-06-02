@@ -9,7 +9,7 @@ This file is the intent dispatcher. Each pattern below names triggers, the CLI i
 
 Behaviors that production-judgment instinct will silently flip when they aren't enshrined here. Don't override these without the user explicitly asking.
 
-- **STAGE BY DEFAULT** — every `generate_video.js` call goes through `--stage`; the command waits until the user fires or cancels the draft from the canvas, then prints the terminal result as its final JSON line.
+- **STAGE BY DEFAULT** — every `generate_video.js` call goes through `--stage`; see the project `PROJECT_AGENT.md` § "Draft gate" for draft and result handling.
 - **AUDIO ON BY DEFAULT** — every `generate_video.js` call generates an audio track (`generate_audio: true`). Pass `--no-audio` ONLY when the user has explicitly asked for a silent clip ("silent", "no audio", "I'll add sound in post"). Trailer / portrait / cinematic framing is NOT a trigger; audio is the baseline, not optional polish.
 
 ## First-use video mode

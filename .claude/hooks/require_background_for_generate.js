@@ -15,6 +15,7 @@ import { readFileSync } from "node:fs";
 // add another long-running generate_* CLI under server/cli/.
 const GUARDED_CLIS = [
   "generate_image.js",
+  "generate_image_pro.js",
   "generate_video.js",
   "generate_voice.js",
 ];
@@ -30,14 +31,23 @@ try {
 const cmd = String(input?.tool_input?.command || "");
 const bg  = input?.tool_input?.run_in_background === true;
 
-// Only treat the command as a CLI invocation when it actually shells out
-// to `node …` (allowing one optional `cd <dir> && ` prefix). This skips
-// incidental mentions of the filename inside echo/printf/gh-body text.
-const lastSegment = cmd.split("&&").pop().trim();
-const isNodeInvocation = lastSegment.startsWith("node ");
-const mentionsGuardedCli = GUARDED_CLIS.some((cli) => cmd.includes(cli));
+function invokesGuardedCli(command) {
+  // Treat common shell command separators as independent segments. This is
+  // intentionally conservative rather than a full shell parser: it catches
+  // `cd x && node ...`, `cd x; node ...`, and one-command invocations while
+  // still ignoring incidental mentions inside echo/printf/gh-body text.
+  const segments = command
+    .split(/(?:&&|\|\||[;\n])/)
+    .map((s) => s.trim())
+    .filter(Boolean);
 
-if (isNodeInvocation && mentionsGuardedCli && !bg) {
+  return segments.some((segment) => (
+    segment.startsWith("node ")
+    && GUARDED_CLIS.some((cli) => segment.includes(cli))
+  ));
+}
+
+if (invokesGuardedCli(cmd) && !bg) {
   console.error(
     `generate_*.js requires run_in_background: true. Re-invoke and BashOutput-poll the bash id.`
   );

@@ -28,6 +28,10 @@ const FORBIDDEN = [
 const STALE_SHARED_GUIDANCE = [
   "./uploads/",
   "filename-reference",
+  "waits for the terminal JSON result",
+  "prints the terminal result as its final JSON line",
+  "--draft-only",
+  "wait_for_generations.js",
 ];
 
 async function sharedInstructionFiles() {
