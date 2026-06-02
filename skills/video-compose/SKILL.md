@@ -78,6 +78,8 @@ The same CLI flag can serve different semantic roles depending on how the prompt
 
 Pick the one that fits. For source lookup, follow the project `PROJECT_AGENT.md` § "Choosing context"; this skill only owns video-specific prompt and CLI shape.
 
+**Storyboard guard:** if a source image has `data.subtype === "storyboard"`, or legacy label/prompt evidence clearly marks it as a storyboard mosaic, route to Pattern 7 / `references/video-multi-shot.md` before generic I2V. Never describe a storyboard mosaic as `Opening frame @Image1`; it is a panel sequence, not a single starting frame.
+
 ### 1. Standalone T2V
 
 **Triggers:** a fresh clip unrelated to canvas content ("a noir alley at dawn, slow dolly-in", "a runner in a stadium, 10 seconds").
@@ -88,7 +90,7 @@ Pick the one that fits. For source lookup, follow the project `PROJECT_AGENT.md`
 ### 2. Animate a canvas image (I2V)
 
 **Triggers:** "animate this", "make a video of this image", "put motion on this still" — applied to a specific canvas `image_result` (character, location, or otherwise).
-**Source:** the named `image_result` node — just `id`.
+**Source:** the named `image_result` node — just `id`; excludes storyboard mosaics, which route through the Storyboard guard above.
 **Call:** `node "$PAI_REPO_ROOT/server/cli/generate_video.js" --prompt "..." --ref-source-id <image.id>`.
 **Edges:** `{ from: <source.id>, to: video_<N>, kind: "derived" }` — emitted by the CLI.
 **Anchor sub-variants:** opening-frame (default — *"opening frame @Image1, …"*) and closing-frame (*"closing on the frame from @Image1"*) — both pass the image as `--ref-source-id`; the anchor direction lives in the prompt wording, since the upstream model exposes no separate last-frame param.
@@ -154,7 +156,7 @@ Cross-pattern asks. Each combo routes to one primary reference — references do
 | Render one script shot from canvas | Pattern 1, 2, or 3 by shot content (no dispatch — translate the shot note body to slot rules) | character / location refs if the shot involves them |
 | Render a continuous script span (>15s total) as a dependent sequence | `video-extension.md` (script-driven chain) | source video only for dependent links; character refs for identity continuity |
 | Render a short script (≤15s total) as one piece | `video-multi-shot.md` (cross-skill source) | character image refs locked across shots |
-| Render a storyboard mosaic as one 15s video (every panel becomes a shot block) | `video-multi-shot.md` (storyboard cross-skill source) | mosaic image + character / location image refs that authored the mosaic |
+| Render a storyboard mosaic as one 15s video (every panel becomes a shot block) | `video-multi-shot.md` (storyboard cross-skill source; required for `image_result.subtype === "storyboard"`) | mosaic image + character / location image refs that authored the mosaic |
 
 ## After the CLI returns
 

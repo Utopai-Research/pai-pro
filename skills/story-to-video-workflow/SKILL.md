@@ -94,7 +94,7 @@ Choose render path:
 Reply `1`, `2`, or describe what you want.
 ```
 
-For storyboard-first, load `image-compose` Pattern 6. Generate one composite mosaic per clip or <=15s shot note, not one image per panel.
+For storyboard-first, load `image-compose` Pattern 6. Generate one composite mosaic per clip or <=15s shot note, not one image per panel; each mosaic should be an `image_result` with `subtype: "storyboard"`.
 
 ## Dispatch for multiple clips
 

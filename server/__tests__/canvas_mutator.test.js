@@ -545,6 +545,35 @@ test("sample workflow fixture validates against doc schema", async () => {
   assert.ok(ok, ok ? "" : formatErrors(validateWorkflow.errors));
 });
 
+test("schema accepts storyboard image subtype", async () => {
+  const doc = {
+    version: 2,
+    workflow_id: "storyboard_schema",
+    title: "Storyboard schema",
+    nodes: [
+      {
+        id: "image_1",
+        type: "image_result",
+        data: {
+          subtype: "storyboard",
+          label: "Storyboard — Shot 1",
+          local_path: "assets/images/storyboard.png",
+          prompt: "2x2 storyboard mosaic with numbered panels.",
+          metadata: {
+            source: "pai",
+            task_type: "image_generation",
+            model: "image-generation-pro",
+            size: "2560x1440",
+          },
+        },
+      },
+    ],
+    edges: [],
+  };
+  const ok = validateWorkflow(doc);
+  assert.ok(ok, ok ? "" : formatErrors(validateWorkflow.errors));
+});
+
 // --- tmp_path + next_ids -------------------------------------------------
 
 async function stageTmpFile(dir, contents, ext = ".png") {

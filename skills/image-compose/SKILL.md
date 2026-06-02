@@ -20,13 +20,13 @@ description: >-
 Most patterns below use the standard image tier:
 
 ```
-node "$PAI_REPO_ROOT/server/cli/generate_image.js" --prompt "..." [--aspect-ratio 16:9] [--image-size 2K] [--label "..."] [--subtype <character|location|edit|reference|split>] [--name "..."] [--role "..."] [--description "..."] [--source-node-id <id>] [--ref-source-id <id> ...]
+node "$PAI_REPO_ROOT/server/cli/generate_image.js" --prompt "..." [--aspect-ratio 16:9] [--image-size 2K] [--label "..."] [--subtype <character|location|edit|reference|split|storyboard>] [--name "..."] [--role "..."] [--description "..."] [--source-node-id <id>] [--ref-source-id <id> ...]
 ```
 
 Storyboard mosaics and video-bound character sheets use the pro image tier:
 
 ```
-node "$PAI_REPO_ROOT/server/cli/generate_image_pro.js" --prompt "..." --size 2560x1440 [--label "..."] [--subtype <character|location|edit|reference|split>] [--name "..."] [--role "..."] [--description "..."] [--source-node-id <id>] [--ref-source-id <id> ...]
+node "$PAI_REPO_ROOT/server/cli/generate_image_pro.js" --prompt "..." --size 2560x1440 [--label "..."] [--subtype <character|location|edit|reference|split|storyboard>] [--name "..."] [--role "..."] [--description "..."] [--source-node-id <id>] [--ref-source-id <id> ...]
 ```
 
 Pro tier accepts `--size` only. Do not pass `--aspect-ratio` or `--image-size` to `generate_image_pro.js`. Common exact sizes: `1024x1024`, `1280x720`, `720x1280`, `1920x1920`, `2560x1440`, `1440x2560`, `3840x2160`, `2160x3840`.
@@ -116,7 +116,7 @@ Triggers: a fresh image unrelated to existing canvas content ("generate a mounta
 Triggers: user asks for a storyboard, mosaic, NxN / N×M grid, shot list, coverage, keyframe sheet, shot planning, or image previs. The intent is **ONE composite image with N×M panels per clip or <=15s shot note**, NOT one image per panel and NOT a video.
 
 - **Tool**: `generate_image_pro.js` (pro tier). Use it for better rendered text, panel boundaries, and multi-cell layout fidelity.
-- **Single call per mosaic**: ONE `node "$PAI_REPO_ROOT/server/cli/generate_image_pro.js" --prompt "..." --size 2560x1440 --label "Storyboard — Shot <N>" --source-node-id <shot_note_id>` per shot-note mosaic. The pattern's point is one composite image per clip/shot note, not N×M small generations.
+- **Single call per mosaic**: ONE `node "$PAI_REPO_ROOT/server/cli/generate_image_pro.js" --prompt "..." --size 2560x1440 --subtype storyboard --label "Storyboard — Shot <N>" --source-node-id <shot_note_id>` per shot-note mosaic. The pattern's point is one composite image per clip/shot note, not N×M small generations.
 - **Exact size**: default to **`2560x1440`** — this is filmmaking. Each panel inside the mosaic is a 16:9 cinematic frame, and the overall sheet should also feel cinematic landscape. The grid shape (3×3, 4×2, etc.) describes cell layout, NOT canvas shape. Only override if the user explicitly says "portrait", "square", "vertical", or names a different ratio:
   - "3x3 storyboard" → `2560x1440` (default)
   - "3x3 square storyboard" → `1920x1920`
@@ -131,7 +131,8 @@ Triggers: user asks for a storyboard, mosaic, NxN / N×M grid, shot list, covera
 #### Node fields the CLI sets
 
 - ONE `image_result` node PER mosaic.
-- The CLI uses your `--label` ("Storyboard — Shot <N>" if shot-specific; "Storyboard" if standalone) and stores the full prompt. Use the label, prompt sections, `source_id`, and incoming derived edges to identify storyboard mosaics later; do not assume custom storyboard metadata unless the CLI gains explicit flags for it.
+- Set `data.subtype = "storyboard"` by passing `--subtype storyboard`.
+- The CLI uses your `--label` ("Storyboard — Shot <N>" if shot-specific; "Storyboard" if standalone) and stores the full prompt. Use `subtype: "storyboard"` first, with the label, prompt sections, `source_id`, and incoming derived edges as legacy fallback signals for older projects.
 
 ### 7. Character reference sheet *(default for ANY video-bound character work — with or without actor refs)*
 

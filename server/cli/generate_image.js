@@ -53,7 +53,7 @@ const args = parseArgs({
   "image-size":   { type: "string", default: "2K" },
   // canvas-mutate integration
   label:           { type: "string" },
-  subtype:         { type: "string" }, // character | location | edit | reference | split
+  subtype:         { type: "string" }, // character | location | edit | reference | split | storyboard
   "source-node-id": { type: "string" }, // authorship edge — see PROJECT_AGENT.md
   "ref-source-id": { type: "string", multiple: true, default: [] },
   "project-id":    { type: "string" },

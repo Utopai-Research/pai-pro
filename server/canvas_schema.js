@@ -70,7 +70,7 @@ const imageResultDataSchema = {
   properties: {
     subtype: {
       type: "string",
-      enum: ["character", "location", "edit", "reference", "split"],
+      enum: ["character", "location", "edit", "reference", "split", "storyboard"],
     },
     label: { type: "string" },
     local_path: { type: "string", minLength: 1 },
