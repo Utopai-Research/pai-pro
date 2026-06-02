@@ -45,7 +45,7 @@ When a storyboard mosaic exists on canvas (`image_result.data.subtype === "story
 
 ## The 4-section scaffold
 
-Total prompt ≤1000 chars. Write plainly — describe what happens.
+Write plainly — describe what happens.
 
 **1. Shot-by-shot timeline** — one block per shot:
 
@@ -127,7 +127,6 @@ Energy arc: open with quiet approach, settle into the detective's process, pivot
 - **Density too uniform** — split the timeline into HIGH / LOW blocks; viewers need recovery time between peaks.
 - **Effects drift** — use precise names (*"speed ramp (deceleration)"* not *"speed ramp"*). Vague effect names produce vague effects.
 - **Character drift across shots** — re-reference the character explicitly per shot (*"the character in @Image1"*); don't assume continuity from one early reference.
-- **Prompt over budget (>1000 chars)** — collapse the Density map to a one-liner; trim shot-block adjectives.
 
 ## Fallback branch
 
