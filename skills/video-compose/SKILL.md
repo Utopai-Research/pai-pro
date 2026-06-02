@@ -52,7 +52,7 @@ Each clip costs real money even after staging — only stage after the user has 
 
 ## Reference caps (video-generation)
 
-≤9 image refs, ≤3 audio refs, ≤3 video refs. Each audio / video ref must be **1.8s–15.2s per file**. **Video refs additionally cap at 15s aggregate** (sum across the ≤3 video refs); audio has no aggregate cap. Audio refs need an image or video anchor — they can't be the only reference. Don't preflight — submit and read `limits` + `sent` on failure. Audio / video duration is on canvas — read `audio_result.data.metadata.duration_sec` and `video_result.data.duration` from `workflow.json`. Never ffprobe canvas-local files (and ffprobe may not be installed).
+≤9 image refs, ≤3 audio refs, ≤3 video refs. Each audio / video ref must be **1.8s–15.2s per file**. **Video refs additionally cap at 15s aggregate** (sum across the ≤3 video refs); audio has no aggregate cap. Audio refs need an image or video anchor — they can't be the only reference. Don't preflight — submit and read `limits` + `sent` on failure. Audio / video durations are already on the canvas — read `audio_result.data.metadata.duration_sec` and `video_result.data.duration` from `workflow.json` instead of probing the files.
 
 ## Reference roles — vocabulary
 

@@ -70,7 +70,7 @@ If every answer is "no" for a given pair (two unrelated scenes), parallel is fin
 
 - **Prompt-independence ≠ creative independence.** B's prompt may be writable without reading A's output, but B's rendered geometry / lighting / subject pose depends on A's actual final frame. If A doesn't exist yet, you can't pin B to it.
 - **Prompt text alone does not pin the frame.** The continuity prefix shapes description; the frame-level pin comes from the attached `--ref-source-id` to the source video. Without it, the model renders something that *describes* the same room but doesn't *match* it pixel-wise.
-- **<15s reference cap.** Two consecutive 10s clips can't be parallelized via shared refs — combined ref length is 20s, over the cap. Serialize: render A first, then pass A's id to B (10s <15s ✓).
+- **15s aggregate video-ref cap.** A clip can't reference two 10s predecessors at once — their combined 20s breaches the cap. Chain instead: each link references only its immediate predecessor (one 10s ref, under the cap).
 - **"Same way" = chain shape.** When the user says "do the next N scenes the same way" after a chain, the structure being repeated is the chain itself, not the per-call shape. Don't collapse "same way" into firing parallel calls.
 
 ## How staged serialization runs
@@ -112,4 +112,4 @@ Scene A ends with a traveler stepping off a train onto a platform. Scene B opens
 
 ## Fallback branch
 
-Extension that doesn't fit forward / backward / chain — e.g. branching from a middle frame, or generating an alternate "what if" version of the same beat: treat as a new I2V from the chosen frame of the source. Extract the frame via `ffmpeg`, drag-drop or upload the frame onto the canvas (so it becomes an `image_result` reference node), then pass that node's id via `--ref-source-id`.
+Extension that doesn't fit forward / backward / chain — e.g. branching from a middle frame, or generating an alternate "what if" version of the same beat: treat as a new I2V from the chosen frame of the source. Extract the frame via `ffmpeg`, add it as an `image_result` node with `canvas_mutate.js --op addNode` (pass the frame's absolute path as `tmp_path`; the `image-compose` skill's `character-sheet.md` "Upload to canvas" step shows the exact payload shape), then pass the returned `assigned.node_id` via `--ref-source-id`.

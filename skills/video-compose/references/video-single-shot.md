@@ -52,7 +52,7 @@ Pattern-specific notes (the role vocabulary itself is in SKILL.md):
 **1. Character close-up:**
 
 ```
-[Style] Photoreal cinematic still. Full-frame cinema camera, 50mm prime, shallow DOF, soft key light with ambient fill, restrained palette, subtle film grain.
+[Style] Photoreal cinematic look. Full-frame cinema camera, 50mm prime, shallow DOF, soft key light with ambient fill, restrained palette, subtle film grain.
 [Duration] 6 seconds
 [Scene] Empty diner at 3am, blue-green fluorescents, drizzle out the window.
 [Character] The character in @Image1: middle-aged detective, trench coat, three-day stubble, focused gaze.
