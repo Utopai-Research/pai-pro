@@ -47,9 +47,9 @@ Do not attempt to invent images via ASCII art or markdown embedding — call the
 
 ## First-use image mode
 
-Before the first image generation in a project/session, ask once if no image mode is known: `Standard 2K ~$0.10` recommended, `Pro 2K ~$0.45`, or `Max quality ~$0.77`. Put the price in each option label. If the user skips, use `Standard 2K`.
+For the ask-once flow and per-mode prices, see the project `PROJECT_AGENT.md` § "First-use generation choices".
 
-Mapping: `Standard 2K` -> `generate_image.js --image-size 2K`; `Pro 2K` -> `generate_image_pro.js --size <2K exact>`; `Max quality` -> pro 4K exact size. Common pro sizes: 16:9 `2560x1440` / `3840x2160`, 9:16 `1440x2560` / `2160x3840`, 1:1 `1920x1920` / `2880x2880`. Pattern-required pro still wins.
+Mode -> flag mapping: `Standard 2K` -> `generate_image.js --image-size 2K`; `Pro 2K` -> `generate_image_pro.js --size <2K exact>`; `Max quality` -> pro 4K exact size. Common pro sizes: 16:9 `2560x1440` / `3840x2160`, 9:16 `1440x2560` / `2160x3840`, 1:1 `1920x1920` / `2880x2880`.
 
 ## Patterns
 
