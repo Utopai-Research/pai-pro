@@ -53,7 +53,7 @@ Prefer the runtime's native structured question UI over Markdown checkboxes. Mar
 - Anthropic runtime: use `AskUserQuestion` when available.
 - Codex runtime: use `request_user_input` when it is listed in the available tools.
 
-Use one short question, a header of 12 characters or fewer, and 2-4 options with `label` plus `description`. Put the recommended option first and suffix its label with `(Recommended)`. Do not add a manual "type something else" option when the native UI already provides free-form/other input.
+Use one short question, a header of 12 characters or fewer, and 2-3 options with `label` plus `description`. Put the recommended option first and suffix its label with `(Recommended)`. Do not add a manual "type something else" option when the native UI already provides free-form/other input.
 
 If the native question tool is unavailable, use a short numbered fallback and then stop:
 

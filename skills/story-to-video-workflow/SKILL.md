@@ -43,7 +43,7 @@ Capability skills own CLI flags, node grammar, reference flags, and failure reco
 
 ## Consent and gates
 
-- A checked recommendation is not consent by itself; wait for the user to answer.
+- A recommended option is not consent by itself; wait for the user to answer.
 - Paid video generation needs explicit user intent before staging.
 - Draft-only, failed, and cancelled generations do not advance the story pipeline.
 - Render path and multi-clip dispatch are separate choices when multiple clips are planned.
