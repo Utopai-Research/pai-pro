@@ -12,7 +12,7 @@ export const VIDEO_LIMITS = {
   //    step rejects with DurationTooLong / DurationTooShort if outside).
   //  - Audio refs: NO aggregate cap (verified: 3 audios totaling 37.84s succeed).
   //  - Video refs: aggregate <=15s total (verified: 3 videos totaling 35.41s
-  //    fail at gen with `generation_failed` "invalid video duration, exceeds 15s").
+  //    fail at gen with `bad_args` "invalid video duration, exceeds 15s").
   //  - Audio refs also require a visual anchor — `bad_args`
   //    "reference_audio cannot be the only reference input" otherwise.
   max_image_refs: 9,

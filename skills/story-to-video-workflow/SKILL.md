@@ -45,7 +45,7 @@ Plan ahead internally, but only ask the next meaningful user-facing choice. Do n
 | Clip render, continuation, audio refs, storyboard animation, or video prompt | `video-compose` |
 | Scene/ref grouping or canvas layout frames | `groups-compose` |
 
-Capability skills own CLI flags, node grammar, reference flags, and failure recovery. This workflow owns sequencing and handoff only.
+Capability skills own CLI flags, node grammar, reference flags, and domain-specific recovery hints. `PROJECT_AGENT.md` owns the shared failure taxonomy. This workflow owns sequencing and handoff only.
 
 ## Consent and gates
 

@@ -114,7 +114,7 @@ For "take a note", "annotate", "jot down", "save this", or "remember that":
 
 ## Media CLIs (`server/cli/`)
 
-Skills wrap these. Call a generation CLI only after loading the matching skill; direct calls are for tiny operations where the skill has no matching recipe. Each prints one JSON line on stdout and uses the failure classes below.
+Skills wrap these. Call a generation CLI only after loading the matching skill; direct calls are for tiny operations where the skill has no matching recipe. Each prints one JSON line on stdout. This file is the canonical public taxonomy for `klass` values an agent may see from generation, pending review, and canvas mutation helpers.
 
 Your cwd is `projects/<active>/`, but scripts live at the repo root. The viewer exports `PAI_REPO_ROOT`; invoke as:
 
@@ -145,17 +145,17 @@ If the canvas is in Run immediately mode, still pass `--stage`; the viewer fires
 
 ### Failure handling
 
-On `{ ok: false, klass, message, limits, sent, ... }`, do not advance the creative pipeline.
+On `{ ok: false, klass, message, limits, sent, ... }`, do not advance the creative pipeline. Classes you may see: `cancelled`, `aborted`, `timeout`, `bad_args`, `asset_rejected`, `content_filtered`, `rate_limited`, `transient`, `transient_exhausted`, `not_found`, `validation`, `conflict`, `infra`.
 
-| `klass` | Response |
+| Situation | Response |
 |---|---|
 | `cancelled` | Stop. Ask whether to revise the draft or leave it. |
-| `content_filtered` | Reword the prompt in safer, less charged language. |
-| `bad_args` | Compare `sent` against `limits`; fix refs, duration, aspect, size, or missing args. |
+| `bad_args` / `validation` / `not_found` / `conflict` | Re-read current state if needed, compare `sent` against `limits`, and fix stale ids, refs, duration, aspect, size, or payload shape. |
 | `asset_rejected` | Identify the rejected ref and swap, mirror, trim, or regenerate it. |
+| `content_filtered` | Reword the prompt in safer, less charged language. |
 | `rate_limited` | Wait `retryAfterSec`; ask before retrying. |
-| `transient_exhausted` | Already retried; ask before another try. |
-| `infra` | Explain plainly and do not retry blindly. |
+| `timeout` / `aborted` | Check recent results once, then ask before rerunning. |
+| `transient` / `transient_exhausted` / `infra` | Explain plainly; ask before retrying. |
 
 Never auto-retry `generate_video.js`; each attempt costs real money.
 
