@@ -201,7 +201,7 @@ test("generate_image_pro.js --stage --draft-only writes a draft sidecar", async 
   assert.ok(sidecar.argv.includes("1024x1024"));
 });
 
-test("generate_video.js --stage --draft-only writes a draft sidecar", async (t) => {
+test("generate_video.js --stage --draft-only defaults to 720p in the sidecar", async (t) => {
   const cwd = await setupCwd();
   t.after(() => rm(cwd, { recursive: true, force: true }));
 
@@ -212,7 +212,6 @@ test("generate_video.js --stage --draft-only writes a draft sidecar", async (t) 
       "--draft-only",
       "--prompt", "wide-angle desert at golden hour",
       "--duration", "10",
-      "--resolution", "1080p",
     ],
     cwd,
     resolveStage: false,
@@ -227,7 +226,7 @@ test("generate_video.js --stage --draft-only writes a draft sidecar", async (t) 
   const sidecar = await readSidecar(cwd, reply.job_id);
   assert.strictEqual(sidecar.kind, "video");
   assert.strictEqual(sidecar.script, "generate_video.js");
-  assert.strictEqual(sidecar.resolution, "1080p");
+  assert.strictEqual(sidecar.resolution, "720p");
   assert.strictEqual(sidecar.duration, 10);
 });
 

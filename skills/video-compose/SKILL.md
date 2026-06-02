@@ -16,7 +16,7 @@ Behaviors that production-judgment instinct will silently flip when they aren't 
 
 ```
 node "$PAI_REPO_ROOT/server/cli/generate_video.js" --prompt "..." [--duration 15] [--aspect-ratio 16:9]
-  [--resolution 1080p] [--no-audio]
+  [--resolution 720p] [--no-audio]
   [--label "..."] [--ref-source-id <id> ...] [--ref-audio-source-id <audio_id> ...]
   [--source-node-id <id>] [--shot-id <N>]
 ```
@@ -83,7 +83,7 @@ Pick the one that fits. For source lookup, follow the project `PROJECT_AGENT.md`
 ### 1. Standalone T2V
 
 **Triggers:** a fresh clip unrelated to canvas content ("a noir alley at dawn, slow dolly-in", "a runner in a stadium, 10 seconds").
-**Call:** `node "$PAI_REPO_ROOT/server/cli/generate_video.js" --prompt "..."` with sensible defaults (15s, 16:9, 1080p, audio on).
+**Call:** `node "$PAI_REPO_ROOT/server/cli/generate_video.js" --prompt "..."` with sensible defaults (15s, 16:9, 720p, audio on).
 **Edges:** none.
 **For the bracket scaffold and slot-by-slot construction when the user wants polish:** see [`references/video-single-shot.md`](references/video-single-shot.md).
 

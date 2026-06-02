@@ -60,7 +60,7 @@ function buildContent({ prompt, imageAssetIds, audioAssetIds, videoAssetIds }) {
  * @param {string}    opts.prompt
  * @param {number}    [opts.duration=15]
  * @param {string}    [opts.aspectRatio="16:9"]
- * @param {string}    [opts.resolution="1080p"]
+ * @param {string}    [opts.resolution="720p"]
  * @param {boolean}   [opts.generateAudio=true]
  * @param {string[]}  [opts.imageAssetIds=[]]   from prior uploadReferences()
  * @param {string[]}  [opts.audioAssetIds=[]]
@@ -75,7 +75,7 @@ export async function submitVideo({
   prompt,
   duration = 15,
   aspectRatio = "16:9",
-  resolution = "1080p",
+  resolution = "720p",
   generateAudio = true,
   imageAssetIds = [],
   audioAssetIds = [],
