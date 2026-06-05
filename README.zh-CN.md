@@ -66,6 +66,6 @@ Docker 模式打开 <http://localhost:7588>，本地模式打开 <http://localho
 PAI-Pro 使用 [PAI PRO Sustainable Use License](LICENSE.md) 发布，允许个人使用、非商业研究和内部商业使用。PAI-Pro Skills 或企业指定源码/Skills 的商业使用需要单独协议；如需企业授权，请联系 [enterprise@utopaistudios.com](mailto:enterprise@utopaistudios.com)。
 
 [discord-shield]: https://img.shields.io/badge/Discord-Join-green?style=flat&logo=discord&logoColor=white
-[discord-url]: https://discord.gg/CfjRGGwK
+[discord-url]: https://discord.gg/hb4MkHND
 [claude-code-url]: https://code.claude.com/docs/en/overview
 [codex-url]: https://developers.openai.com/codex/cli
