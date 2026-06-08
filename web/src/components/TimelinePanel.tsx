@@ -1536,50 +1536,49 @@ function ReelCard({
   return (
     <div
       className={
-        'group relative flex h-full flex-col overflow-hidden rounded-md border bg-neutral-950 transition-colors ' +
+        'group relative h-full overflow-hidden rounded-md border bg-neutral-950 transition-colors ' +
         (active
           ? 'border-neutral-300'
           : 'border-neutral-800 hover:border-neutral-700')
       }
     >
-      <button type="button" onClick={onClick} className="block w-full shrink-0 text-left">
-        <div
-          className="relative h-[76px] w-full bg-black"
-        >
-          {url !== '' ? (
-            <video
-              src={url}
-              preload="metadata"
-              muted
-              playsInline
-              draggable={false}
-              className="h-full w-full object-cover"
-              onError={(e) => {
-                ;(e.currentTarget as HTMLVideoElement).style.display = 'none'
-              }}
-            />
-          ) : null}
-          {typeof shotId === 'number' ? (
-            <div className="absolute left-2 top-2 rounded bg-black/70 px-1.5 py-0.5 font-mono text-[11px] text-neutral-100">
-              #{String(shotId).padStart(2, '0')}
-            </div>
-          ) : null}
-          {/* Active card always shows its play state; idle cards show
-              ▶ on hover so the click affordance is obvious. */}
-          <div
-            className={
-              'pointer-events-none absolute inset-0 flex items-center justify-center bg-black/40 transition-opacity ' +
-              (active ? 'opacity-100' : 'opacity-0 group-hover:opacity-100')
-            }
-          >
-            <span className="text-2xl text-neutral-100">
-              {isPlaying ? '⏸' : '▶'}
-            </span>
+      <button type="button" onClick={onClick} className="absolute inset-0 block w-full text-left">
+        {url !== '' ? (
+          <video
+            src={url}
+            preload="metadata"
+            muted
+            playsInline
+            draggable={false}
+            className="block h-full w-full object-cover"
+            onError={(e) => {
+              ;(e.currentTarget as HTMLVideoElement).style.display = 'none'
+            }}
+          />
+        ) : null}
+        {typeof shotId === 'number' ? (
+          <div className="absolute left-2 top-2 rounded bg-black/70 px-1.5 py-0.5 font-mono text-[11px] text-neutral-100">
+            #{String(shotId).padStart(2, '0')}
           </div>
-          {active ? (
-            <div className="absolute inset-x-0 bottom-0 h-0.5 bg-neutral-300" />
-          ) : null}
+        ) : null}
+        {/* Active card always shows its play state; idle cards show
+            ▶ on hover so the click affordance is obvious. */}
+        <div
+          className={
+            'pointer-events-none absolute inset-0 flex items-center justify-center bg-black/40 transition-opacity ' +
+            (active ? 'opacity-100' : 'opacity-0 group-hover:opacity-100')
+          }
+        >
+          <span className="text-2xl text-neutral-100">
+            {isPlaying ? '⏸' : '▶'}
+          </span>
         </div>
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 via-black/45 to-transparent px-2 pb-2 pt-8">
+          <div className="truncate text-xs text-neutral-100 drop-shadow">{label}</div>
+        </div>
+        {active ? (
+          <div className="absolute inset-x-0 bottom-0 h-0.5 bg-neutral-300" />
+        ) : null}
       </button>
       <TimelineActionCluster
         referDisabled={referDisabled}
@@ -1595,9 +1594,6 @@ function ReelCard({
           ×
         </TimelineIconButton>
       </TimelineActionCluster>
-      <div className="px-2 py-1.5">
-        <div className="truncate text-xs text-neutral-200">{label}</div>
-      </div>
     </div>
   )
 }
