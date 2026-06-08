@@ -14,12 +14,12 @@
 import path from "node:path";
 import fs from "node:fs/promises";
 import { parseArgs, emitSuccess, emitFailure, classify, isoNow, truncateLabel } from "./_cli.js";
-import { submitVideo, pollVideo, downloadVideo } from "../pai_video_client.js";
+import { submitVideo, pollVideo } from "../pai_video_client.js";
 import { getDefault, getCost } from "../model_registry.js";
 import { uploadReferences } from "../pai_assets_client.js";
 import { kickPreupload } from "./_preupload_hook.js";
 import {
-  writeBytesToTmp,
+  streamUrlToTmp,
   viewerUrlForLocalPath,
   buildProviderRefs,
   readActiveProject,
@@ -268,9 +268,11 @@ try {
   });
 
   const { videoUrl, durationSeconds } = await pollVideo(taskId);
-  const mp4Bytes = await downloadVideo(videoUrl);
-  const staged = await writeBytesToTmp({
-    bytes: mp4Bytes,
+  // Stream the MP4 straight to the tmp file — a 1080p clip is tens of MB,
+  // and buffering it whole made the long-lived viewer OOM-prone under
+  // draft-gate fan-out (audit N22).
+  const staged = await streamUrlToTmp({
+    url: videoUrl,
     mimeType: "video/mp4",
     projectId,
   });

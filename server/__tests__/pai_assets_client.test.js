@@ -421,3 +421,35 @@ test("circuit breaker open → infra (regression signal)", withFakeTimers(async 
     restore();
   }
 }));
+
+// _assetCache is an LRUCache(max: 2000), not an unbounded Map (audit N23):
+// over a long viewer uptime the old Map only ever grew. Seed more than max
+// distinct keys (via reseedFromCanvas, which needs no network) and assert
+// the cache evicts the oldest while keeping the most recent — and that the
+// resident set never exceeds the bound.
+test("_assetCache evicts least-recently-used entries past its max", async () => {
+  const client = await freshClient();
+  const MAX = 2000;
+  const N = MAX + 1; // one over the bound → the first key must be evicted
+
+  // Each node mints one cache entry keyed by /projects/p/<local_path>,
+  // inserted in array order, so index 0 is the oldest.
+  const nodes = Array.from({ length: N }, (_, i) => ({
+    id: `image_${i}`,
+    type: "image_result",
+    data: {
+      label: `a${i}`,
+      local_path: `assets/images/image_${i}.png`,
+      metadata: { asset_id: `asset-${i}` },
+    },
+  }));
+  client.reseedFromCanvas("p", nodes);
+
+  const snap = client.snapshotAssetStates();
+  const keyFor = (i) => `/projects/p/assets/images/image_${i}.png`;
+
+  assert.equal(Object.keys(snap).length, MAX, "resident entries are capped at max");
+  assert.equal(snap[keyFor(0)], undefined, "oldest entry evicted once over the bound");
+  assert.equal(snap[keyFor(N - 1)]?.assetId, `asset-${N - 1}`, "most-recent entry retained");
+  assert.equal(snap[keyFor(1)]?.assetId, "asset-1", "second-oldest survives (only one over max)");
+});

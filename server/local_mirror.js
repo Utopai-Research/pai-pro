@@ -1,10 +1,14 @@
-// Project asset I/O helpers. Generation CLIs stage assets via mirrorToTmp /
-// writeBytesToTmp and hand the absolute path to the mutator (addNode
-// tmp_path); the mutator renames into assets/<kind>/<node-id>.<ext> under
-// its lock so filenames always match node ids.
+// Project asset I/O helpers. Generation CLIs stage assets via
+// writeBytesToTmp (in-memory bytes) or streamUrlToTmp (a remote URL
+// streamed straight to disk) and hand the absolute path to the mutator
+// (addNode tmp_path); the mutator renames into
+// assets/<kind>/<node-id>.<ext> under its lock so filenames always match
+// node ids.
 
 import fs from "node:fs/promises";
 import fsSync from "node:fs";
+import { pipeline } from "node:stream/promises";
+import { Readable } from "node:stream";
 import path from "node:path";
 import crypto from "node:crypto";
 import { PAI_REPO_ROOT } from "./lib/paths.js";
@@ -63,21 +67,36 @@ function basenameFromUrl(url) {
 
 const TMP_DIRNAME = ".tmp";
 
-export async function mirrorToTmp({ url, projectId, filename }) {
-  if (!url) throw new Error("mirrorToTmp: url required");
+// Download a remote URL straight to a tmp file by streaming the response
+// body to disk — the bytes never accumulate in a single Buffer. Used for
+// large write-only assets (e.g. generate_video.js's MP4, tens of MB per
+// 1080p clip) where buffering the whole payload in RAM made the
+// long-lived viewer sluggish / OOM under draft-gate fan-out. Same return
+// shape as writeBytesToTmp; pick the extension from mimeType, falling back
+// to the URL's own extension.
+export async function streamUrlToTmp({ url, mimeType, projectId, filename, timeoutMs = 120_000 }) {
+  if (!url) throw new Error("streamUrlToTmp: url required");
   const proj = projectId || await readActiveProject();
-  const ext = path.extname(basenameFromUrl(url)) || ".bin";
-  const fname = filename || `tmp_${crypto.randomBytes(8).toString("hex")}${ext}`;
+  const ext = mimeType
+    ? extensionForMime(mimeType)
+    : (path.extname(basenameFromUrl(url)).replace(/^\./, "") || "bin");
+  const fname = filename || `tmp_${crypto.randomBytes(8).toString("hex")}.${ext}`;
   const relPath = path.posix.join("assets", TMP_DIRNAME, fname);
   const absPath = path.join(PAI_REPO_ROOT, "projects", proj, relPath);
 
-  const res = await fetch(url);
-  if (!res.ok) {
-    throw new Error(`mirror download failed (${res.status} ${res.statusText}): ${url}`);
+  const res = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) });
+  if (!res.ok || !res.body) {
+    throw new Error(`stream download failed (${res.status} ${res.statusText}): ${url}`);
   }
-  const buf = Buffer.from(await res.arrayBuffer());
   await fs.mkdir(path.dirname(absPath), { recursive: true });
-  await fs.writeFile(absPath, buf);
+  try {
+    // res.body is a WHATWG ReadableStream; pipeline wants a Node stream.
+    await pipeline(Readable.fromWeb(res.body), fsSync.createWriteStream(absPath));
+  } catch (e) {
+    // Leave no half-written tmp file behind on a mid-stream error.
+    await fs.unlink(absPath).catch(() => {});
+    throw e;
+  }
   return { local_path: relPath, absolute_path: absPath, filename: fname };
 }
 

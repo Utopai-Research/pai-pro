@@ -40,6 +40,7 @@
 //                  502 { detail: "video-generation-assets circuit breaker open" }
 
 import { EventEmitter } from "node:events";
+import { LRUCache } from "lru-cache";
 import { callGenerate, err } from "./pai_client.js";
 import { readTunnelOrigin } from "./local_mirror.js";
 
@@ -75,8 +76,19 @@ function emitUpdate(url, status, extra = {}) {
 
 // --- cache ---------------------------------------------------------------
 
-// Map<canonicalKey, { status, assetId?, reason?, promise? }>
-const _assetCache = new Map();
+// LRUCache<canonicalKey, { status, assetId?, reason?, promise? }>
+//
+// Bounded so the viewer's RSS can't grow without limit over a long uptime:
+// the old plain Map only ever added entries (one per distinct asset URL
+// across every project the session ever touched). Entries are tiny (a
+// status enum + an id/reason string), so 2000 keeps realistic working
+// sets — several projects, each with a few hundred assets — fully resident
+// for dedupe while hard-capping growth at well under a megabyte. Eviction
+// is least-recently-used (get/set both mark recency), so the assets a
+// session is actively re-referencing stay warm. No TTL: an asset_id stays
+// valid for the asset's lifetime; expired *groups* are handled separately
+// via the groupExpired retry in doUpload.
+const _assetCache = new LRUCache({ max: 2000 });
 
 // Collapse the five URL forms that flow through the system onto one cache
 // key per logical asset. Without this, the same image gets a separate
