@@ -26,7 +26,7 @@
 // services/asset_sync.js bridge dispatches mutator updateNode patches in
 // response to paiAssetEvents 'update' (active / rejected) so workflow.json
 // becomes the durable cache. On boot, services/projects.js calls
-// reseedFromCanvas to re-prime the in-process Map from that metadata.
+// reseedFromCanvas to re-prime the in-process cache from that metadata.
 //
 // **Wire shapes (post-fix):**
 //   CreateAsset → 200 { Result: { Id } }                        (no Status)
@@ -40,6 +40,7 @@
 //                  502 { detail: "video-generation-assets circuit breaker open" }
 
 import { EventEmitter } from "node:events";
+import { LRUCache } from "lru-cache";
 import { callGenerate, err } from "./pai_client.js";
 import { readTunnelOrigin } from "./local_mirror.js";
 
@@ -75,8 +76,13 @@ function emitUpdate(url, status, extra = {}) {
 
 // --- cache ---------------------------------------------------------------
 
-// Map<canonicalKey, { status, assetId?, reason?, promise? }>
-const _assetCache = new Map();
+// LRUCache<canonicalKey, { status, assetId?, reason?, promise? }>
+//
+// Bounded so viewer RSS cannot grow across long uptime. Entries are tiny;
+// 2000 keeps several projects' working sets resident while capping growth.
+// No TTL: asset IDs do not expire on a clock; expired groups are retried
+// in doUpload.
+const _assetCache = new LRUCache({ max: 2000 });
 
 // Collapse the five URL forms that flow through the system onto one cache
 // key per logical asset. Without this, the same image gets a separate

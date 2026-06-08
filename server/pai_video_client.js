@@ -8,14 +8,17 @@
 //
 // Reference: raw-models.md § "video-generation".
 //
-// Three exported functions split the submit / poll / download flow:
+// Two exported functions split the submit / poll flow:
 //
 //   submitVideo({ ... })       → POST /api/v1/submit, returns { taskId, raw }
 //   pollVideo(taskId, opts)    → polls /api/v1/task/status/{id} to terminal,
 //                                returns { videoUrl, raw, durationSeconds }
-//   downloadVideo(url)         → fetch the MP4 bytes from the signed CDN URL
+//
+// The resolved MP4 is fetched by the caller (generate_video.js) via
+// local_mirror.js's streamUrlToTmp, which streams the body straight to
+// disk instead of buffering tens of MB per clip in RAM.
 
-import { callSubmit, pollStatus, downloadUrlToBuffer, err } from "./pai_client.js";
+import { callSubmit, pollStatus, err } from "./pai_client.js";
 
 const MODEL = "video-generation";
 const SUBMIT_TIMEOUT_MS = 30_000;
@@ -144,15 +147,4 @@ export async function pollVideo(taskId, { onProgress } = {}) {
     raw: resp,
     durationSeconds: (Date.now() - started) / 1000,
   };
-}
-
-/**
- * Pull the MP4 bytes from a signed CDN URL. PAI rehosts to GCS with a
- * publicly-fetchable signed URL (24h TTL).
- *
- * @param {string} videoUrl
- * @returns {Promise<Buffer>}
- */
-export async function downloadVideo(videoUrl) {
-  return downloadUrlToBuffer(videoUrl, { timeoutMs: 120_000 });
 }
