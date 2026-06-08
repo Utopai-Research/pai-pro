@@ -3,11 +3,10 @@
  *
  * Two sections:
  *   - On reel:   videos with a numeric shot_id, sorted ascending. The
- *                player at the top steps through these in order; click
- *                a card to jump. Drag a card to reorder; drop from
- *                Available directly onto the reel — position is taken
- *                from the cursor's slot (left/right half of each card),
- *                or the trailing empty space to append.
+ *                player at the top steps through these in order. The
+ *                reel renders as one duration-scaled horizontal track;
+ *                click a card to jump, drag a card to reorder, or drop
+ *                from Available directly onto the reel to add it.
  *   - Available: videos with no shot_id, rendered as compact thumbs.
  *                Click to play once (no auto-advance). Drag to add to
  *                the reel at a position. Drag a reel clip back to this
@@ -15,8 +14,8 @@
  *
  * Player: a single <video> element keeps mounted and swaps `src` on
  * shot boundaries. Sequence time is "duration up to active shot +
- * currentTime within shot", so the scrubber tracks the whole reel.
- * Tick marks at shot boundaries; click to seek anywhere.
+ * currentTime within shot", so the scrubber and reel playhead track
+ * the whole reel. Tick marks at shot boundaries; click to seek anywhere.
  *
  * Download: the toolbar's right side hits GET /projects/:id/reel.mp4,
  * which runs server-side ffmpeg concat over every shot-id'd clip and
@@ -87,6 +86,85 @@ function formatTime(secs: number): string {
   const m = Math.floor(secs / 60)
   const s = Math.floor(secs % 60)
   return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+}
+
+const TIMELINE_PX_PER_SECOND = 20
+const TIMELINE_MIN_CLIP_SECONDS = 1
+const TIMELINE_MIN_CLIP_WIDTH = 120
+
+function timelineDurationSeconds(node: VideoResultNode): number {
+  const duration = node.data.duration
+  return typeof duration === 'number' && Number.isFinite(duration) && duration > 0
+    ? duration
+    : TIMELINE_MIN_CLIP_SECONDS
+}
+
+function timelineClipWidth(node: VideoResultNode): number {
+  return Math.max(
+    TIMELINE_MIN_CLIP_WIDTH,
+    timelineDurationSeconds(node) * TIMELINE_PX_PER_SECOND,
+  )
+}
+
+function TimelineRuler({
+  totalSeconds,
+  widthPx,
+}: {
+  totalSeconds: number
+  widthPx: number
+}): JSX.Element {
+  if (totalSeconds <= 0) {
+    return (
+      <div
+        className="relative h-7 border-t border-neutral-900 bg-neutral-950/80"
+        style={{ width: widthPx }}
+      />
+    )
+  }
+
+  const niceIntervals = [1, 2, 5, 10, 15, 30, 60, 120, 300]
+  const majorInterval =
+    niceIntervals.find((seconds) => seconds * TIMELINE_PX_PER_SECOND >= 72) ?? 300
+  const minorInterval = majorInterval / 5
+  const marks: { time: number; major: boolean }[] = []
+
+  for (let t = 0; t <= totalSeconds + 0.001; t += minorInterval) {
+    const snapped = Math.round(t / minorInterval) * minorInterval
+    if (snapped > totalSeconds + 0.001) break
+    const major =
+      Math.abs(snapped / majorInterval - Math.round(snapped / majorInterval)) < 0.001
+    marks.push({ time: snapped, major })
+  }
+
+  return (
+    <div
+      className="relative h-7 border-t border-neutral-900 bg-neutral-950/80"
+      style={{ width: widthPx }}
+    >
+      {marks.map(({ time: markTime, major }) => {
+        const left = markTime * TIMELINE_PX_PER_SECOND
+        return (
+          <div
+            key={`${markTime}-${major ? 'major' : 'minor'}`}
+            className="absolute top-0"
+            style={{ left }}
+          >
+            <div
+              className={
+                'absolute left-0 top-0 w-px ' +
+                (major ? 'h-3 bg-neutral-500' : 'h-1.5 bg-neutral-700')
+              }
+            />
+            {major ? (
+              <span className="absolute left-1.5 top-2.5 whitespace-nowrap font-mono text-[9px] text-neutral-500 tabular-nums">
+                {formatTime(markTime)}
+              </span>
+            ) : null}
+          </div>
+        )
+      })}
+    </div>
+  )
 }
 
 export function TimelinePanel({
@@ -600,6 +678,25 @@ export function TimelinePanel({
     return available.filter((n) => !optSet.has(n.id))
   }, [available, optimisticOrder])
 
+  const reelTrack = useMemo(() => {
+    let totalSeconds = 0
+    let widthPx = 0
+    const widthsById = new Map<string, number>()
+
+    for (const node of effectiveReel) {
+      totalSeconds += timelineDurationSeconds(node)
+      const width = timelineClipWidth(node)
+      widthsById.set(node.id, width)
+      widthPx += width
+    }
+
+    return {
+      totalSeconds,
+      widthPx: Math.max(widthPx, 1),
+      widthsById,
+    }
+  }, [effectiveReel])
+
   // Sparse renumber: only PATCH the cards whose shot_id actually
   // changes. 1-based, matching the existing reorderTo at line ~504.
   const applyOptimisticOrder = useCallback(
@@ -877,6 +974,10 @@ export function TimelinePanel({
   }
 
   const sequenceProgress = total > 0 ? time / total : 0
+  const reelPlayheadPx =
+    playlistMode === 'reel' && total > 0
+      ? Math.max(0, Math.min(reelTrack.widthPx, time * TIMELINE_PX_PER_SECOND))
+      : null
   const aspect = playlist[activeIdx]?.data.aspect ?? '16:9'
   const aspectStyle = aspect.replace(':', ' / ')
 
@@ -1094,47 +1195,72 @@ export function TimelinePanel({
                   pointerWithin against each SortableClip's own
                   droppable. */}
               <ReelAreaDroppable showEmptyHint={effectiveOrder.length === 0}>
-                <SortableContext items={effectiveOrder} strategy={horizontalListSortingStrategy}>
-                  <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7">
-                    {effectiveReel.map((n) => {
-                      // Active-card tracking follows the playing node's
-                      // id (truth-state), NOT this map's index — during
-                      // an optimistic reorder, the displayed position
-                      // shifts while playback continues on the original
-                      // clip. Without this, the play overlay would
-                      // briefly jump to a different card.
-                      const isActive =
-                        playlistMode === 'reel' &&
-                        reel[activeIdx]?.id === n.id &&
-                        playlist.length > 0
-                      return (
-                        <SortableClip key={n.id} id={n.id} aspect={n.data.aspect ?? '16:9'}>
-                          <ReelCard
-                            node={n}
-                            active={isActive}
-                            isPlaying={isActive && playing}
-                            onClick={() => {
-                              if (isActive) {
-                                togglePlay()
-                                return
-                              }
-                              // Look up the truth-state index so a click
-                              // during the brief optimistic window still
-                              // seeks to the clicked node, not whichever
-                              // node happens to share its display slot.
-                              const truthIdx = reel.findIndex((r) => r.id === n.id)
-                              if (truthIdx >= 0) playReelFrom(truthIdx)
-                            }}
-                            onAction={() => removeFromReel(n.id)}
-                            onRefer={() => referClip(n.id)}
-                            onArchive={() => archiveClip(n.id)}
-                            referDisabled={composer === null}
-                          />
-                        </SortableClip>
-                      )
-                    })}
+                <div className="scrollbar-subtle overflow-x-auto rounded-md border border-neutral-900 bg-neutral-950/40">
+                  <div
+                    className="relative min-w-full"
+                    style={{ width: reelTrack.widthPx }}
+                  >
+                    <TimelineRuler
+                      totalSeconds={reelTrack.totalSeconds}
+                      widthPx={reelTrack.widthPx}
+                    />
+                    {reelPlayheadPx !== null ? (
+                      <div
+                        className="pointer-events-none absolute bottom-0 top-0 z-20"
+                        style={{ left: reelPlayheadPx }}
+                      >
+                        <div className="absolute -top-px left-1/2 h-3 w-3 -translate-x-1/2 rounded-b-sm bg-neutral-100 shadow-[0_0_12px_rgba(255,255,255,0.45)]" />
+                        <div className="h-full w-px bg-neutral-100 shadow-[0_0_10px_rgba(255,255,255,0.55)]" />
+                      </div>
+                    ) : null}
+                    <SortableContext items={effectiveOrder} strategy={horizontalListSortingStrategy}>
+                      <div className="flex h-[118px] min-w-full items-stretch overflow-visible bg-neutral-950">
+                        {effectiveReel.map((n) => {
+                          // Active-card tracking follows the playing node's
+                          // id (truth-state), NOT this map's index — during
+                          // an optimistic reorder, the displayed position
+                          // shifts while playback continues on the original
+                          // clip. Without this, the play overlay would
+                          // briefly jump to a different card.
+                          const isActive =
+                            playlistMode === 'reel' &&
+                            reel[activeIdx]?.id === n.id &&
+                            playlist.length > 0
+                          return (
+                            <SortableClip
+                              key={n.id}
+                              id={n.id}
+                              aspect={n.data.aspect ?? '16:9'}
+                              widthPx={reelTrack.widthsById.get(n.id) ?? timelineClipWidth(n)}
+                            >
+                              <ReelCard
+                                node={n}
+                                active={isActive}
+                                isPlaying={isActive && playing}
+                                onClick={() => {
+                                  if (isActive) {
+                                    togglePlay()
+                                    return
+                                  }
+                                  // Look up the truth-state index so a click
+                                  // during the brief optimistic window still
+                                  // seeks to the clicked node, not whichever
+                                  // node happens to share its display slot.
+                                  const truthIdx = reel.findIndex((r) => r.id === n.id)
+                                  if (truthIdx >= 0) playReelFrom(truthIdx)
+                                }}
+                                onAction={() => removeFromReel(n.id)}
+                                onRefer={() => referClip(n.id)}
+                                onArchive={() => archiveClip(n.id)}
+                                referDisabled={composer === null}
+                              />
+                            </SortableClip>
+                          )
+                        })}
+                      </div>
+                    </SortableContext>
                   </div>
-                </SortableContext>
+                </div>
               </ReelAreaDroppable>
             </div>
           </div>
@@ -1244,20 +1370,15 @@ function ReelCard({
   return (
     <div
       className={
-        'group relative overflow-hidden rounded-md border bg-neutral-950 transition-colors ' +
+        'group relative flex h-full flex-col overflow-hidden rounded-md border bg-neutral-950 transition-colors ' +
         (active
           ? 'border-neutral-300'
           : 'border-neutral-800 hover:border-neutral-700')
       }
     >
-      <button type="button" onClick={onClick} className="block w-full text-left">
+      <button type="button" onClick={onClick} className="block w-full shrink-0 text-left">
         <div
-          className="relative mx-auto bg-black"
-          style={{
-            width: '100%',
-            aspectRatio: aspect.replace(':', ' / '),
-            maxHeight: '80px',
-          }}
+          className="relative h-[76px] w-full bg-black"
         >
           {url !== '' ? (
             <video

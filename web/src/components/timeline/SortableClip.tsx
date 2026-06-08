@@ -1,6 +1,7 @@
 /**
  * Per-clip sortable wrapper for the reel. Adapted from pai-next's
- * handover §10.3 to pai-pro's grid layout + VideoResultNode shape.
+ * handover §10.3 to pai-pro's duration-scaled row + VideoResultNode
+ * shape.
  *
  * Responsibilities:
  *   - Register the clip with dnd-kit via useSortable so the parent
@@ -33,6 +34,9 @@ interface SortableClipProps {
   /** Aspect ratio string like "16:9" — used to size the placeholder so
    *  it matches the card it replaces. */
   aspect: string
+  /** Optional fixed timeline width. When present, the reel lays out as
+   *  a single duration-scaled row instead of an auto-sized grid card. */
+  widthPx?: number
   /** The live card content rendered when this clip is NOT being dragged. */
   children: ReactNode
 }
@@ -40,6 +44,7 @@ interface SortableClipProps {
 export default function SortableClip({
   id,
   aspect,
+  widthPx,
   children,
 }: SortableClipProps): JSX.Element {
   const {
@@ -65,6 +70,9 @@ export default function SortableClip({
       {...attributes}
       className="relative outline-none focus:outline-none"
       style={{
+        width: widthPx !== undefined ? `${widthPx}px` : undefined,
+        minWidth: widthPx !== undefined ? `${widthPx}px` : undefined,
+        flexShrink: widthPx !== undefined ? 0 : undefined,
         transform: CSS.Translate.toString(transform),
         // Pass dnd-kit's transition verbatim — see file-level comment.
         transition: transition ?? undefined,
