@@ -48,6 +48,17 @@ import { updateProjectMeta } from "../lib/writers.js";
 const ptys = new Map();
 const socketAttach = new Map();           // socket.id -> projectId
 const PTY_BUFFER_CAP = 256 * 1024;        // 256 KB rolling tail; xterm scrollback handles the rest
+// Upper bound on how long the auto-launch waits for a shell prompt before
+// writing the launch/resume command anyway. A login shell normally prints its
+// prompt in well under a second; this only matters on a slow/loaded machine
+// where the prompt is late. Guaranteed progress: the command is written at the
+// latest after this deadline so the launch never hangs.
+const PTY_PROMPT_DEADLINE_MS = 4000;
+// Heuristic "shell is idle at a prompt" detector. zsh prints `%`, bash `$`,
+// root `#`, and some themes end in `>` or `❯`; tolerate a trailing space and
+// any ANSI/OSC trailer the prompt emits after the marker. Best-effort only —
+// the bounded deadline above covers prompts this doesn't match.
+const SHELL_PROMPT_RE = /[$%#>❯][ \t]*(?:\x1b\][^\x07]*\x07|\x1b\[[0-9;?]*[ -/]*[@-~])*[ \t]*$/;
 
 function detachSocket(socketId) {
   const projectId = socketAttach.get(socketId);
@@ -198,14 +209,40 @@ function registerSocketPtyHandlers({ socket, io, projects, nodePty }) {
       ptys.delete(projectId);
     });
     socket.emit("pty:spawned", { pid: pty.pid, attached: false });
-    // Auto-launch the owning agent after the shell settles. Resume the most
-    // recent session in the project's cwd if the provider can find one.
-    setTimeout(async () => {
+
+    // Auto-launch the owning agent once the shell is ready, resuming the most
+    // recent session in the project's cwd if the provider can find one. Writing
+    // into a half-initialized `zsh -l` lands the command in a bare terminal, so
+    // gate the write on a shell prompt appearing in the pty output. A bounded
+    // fallback timer guarantees progress if the prompt is never matched.
+    let launched = false;
+    let promptProbe = null;
+    let promptDeadline = null;
+    const launch = async () => {
+      if (launched) return;
+      launched = true;
+      if (promptProbe) { try { promptProbe.dispose(); } catch {} }
+      if (promptDeadline) clearTimeout(promptDeadline);
+
+      // Re-fetch the live project: the deferred wait above means it may have
+      // been deleted or reloaded (routes/projects.js, services/watcher.js both
+      // mutate this Map). The captured `project` could be stale, so abort
+      // quietly if it's gone or has been replaced by a different entry.
+      const liveProject = projects.get(projectId);
+      if (!liveProject || liveProject !== project) {
+        console.debug(`[viewer] skipping agent auto-launch for ${projectId}: project gone or replaced`);
+        return;
+      }
+
       let latest = null;
       try { latest = await provider.findLatestSession(projectId); }
-      catch { /* fall back to fresh launch */ }
+      catch (e) {
+        // Don't silently downgrade a resume to a fresh launch — the agent would
+        // lose all prior context. Keep the fresh-launch fallback, but log it.
+        console.warn(`[viewer] findLatestSession failed for ${projectId}, launching fresh: ${e.message}`);
+      }
       if (latest) {
-        persistDiscoveredAgentSession(projectId, project, latest).catch((e) => {
+        persistDiscoveredAgentSession(projectId, liveProject, latest).catch((e) => {
           console.warn(`[viewer] failed to persist agent session for ${projectId}: ${e.message}`);
         });
       }
@@ -216,12 +253,28 @@ function registerSocketPtyHandlers({ socket, io, projects, nodePty }) {
         try { await provider.ensureTrust(cwd); }
         catch (e) { console.warn(`[viewer] ensureTrust failed for ${projectId}: ${e.message}`); }
       }
-      const input = { projectId, meta: project.meta, session: latest };
+      const input = { projectId, meta: liveProject.meta, session: latest };
       const cmd = latest
         ? provider.buildResumeCommand(input)
         : provider.buildLaunchCommand(input);
-      try { pty.write(cmd); } catch {}
-    }, 500);
+      try {
+        pty.write(cmd);
+      } catch (e) {
+        // A failed write leaves a bare terminal; surface it instead of swallowing.
+        for (const sid of entry.subscribers) {
+          io.sockets.sockets.get(sid)?.emit("pty:error", `agent launch failed: ${e.message}`);
+        }
+      }
+    };
+
+    // Watch the pty output for a shell prompt, then launch. The deadline fires
+    // the launch regardless if no prompt is matched in time.
+    let promptSeen = "";
+    promptProbe = pty.onData((data) => {
+      promptSeen = (promptSeen + data).slice(-256);
+      if (SHELL_PROMPT_RE.test(promptSeen)) launch();
+    });
+    promptDeadline = setTimeout(launch, PTY_PROMPT_DEADLINE_MS);
   });
 
   socket.on("pty:input", (data) => {
