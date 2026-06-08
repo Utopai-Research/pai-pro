@@ -4,34 +4,21 @@
  * "append to end of current reel" — for an empty reel that's position
  * 1; for a non-empty reel of N cards that's position N+1.
  *
- * Why always-mounted (vs the prior ReelEmptyDroppable which only
- * rendered when reel was empty): with the conditional approach, the
- * "append at end" case for a non-empty reel had no drop target — the
- * trailing empty grid space past the last card had no useDroppable
- * registered. The cursor's sticky-over (collision killer C) would
- * resolve to the last reel card, which caused drops past the last
- * card to insert BEFORE the last card (splice at index N-1) instead
- * of appending after it (splice at index N). Always-mounted droppable
- * fixes this by giving the trailing empty space a real over target.
+ * The droppable stays mounted for non-empty reels so trailing empty
+ * row space remains an append target.
  *
  * Within the wrapper, the SortableClips' own droppables take precedence
  * via pointerWithin — so a cursor on a specific card still resolves to
  * that card's slot (not 'reel-area'). The wrapper only fires when
- * cursor is in the empty space (past the last card, between rows of
- * the wrapping grid, etc.).
+ * cursor is in empty row space such as the area past the last card.
  */
 import type { ReactNode } from 'react'
 import { useDroppable } from '@dnd-kit/core'
 
 interface ReelAreaDroppableProps {
-  /** Reel content — empty-state hint OR SortableContext with cards.
-   *  The wrapper toggles between two visual states based on
-   *  `showEmptyHint`. */
+  /** Empty-state hint or SortableContext with cards. */
   children: ReactNode
-  /** True when there are no reel cards to render (no truth-state reel
-   *  AND no cross-region preview). Drives the dashed-border "Drag a
-   *  clip here to start the reel" placeholder visual; false when reel
-   *  has cards (the wrapper is transparent). */
+  /** True when neither truth-state reel cards nor preview cards exist. */
   showEmptyHint: boolean
 }
 

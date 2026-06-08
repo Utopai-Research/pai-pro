@@ -15,7 +15,7 @@
  *   source without enrolling in a sortable list. During cross-region
  *   preview the source's id appears in the reel's SortableContext
  *   items array, at which point dnd-kit transitions it to a sortable
- *   for the duration of that drag (handover §8.7).
+ *   for the duration of that drag.
  */
 import type { ReactNode } from 'react'
 import { useDraggable } from '@dnd-kit/core'

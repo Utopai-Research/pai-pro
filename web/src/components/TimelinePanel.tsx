@@ -3,11 +3,10 @@
  *
  * Two sections:
  *   - On reel:   videos with a numeric shot_id, sorted ascending. The
- *                player at the top steps through these in order; click
- *                a card to jump. Drag a card to reorder; drop from
- *                Available directly onto the reel — position is taken
- *                from the cursor's slot (left/right half of each card),
- *                or the trailing empty space to append.
+ *                player at the top steps through these in order. The
+ *                reel renders as one duration-scaled horizontal track;
+ *                click a card to jump, drag a card to reorder, or drop
+ *                from Available directly onto the reel to add it.
  *   - Available: videos with no shot_id, rendered as compact thumbs.
  *                Click to play once (no auto-advance). Drag to add to
  *                the reel at a position. Drag a reel clip back to this
@@ -15,8 +14,8 @@
  *
  * Player: a single <video> element keeps mounted and swaps `src` on
  * shot boundaries. Sequence time is "duration up to active shot +
- * currentTime within shot", so the scrubber tracks the whole reel.
- * Tick marks at shot boundaries; click to seek anywhere.
+ * currentTime within shot", so the transport time and reel playhead
+ * track the whole reel.
  *
  * Download: the toolbar's right side hits GET /projects/:id/reel.mp4,
  * which runs server-side ffmpeg concat over every shot-id'd clip and
@@ -26,11 +25,20 @@
  * PATCH all affected nodes in one batch via /projects/:id/nodes/batch-data
  * so the server emits a single canvas-state update.
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+} from 'react'
 import { createPortal } from 'react-dom'
 import {
   DndContext,
   DragOverlay,
+  KeyboardCode,
   KeyboardSensor,
   MouseSensor,
   TouchSensor,
@@ -89,6 +97,159 @@ function formatTime(secs: number): string {
   return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
 }
 
+function isKeyboardShortcutTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false
+  if (target.isContentEditable) return true
+  const tag = target.tagName
+  return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT'
+}
+
+const TIMELINE_DEFAULT_PX_PER_SECOND = 20
+const TIMELINE_MIN_PX_PER_SECOND = 8
+const TIMELINE_MAX_PX_PER_SECOND = 80
+const TIMELINE_MIN_CLIP_SECONDS = 1
+const TIMELINE_ZOOM_SENSITIVITY = 0.01
+
+function timelineDurationSeconds(node: VideoResultNode): number {
+  const duration = node.data.duration
+  return typeof duration === 'number' && Number.isFinite(duration) && duration > 0
+    ? duration
+    : TIMELINE_MIN_CLIP_SECONDS
+}
+
+function clampTimelinePxPerSecond(pxPerSecond: number): number {
+  return Math.min(
+    TIMELINE_MAX_PX_PER_SECOND,
+    Math.max(TIMELINE_MIN_PX_PER_SECOND, pxPerSecond),
+  )
+}
+
+function timelineClipWidth(node: VideoResultNode, pxPerSecond: number): number {
+  return timelineDurationSeconds(node) * pxPerSecond
+}
+
+function TimelineRuler({
+  totalSeconds,
+  widthPx,
+  pxPerSecond,
+  onPointerDown,
+}: {
+  totalSeconds: number
+  widthPx: number
+  pxPerSecond: number
+  onPointerDown?: (event: ReactPointerEvent<HTMLDivElement>) => void
+}): JSX.Element {
+  if (totalSeconds <= 0) {
+    return (
+      <div
+        className="relative h-7 border-t border-neutral-900 bg-neutral-950/80"
+        style={{ width: widthPx }}
+      />
+    )
+  }
+
+  const niceIntervals = [1, 2, 5, 10, 15, 30, 60, 120, 300]
+  const majorInterval =
+    niceIntervals.find((seconds) => seconds * pxPerSecond >= 72) ?? 300
+  const minorInterval = majorInterval / 5
+  const marks: { time: number; major: boolean }[] = []
+
+  for (let t = 0; t <= totalSeconds + 0.001; t += minorInterval) {
+    const snapped = Math.round(t / minorInterval) * minorInterval
+    if (snapped > totalSeconds + 0.001) break
+    const major =
+      Math.abs(snapped / majorInterval - Math.round(snapped / majorInterval)) < 0.001
+    marks.push({ time: snapped, major })
+  }
+
+  return (
+    <div
+      className="relative h-7 touch-none cursor-ew-resize border-t border-neutral-900 bg-neutral-950/80"
+      onPointerDown={onPointerDown}
+      style={{ width: widthPx }}
+      title="Click or drag to seek"
+    >
+      {marks.map(({ time: markTime, major }) => {
+        const left = markTime * pxPerSecond
+        return (
+          <div
+            key={`${markTime}-${major ? 'major' : 'minor'}`}
+            className="absolute top-0"
+            style={{ left }}
+          >
+            <div
+              className={
+                'absolute left-0 top-0 w-px ' +
+                (major ? 'h-3 bg-neutral-500' : 'h-1.5 bg-neutral-700')
+              }
+            />
+            {major ? (
+              <span className="absolute left-1.5 top-2.5 whitespace-nowrap font-mono text-[9px] text-neutral-500 tabular-nums">
+                {formatTime(markTime)}
+              </span>
+            ) : null}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function TimelineZoomControl({
+  value,
+  onChange,
+}: {
+  value: number
+  onChange: (pxPerSecond: number) => void
+}): JSX.Element {
+  const min = TIMELINE_MIN_PX_PER_SECOND
+  const max = TIMELINE_MAX_PX_PER_SECOND
+  const logSpan = Math.log(max / min)
+  const toT = (px: number): number => Math.log(px / min) / logSpan
+  const toPx = (t: number): number => min * (max / min) ** Math.min(1, Math.max(0, t))
+  const t = Math.min(1, Math.max(0, toT(value)))
+  const step = (dir: 1 | -1): void => {
+    onChange(clampTimelinePxPerSecond(toPx(t + dir * 0.1)))
+  }
+
+  return (
+    <div className="flex items-center gap-1.5 text-neutral-500">
+      <button
+        type="button"
+        aria-label="Zoom timeline out"
+        title="Zoom timeline out"
+        disabled={value <= min}
+        onClick={() => step(-1)}
+        className="grid h-5 w-5 place-items-center rounded border border-neutral-800 bg-neutral-950 text-[11px] leading-none transition-colors hover:border-neutral-600 hover:text-neutral-200 disabled:cursor-not-allowed disabled:opacity-35"
+      >
+        -
+      </button>
+      <input
+        type="range"
+        min={0}
+        max={1000}
+        step={1}
+        value={Math.round(t * 1000)}
+        aria-label="Zoom timeline"
+        title="Zoom timeline"
+        onChange={(e) => onChange(clampTimelinePxPerSecond(toPx(Number(e.target.value) / 1000)))}
+        onDoubleClick={() => onChange(TIMELINE_DEFAULT_PX_PER_SECOND)}
+        className="h-1 w-24 cursor-pointer accent-neutral-300"
+      />
+      <button
+        type="button"
+        aria-label="Zoom timeline in"
+        title="Zoom timeline in"
+        disabled={value >= max}
+        onClick={() => step(1)}
+        className="grid h-5 w-5 place-items-center rounded border border-neutral-800 bg-neutral-950 text-[11px] leading-none transition-colors hover:border-neutral-600 hover:text-neutral-200 disabled:cursor-not-allowed disabled:opacity-35"
+      >
+        +
+      </button>
+    </div>
+  )
+}
+
 export function TimelinePanel({
   projectId,
   workflow,
@@ -123,7 +284,7 @@ export function TimelinePanel({
   // Player runs against a "playlist" — either the full reel
   // (auto-advance through every shot) or a single off-reel clip the
   // user clicked to preview. Wrapping both modes behind one list lets
-  // the scrubber / cumul / activeIdx math stay identical.
+  // the time / cumul / activeIdx math stay identical.
   //
   // Reel-mode playback uses a SERVER-CONCATENATED master MP4 so clip
   // boundaries are `currentTime` jumps inside one continuous stream
@@ -147,6 +308,46 @@ export function TimelinePanel({
   // currently mounted; the src-swap effect re-fires on the toggle so
   // the new element gets its src + currentTime set correctly.
   const [fullscreenOpen, setFullscreenOpen] = useState(false)
+
+  const timelineScrollRef = useRef<HTMLDivElement | null>(null)
+  const [timelinePxPerSecond, setTimelinePxPerSecond] = useState(TIMELINE_DEFAULT_PX_PER_SECOND)
+  const timelinePxPerSecondRef = useRef(timelinePxPerSecond)
+  const timelineZoomAnchorRef = useRef<{ anchorTime: number; cursorClientX: number } | null>(null)
+  const [timelineScrollLeft, setTimelineScrollLeft] = useState(0)
+  const [timelineMaxScroll, setTimelineMaxScroll] = useState(0)
+
+  useEffect(() => {
+    timelinePxPerSecondRef.current = timelinePxPerSecond
+  }, [timelinePxPerSecond])
+
+  const updateTimelineScrollState = useCallback(() => {
+    const el = timelineScrollRef.current
+    if (!el) {
+      setTimelineScrollLeft(0)
+      setTimelineMaxScroll(0)
+      return
+    }
+    setTimelineScrollLeft(el.scrollLeft)
+    setTimelineMaxScroll(Math.max(0, el.scrollWidth - el.clientWidth))
+  }, [])
+
+  const applyTimelineZoom = useCallback((nextPxPerSecond: number, anchorClientX?: number) => {
+    const current = timelinePxPerSecondRef.current
+    const next = clampTimelinePxPerSecond(nextPxPerSecond)
+    if (Math.abs(next - current) < 0.001) return
+
+    const el = timelineScrollRef.current
+    if (el) {
+      const rect = el.getBoundingClientRect()
+      const clientX = anchorClientX ?? rect.left + el.clientWidth / 2
+      const contentX = el.scrollLeft + clientX - rect.left
+      timelineZoomAnchorRef.current = {
+        anchorTime: contentX / current,
+        cursorClientX: clientX,
+      }
+    }
+    setTimelinePxPerSecond(next)
+  }, [])
 
   // ---- Reel master manifest -----------------------------------------
   //
@@ -358,7 +559,7 @@ export function TimelinePanel({
     const v = videoRef.current
     if (!v) return
     if (masterMode) {
-      // v.currentTime IS the sequence time. Update the scrubber, then
+      // v.currentTime IS the sequence time. Update the transport time, then
       // resolve which clip the cursor is in. activeIdx only changes at
       // boundaries — no src swap, no decoder teardown.
       const t = v.currentTime
@@ -373,7 +574,7 @@ export function TimelinePanel({
   }
   const onEnded = (): void => {
     if (masterMode) {
-      // Master ends naturally at total — stop and pin the scrubber.
+      // Master ends naturally at total — stop and pin the transport time.
       setPlaying(false)
       setTime(total)
       return
@@ -410,6 +611,19 @@ export function TimelinePanel({
     }
     setPlaying((p) => !p)
   }
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (event.defaultPrevented || event.repeat) return
+      if (event.code !== 'Space' && event.key !== ' ') return
+      if (isKeyboardShortcutTarget(event.target)) return
+      event.preventDefault()
+      event.stopPropagation()
+      togglePlay()
+    }
+    window.addEventListener('keydown', onKeyDown, { capture: true })
+    return (): void => window.removeEventListener('keydown', onKeyDown, { capture: true })
+  }, [togglePlay])
+
   const restart = (): void => {
     setActiveIdx(0)
     setTime(0)
@@ -432,14 +646,11 @@ export function TimelinePanel({
     setTime(0)
     setPlaying(true)
   }
-  const scrub = (e: React.MouseEvent<HTMLDivElement>): void => {
-    if (!total) return
-    const r = e.currentTarget.getBoundingClientRect()
-    const p = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width))
-    const t = p * total
+
+  const seekReelTo = (nextTime: number): void => {
+    if (playlistMode !== 'reel' || total <= 0) return
+    const t = Math.max(0, Math.min(total, nextTime))
     if (masterMode) {
-      // One continuous stream → just set currentTime; activeIdx is
-      // derived from t. No requestAnimationFrame dance.
       const v = videoRef.current
       if (v) { try { v.currentTime = t } catch { /* noop */ } }
       setTime(t)
@@ -447,10 +658,7 @@ export function TimelinePanel({
       if (i !== activeIdx) setActiveIdx(i)
       return
     }
-    // Per-clip fallback path (single-clip preview, or reel-mode while
-    // the master is still building): seek within the active clip; if
-    // the scrub target is in a different clip, swap activeIdx and
-    // seek after the rAF tick so the new src has mounted.
+
     let i = 0
     for (; i < cumul.length; i++) if (t < cumul[i]) break
     i = Math.min(i, playlist.length - 1)
@@ -467,24 +675,46 @@ export function TimelinePanel({
     setTime(t)
   }
 
+  const seekReelFromClientX = (clientX: number): void => {
+    const el = timelineScrollRef.current
+    if (!el) return
+    const rect = el.getBoundingClientRect()
+    const contentX = el.scrollLeft + clientX - rect.left
+    seekReelTo(contentX / timelinePxPerSecond)
+  }
+
+  const beginTimelineSeek = (event: ReactPointerEvent<HTMLElement>): void => {
+    if (event.button !== 0) return
+    event.preventDefault()
+    event.stopPropagation()
+    seekReelFromClientX(event.clientX)
+
+    const onMove = (moveEvent: PointerEvent): void => {
+      seekReelFromClientX(moveEvent.clientX)
+    }
+    const stopSeeking = (): void => {
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', stopSeeking)
+      window.removeEventListener('pointercancel', stopSeeking)
+    }
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', stopSeeking, { once: true })
+    window.addEventListener('pointercancel', stopSeeking, { once: true })
+  }
+
   // ---- Timeline reorder / move between sections ----
   //
   // Drop targets:
-  //   - slot N        → insert source at position N (0..reel.length).
-  //                     N is derived from the cursor's X within the
-  //                     reel-card it's over: left half = before this
-  //                     card, right half = after it. Drops on empty
-  //                     grid space past the last card resolve to
-  //                     N = reel.length (append).
+  //   - reel item     → insert/reorder at the item dnd-kit resolves.
+  //   - reel-area     → append to the end of the row.
   //   - available     → set source.shot_id = null (remove from reel).
   //
   // After computing the new reel ordering, send one batch PATCH that
   // assigns shot_id = i+1 to each reel node (skip if already correct)
   // and shot_id = null to anything that left the reel.
   //
-  // Still used by the explicit remove/add buttons (additive paths the
-  // dnd-kit migration kept). Cross-region drag goes through
-  // applyOptimisticOrder instead and bypasses this function.
+  // Explicit add/remove buttons use this path. Cross-region drag goes
+  // through applyOptimisticOrder instead.
   const reorderTo = async (
     sourceId: string,
     destination:
@@ -592,7 +822,7 @@ export function TimelinePanel({
   }, [reel, available, optimisticOrder])
 
   // When the cross-region preview engages, optimisticOrder includes
-  // the source id and the source is rendered inside the reel grid. Keep
+  // the source id and the source is rendered inside the reel row. Keep
   // it out of Available so it is not visible in both sections.
   const effectiveAvailable = useMemo<VideoResultNode[]>(() => {
     if (optimisticOrder == null) return available
@@ -600,8 +830,73 @@ export function TimelinePanel({
     return available.filter((n) => !optSet.has(n.id))
   }, [available, optimisticOrder])
 
-  // Sparse renumber: only PATCH the cards whose shot_id actually
-  // changes. 1-based, matching the existing reorderTo at line ~504.
+  const reelTrack = useMemo(() => {
+    let totalSeconds = 0
+
+    for (const node of effectiveReel) {
+      totalSeconds += timelineDurationSeconds(node)
+    }
+
+    return {
+      totalSeconds,
+      widthPx: Math.max(totalSeconds * timelinePxPerSecond, 1),
+    }
+  }, [effectiveReel, timelinePxPerSecond])
+
+  useLayoutEffect(() => {
+    const anchor = timelineZoomAnchorRef.current
+    if (anchor === null) return
+    timelineZoomAnchorRef.current = null
+
+    const el = timelineScrollRef.current
+    if (!el) return
+    const rect = el.getBoundingClientRect()
+    const targetScreenX = anchor.cursorClientX - rect.left
+    el.scrollLeft = Math.max(0, anchor.anchorTime * timelinePxPerSecond - targetScreenX)
+    updateTimelineScrollState()
+  }, [timelinePxPerSecond, reelTrack.widthPx, updateTimelineScrollState])
+
+  useEffect(() => {
+    const el = timelineScrollRef.current
+    if (!el) {
+      updateTimelineScrollState()
+      return undefined
+    }
+
+    const measure = () => updateTimelineScrollState()
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [reelTrack.widthPx, effectiveOrder.length, updateTimelineScrollState])
+
+  useEffect(() => {
+    const el = timelineScrollRef.current
+    if (!el) return undefined
+
+    const onWheel = (event: WheelEvent): void => {
+      if (event.ctrlKey) {
+        event.preventDefault()
+        const current = timelinePxPerSecondRef.current
+        applyTimelineZoom(
+          current * Math.exp(-event.deltaY * TIMELINE_ZOOM_SENSITIVITY),
+          event.clientX,
+        )
+        return
+      }
+
+      if (el.scrollWidth > el.clientWidth && Math.abs(event.deltaY) > Math.abs(event.deltaX)) {
+        event.preventDefault()
+        el.scrollLeft += event.deltaY
+        updateTimelineScrollState()
+      }
+    }
+
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => el.removeEventListener('wheel', onWheel)
+  }, [applyTimelineZoom, effectiveOrder.length, updateTimelineScrollState])
+
+  // Sparse renumber: only PATCH the cards whose shot_id actually changes.
   const applyOptimisticOrder = useCallback(
     (nextIds: string[]) => {
       if (projectId === null) return
@@ -611,15 +906,8 @@ export function TimelinePanel({
       }
       setOptimisticOrder(nextIds)
       const updates: CanvasNodeDataUpdate[] = []
-      // Sparse renumber: emit shot_id = i+1 for any id whose current
-      // value differs. Look up in BOTH reel and available — a cross-
-      // region drag inserts an Available source id into nextIds; the
-      // source is in `available`, not `reel`. Without checking
-      // available, the source is silently skipped from the PATCH,
-      // never gets a shot_id, never joins the reel — and the
-      // optimistic preview gets stuck forever (truth never matches).
-      // Downstream symptoms: × Remove and playback both no-op on the
-      // ghost card because reel.findIndex returns -1.
+      // Cross-region drag inserts an Available source id into nextIds,
+      // so look up candidates in both sections before assigning shot_id.
       nextIds.forEach((id, i) => {
         const node =
           reel.find((n) => n.id === id) ??
@@ -649,7 +937,14 @@ export function TimelinePanel({
   const sensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { distance: 4 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+      keyboardCodes: {
+        start: [KeyboardCode.Enter],
+        cancel: [KeyboardCode.Esc],
+        end: [KeyboardCode.Enter, KeyboardCode.Tab],
+      },
+    }),
   )
 
   // Once the cursor commits to a droppable, stay committed until it
@@ -747,17 +1042,9 @@ export function TimelinePanel({
       }
       const sourceId = String(active.id)
       const overId = String(over.id)
-      // `sourceId === overId` has TWO meanings depending on whether
-      // source was in the pre-drag reel:
-      //   - Intra-reel (source IN baseline): dropped on own original
-      //     slot — true no-op.
-      //   - Cross-region (source NOT in baseline): handleDragOver has
-      //     spliced source into the reel's optimistic preview at the
-      //     cursor position. dnd-kit's collision then picks the source's
-      //     own preview-position <SortableClip> as the over target on
-      //     release. THIS IS A COMMIT, not a no-op. Returning here was
-      //     the root cause of the "drag-up doesn't assign shot_id" bug
-      //     — handleDragOver's preview was stuck and never persisted.
+      // Dropping on itself is only a no-op for pre-existing reel clips.
+      // A cross-region source can be over its optimistic preview slot;
+      // commit that preview instead of treating it as unchanged.
       if (sourceId === overId) {
         if (baseline.includes(sourceId)) return
         if (optimisticOrder) applyOptimisticOrder(optimisticOrder)
@@ -777,9 +1064,8 @@ export function TimelinePanel({
       //   2. Intra-reel reorder (both in reel): arrayMove + apply.
       //   3. Available → reel slot (source not in reel, over IS in
       //      reel): splice the source into baseline at the over index.
-      //   4. Available → empty reel (overId === 'reel-empty'): source
-      //      becomes reel #1. Without this branch, an empty-reel target
-      //      would no-op because baseline = [] and overInReel = false.
+      //   4. Available → reel-area: append. For an empty reel this
+      //      becomes reel #1.
       // Anything else (no over, source/over in unknown regions): restore
       // baseline (preview was non-committal).
       if (sourceInReel && overId === 'available-drop') {
@@ -832,7 +1118,7 @@ export function TimelinePanel({
 
   // When a cross-region drag previews an Available clip in the reel, the
   // source card unmounts from Available. Keep a placeholder in its slot
-  // so the grid does not reflow under the pointer.
+  // so Available does not reflow under the pointer.
   //
   // ghostClipId === null when no cross-region preview is in flight.
   const ghostClipId =
@@ -876,7 +1162,10 @@ export function TimelinePanel({
     }
   }
 
-  const sequenceProgress = total > 0 ? time / total : 0
+  const reelPlayheadPx =
+    playlistMode === 'reel' && total > 0
+      ? Math.max(0, Math.min(reelTrack.widthPx, time * timelinePxPerSecond))
+      : null
   const aspect = playlist[activeIdx]?.data.aspect ?? '16:9'
   const aspectStyle = aspect.replace(':', ' / ')
 
@@ -953,89 +1242,78 @@ export function TimelinePanel({
             </div>
           </div>
         )}
-        <div className="flex items-center gap-3 px-4 py-2 text-neutral-300">
-          <button
-            type="button"
-            onClick={togglePlay}
-            className="rounded-md border border-neutral-700 bg-neutral-900 px-3 py-1 text-xs hover:border-neutral-500"
-          >
-            {playing
-              ? '⏸ Pause'
-              : time >= total && total > 0
-                ? '↻ Replay'
-                : '▶ Play'}
-          </button>
-          <button
-            type="button"
-            onClick={restart}
-            className="rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1 text-xs hover:border-neutral-500"
-            title="Restart"
-          >
-            ↺
-          </button>
-          <div className="font-mono text-[11px] text-neutral-500 tabular-nums">
+        <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 px-4 py-2 text-neutral-300">
+          <div className="flex min-w-0 items-center gap-3">
+            <button
+              type="button"
+              onClick={togglePlay}
+              className="rounded-md border border-neutral-700 bg-neutral-900 px-3 py-1 text-xs hover:border-neutral-500"
+            >
+              {playing
+                ? '⏸ Pause'
+                : time >= total && total > 0
+                  ? '↻ Replay'
+                  : '▶ Play'}
+            </button>
+            <button
+              type="button"
+              onClick={restart}
+              className="rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1 text-xs hover:border-neutral-500"
+              title="Restart"
+            >
+              ↺
+            </button>
+          </div>
+          <div className="font-mono text-[12px] text-neutral-400 tabular-nums">
             {formatTime(time)}
-            <span className="px-1 text-neutral-700">/</span>
+            <span className="px-1.5 text-neutral-700">/</span>
             {formatTime(total)}
           </div>
-          <div
-            className="relative h-1.5 flex-1 cursor-pointer rounded bg-neutral-800"
-            onClick={scrub}
-          >
-            {cumul.slice(0, -1).map((c, i) => (
-              <div
-                key={i}
-                className="absolute top-0 h-full w-px bg-neutral-600"
-                style={{ left: `${(c / total) * 100}%` }}
+          <div className="flex min-w-0 items-center justify-end gap-3">
+            {variant === 'inline' && reel.length > 0 ? (
+              <TimelineZoomControl
+                value={timelinePxPerSecond}
+                onChange={applyTimelineZoom}
               />
-            ))}
-            <div
-              className="absolute left-0 top-0 h-full rounded bg-neutral-300"
-              style={{ width: `${sequenceProgress * 100}%` }}
-            />
+            ) : null}
+            <button
+              type="button"
+              onClick={() => void downloadReel()}
+              disabled={downloading || reel.length === 0}
+              className={
+                'inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-[11px] uppercase tracking-wide transition-colors ' +
+                (downloading
+                  ? 'cursor-wait border-neutral-700 bg-neutral-900 text-neutral-400'
+                  : reel.length === 0
+                    ? 'cursor-not-allowed border-neutral-800 bg-neutral-950 text-neutral-600'
+                    : 'border-neutral-700 bg-neutral-900 text-neutral-200 hover:border-neutral-500 hover:text-white')
+              }
+              title={
+                reel.length === 0
+                  ? 'Add at least one shot to the reel first'
+                  : downloading
+                    ? 'Stitching reel via ffmpeg…'
+                    : `Stitch ${reel.length} shot${reel.length === 1 ? '' : 's'} and download`
+              }
+            >
+              {downloading ? (
+                <>
+                  <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-neutral-400" />
+                  Stitching…
+                </>
+              ) : (
+                <>↓ Download</>
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={() => setFullscreenOpen((o) => !o)}
+              className="inline-flex items-center gap-1.5 rounded-md border border-neutral-700 bg-neutral-900 px-2.5 py-1 text-[11px] uppercase tracking-wide text-neutral-200 transition-colors hover:border-neutral-500 hover:text-white"
+              title={expandTitle}
+            >
+              {expandLabel}
+            </button>
           </div>
-          <div className="font-mono text-[11px] text-neutral-500 tabular-nums">
-            {playlistMode === 'reel'
-              ? `shot ${activeIdx + 1}/${playlist.length}`
-              : 'single'}
-          </div>
-          <button
-            type="button"
-            onClick={() => void downloadReel()}
-            disabled={downloading || reel.length === 0}
-            className={
-              'ml-1 inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-[11px] uppercase tracking-wide transition-colors ' +
-              (downloading
-                ? 'cursor-wait border-neutral-700 bg-neutral-900 text-neutral-400'
-                : reel.length === 0
-                  ? 'cursor-not-allowed border-neutral-800 bg-neutral-950 text-neutral-600'
-                  : 'border-neutral-700 bg-neutral-900 text-neutral-200 hover:border-neutral-500 hover:text-white')
-            }
-            title={
-              reel.length === 0
-                ? 'Add at least one shot to the reel first'
-                : downloading
-                  ? 'Stitching reel via ffmpeg…'
-                  : `Stitch ${reel.length} shot${reel.length === 1 ? '' : 's'} and download`
-            }
-          >
-            {downloading ? (
-              <>
-                <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-neutral-400" />
-                Stitching…
-              </>
-            ) : (
-              <>↓ Download</>
-            )}
-          </button>
-          <button
-            type="button"
-            onClick={() => setFullscreenOpen((o) => !o)}
-            className="inline-flex items-center gap-1.5 rounded-md border border-neutral-700 bg-neutral-900 px-2.5 py-1 text-[11px] uppercase tracking-wide text-neutral-200 transition-colors hover:border-neutral-500 hover:text-white"
-            title={expandTitle}
-          >
-            {expandLabel}
-          </button>
         </div>
       </>
     )
@@ -1063,9 +1341,6 @@ export function TimelinePanel({
       ) : null}
 
       <div className="scrollbar-subtle flex-1 overflow-y-auto">
-        {/* Reel section: the whole grid is one drop target. Position is
-            taken from the cursor's left/right half of whichever card
-            it's over; empty trailing space falls through to "append". */}
         {/* One DndContext wraps both reel and Available so cross-region drag
             can transition the same id between useDraggable and useSortable. */}
         <DndContext
@@ -1078,63 +1353,100 @@ export function TimelinePanel({
         >
           {/* Reel section */}
           <div className="border-b border-neutral-900">
-            <div className="px-4 py-2 text-[11px] uppercase tracking-wide text-neutral-500">
-              On reel ({reel.length})
-              <span className="ml-2 normal-case tracking-normal text-neutral-700">
-                · drag to reorder · drop from Available to add
-              </span>
-            </div>
-            <div className="min-h-[88px] px-4 pb-3">
-              {/* ReelAreaDroppable is always mounted (id 'reel-area').
-                  Drop on it = "append at end of current reel" — handles
-                  both the empty-reel case (drag a clip onto the
-                  placeholder, becomes reel #1) and the non-empty append
-                  case (drop past the last card, becomes reel #N+1).
-                  Specific-card drops still take precedence via
-                  pointerWithin against each SortableClip's own
-                  droppable. */}
+            <div className="min-h-[88px] px-4 py-3">
+              {/* ReelAreaDroppable handles empty-reel drops and appends
+                  past the last card; card drops still take precedence. */}
               <ReelAreaDroppable showEmptyHint={effectiveOrder.length === 0}>
-                <SortableContext items={effectiveOrder} strategy={horizontalListSortingStrategy}>
-                  <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7">
-                    {effectiveReel.map((n) => {
-                      // Active-card tracking follows the playing node's
-                      // id (truth-state), NOT this map's index — during
-                      // an optimistic reorder, the displayed position
-                      // shifts while playback continues on the original
-                      // clip. Without this, the play overlay would
-                      // briefly jump to a different card.
-                      const isActive =
-                        playlistMode === 'reel' &&
-                        reel[activeIdx]?.id === n.id &&
-                        playlist.length > 0
-                      return (
-                        <SortableClip key={n.id} id={n.id} aspect={n.data.aspect ?? '16:9'}>
-                          <ReelCard
-                            node={n}
-                            active={isActive}
-                            isPlaying={isActive && playing}
-                            onClick={() => {
-                              if (isActive) {
-                                togglePlay()
-                                return
-                              }
-                              // Look up the truth-state index so a click
-                              // during the brief optimistic window still
-                              // seeks to the clicked node, not whichever
-                              // node happens to share its display slot.
-                              const truthIdx = reel.findIndex((r) => r.id === n.id)
-                              if (truthIdx >= 0) playReelFrom(truthIdx)
-                            }}
-                            onAction={() => removeFromReel(n.id)}
-                            onRefer={() => referClip(n.id)}
-                            onArchive={() => archiveClip(n.id)}
-                            referDisabled={composer === null}
+                <div className="relative rounded-md border border-neutral-900 bg-neutral-950/40">
+                  <div
+                    ref={timelineScrollRef}
+                    className="scrollbar-subtle overflow-x-auto"
+                    onScroll={updateTimelineScrollState}
+                  >
+                    <div
+                      className="relative min-w-full"
+                      style={{ width: reelTrack.widthPx }}
+                    >
+                      <TimelineRuler
+                        totalSeconds={reelTrack.totalSeconds}
+                        widthPx={reelTrack.widthPx}
+                        pxPerSecond={timelinePxPerSecond}
+                        onPointerDown={beginTimelineSeek}
+                      />
+                      {reelPlayheadPx !== null ? (
+                        <div
+                          className="pointer-events-none absolute bottom-0 top-0 z-20"
+                          style={{ left: reelPlayheadPx }}
+                        >
+                          <div
+                            aria-hidden
+                            title="Drag playhead"
+                            onPointerDown={beginTimelineSeek}
+                            className="pointer-events-auto absolute -top-px left-1/2 h-3 w-3 -translate-x-1/2 touch-none cursor-ew-resize rounded-b-sm bg-neutral-100 shadow-[0_0_12px_rgba(255,255,255,0.45)]"
                           />
-                        </SortableClip>
-                      )
-                    })}
+                          <div className="h-full w-px bg-neutral-100 shadow-[0_0_10px_rgba(255,255,255,0.55)]" />
+                        </div>
+                      ) : null}
+                      <SortableContext items={effectiveOrder} strategy={horizontalListSortingStrategy}>
+                        <div className="flex h-[118px] min-w-full items-stretch overflow-visible bg-neutral-950">
+                          {effectiveReel.map((n) => {
+                            // Active-card tracking follows the playing node's
+                            // id (truth-state), NOT this map's index — during
+                            // an optimistic reorder, the displayed position
+                            // shifts while playback continues on the original
+                            // clip. Without this, the play overlay would
+                            // briefly jump to a different card.
+                            const isActive =
+                              playlistMode === 'reel' &&
+                              reel[activeIdx]?.id === n.id &&
+                              playlist.length > 0
+                            return (
+                              <SortableClip
+                                key={n.id}
+                                id={n.id}
+                                widthPx={timelineClipWidth(n, timelinePxPerSecond)}
+                              >
+                                <ReelCard
+                                  node={n}
+                                  active={isActive}
+                                  isPlaying={isActive && playing}
+                                  onClick={() => {
+                                    if (isActive) {
+                                      togglePlay()
+                                      return
+                                    }
+                                    // Look up the truth-state index so a click
+                                    // during the brief optimistic window still
+                                    // seeks to the clicked node, not whichever
+                                    // node happens to share its display slot.
+                                    const truthIdx = reel.findIndex((r) => r.id === n.id)
+                                    if (truthIdx >= 0) playReelFrom(truthIdx)
+                                  }}
+                                  onAction={() => removeFromReel(n.id)}
+                                  onRefer={() => referClip(n.id)}
+                                  onArchive={() => archiveClip(n.id)}
+                                  referDisabled={composer === null}
+                                />
+                              </SortableClip>
+                            )
+                          })}
+                        </div>
+                      </SortableContext>
+                    </div>
                   </div>
-                </SortableContext>
+                  {timelineScrollLeft > 1 ? (
+                    <div
+                      className="pointer-events-none absolute inset-y-0 left-0 z-30 w-10 rounded-l-md"
+                      style={{ background: 'linear-gradient(90deg, #0a0a0a 0%, rgba(10,10,10,0) 100%)' }}
+                    />
+                  ) : null}
+                  {timelineScrollLeft < timelineMaxScroll - 1 ? (
+                    <div
+                      className="pointer-events-none absolute inset-y-0 right-0 z-30 w-10 rounded-r-md"
+                      style={{ background: 'linear-gradient(270deg, #0a0a0a 0%, rgba(10,10,10,0) 100%)' }}
+                    />
+                  ) : null}
+                </div>
               </ReelAreaDroppable>
             </div>
           </div>
@@ -1239,60 +1551,52 @@ function ReelCard({
   const url = node.data.video_url
   const shotId = node.data.shot_id
   const label = node.data.label ?? 'untitled'
-  const aspect = node.data.aspect ?? '16:9'
-  const duration = node.data.duration
   return (
     <div
       className={
-        'group relative overflow-hidden rounded-md border bg-neutral-950 transition-colors ' +
+        'group relative h-full overflow-hidden rounded-md border bg-neutral-950 transition-colors ' +
         (active
           ? 'border-neutral-300'
           : 'border-neutral-800 hover:border-neutral-700')
       }
     >
-      <button type="button" onClick={onClick} className="block w-full text-left">
-        <div
-          className="relative mx-auto bg-black"
-          style={{
-            width: '100%',
-            aspectRatio: aspect.replace(':', ' / '),
-            maxHeight: '80px',
-          }}
-        >
-          {url !== '' ? (
-            <video
-              src={url}
-              preload="metadata"
-              muted
-              playsInline
-              draggable={false}
-              className="h-full w-full object-cover"
-              onError={(e) => {
-                ;(e.currentTarget as HTMLVideoElement).style.display = 'none'
-              }}
-            />
-          ) : null}
-          {typeof shotId === 'number' ? (
-            <div className="absolute left-2 top-2 rounded bg-black/70 px-1.5 py-0.5 font-mono text-[11px] text-neutral-100">
-              #{String(shotId).padStart(2, '0')}
-            </div>
-          ) : null}
-          {/* Active card always shows its play state; idle cards show
-              ▶ on hover so the click affordance is obvious. */}
-          <div
-            className={
-              'pointer-events-none absolute inset-0 flex items-center justify-center bg-black/40 transition-opacity ' +
-              (active ? 'opacity-100' : 'opacity-0 group-hover:opacity-100')
-            }
-          >
-            <span className="text-2xl text-neutral-100">
-              {isPlaying ? '⏸' : '▶'}
-            </span>
+      <button type="button" onClick={onClick} className="absolute inset-0 block w-full text-left">
+        {url !== '' ? (
+          <video
+            src={url}
+            preload="metadata"
+            muted
+            playsInline
+            draggable={false}
+            className="block h-full w-full object-cover"
+            onError={(e) => {
+              ;(e.currentTarget as HTMLVideoElement).style.display = 'none'
+            }}
+          />
+        ) : null}
+        {typeof shotId === 'number' ? (
+          <div className="absolute left-2 top-2 rounded bg-black/70 px-1.5 py-0.5 font-mono text-[11px] text-neutral-100">
+            #{String(shotId).padStart(2, '0')}
           </div>
-          {active ? (
-            <div className="absolute inset-x-0 bottom-0 h-0.5 bg-neutral-300" />
-          ) : null}
+        ) : null}
+        {/* Active card always shows its play state; idle cards show
+            ▶ on hover so the click affordance is obvious. */}
+        <div
+          className={
+            'pointer-events-none absolute inset-0 flex items-center justify-center bg-black/40 transition-opacity ' +
+            (active ? 'opacity-100' : 'opacity-0 group-hover:opacity-100')
+          }
+        >
+          <span className="text-2xl text-neutral-100">
+            {isPlaying ? '⏸' : '▶'}
+          </span>
         </div>
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 via-black/45 to-transparent px-2 pb-2 pt-8">
+          <div className="truncate text-xs text-neutral-100 drop-shadow">{label}</div>
+        </div>
+        {active ? (
+          <div className="absolute inset-x-0 bottom-0 h-0.5 bg-neutral-300" />
+        ) : null}
       </button>
       <TimelineActionCluster
         referDisabled={referDisabled}
@@ -1308,13 +1612,6 @@ function ReelCard({
           ×
         </TimelineIconButton>
       </TimelineActionCluster>
-      <div className="px-2 py-1.5">
-        <div className="truncate text-xs text-neutral-200">{label}</div>
-        <div className="mt-0.5 truncate font-mono text-[10px] text-neutral-500">
-          {aspect}
-          {typeof duration === 'number' ? ` · ${duration}s` : ''}
-        </div>
-      </div>
     </div>
   )
 }
