@@ -14,8 +14,8 @@
  *
  * Player: a single <video> element keeps mounted and swaps `src` on
  * shot boundaries. Sequence time is "duration up to active shot +
- * currentTime within shot", so the scrubber and reel playhead track
- * the whole reel. Tick marks at shot boundaries; click to seek anywhere.
+ * currentTime within shot", so the transport time and reel playhead
+ * track the whole reel.
  *
  * Download: the toolbar's right side hits GET /projects/:id/reel.mp4,
  * which runs server-side ffmpeg concat over every shot-id'd clip and
@@ -264,7 +264,7 @@ export function TimelinePanel({
   // Player runs against a "playlist" — either the full reel
   // (auto-advance through every shot) or a single off-reel clip the
   // user clicked to preview. Wrapping both modes behind one list lets
-  // the scrubber / cumul / activeIdx math stay identical.
+  // the time / cumul / activeIdx math stay identical.
   //
   // Reel-mode playback uses a SERVER-CONCATENATED master MP4 so clip
   // boundaries are `currentTime` jumps inside one continuous stream
@@ -539,7 +539,7 @@ export function TimelinePanel({
     const v = videoRef.current
     if (!v) return
     if (masterMode) {
-      // v.currentTime IS the sequence time. Update the scrubber, then
+      // v.currentTime IS the sequence time. Update the transport time, then
       // resolve which clip the cursor is in. activeIdx only changes at
       // boundaries — no src swap, no decoder teardown.
       const t = v.currentTime
@@ -554,7 +554,7 @@ export function TimelinePanel({
   }
   const onEnded = (): void => {
     if (masterMode) {
-      // Master ends naturally at total — stop and pin the scrubber.
+      // Master ends naturally at total — stop and pin the transport time.
       setPlaying(false)
       setTime(total)
       return
@@ -613,41 +613,6 @@ export function TimelinePanel({
     setTime(0)
     setPlaying(true)
   }
-  const scrub = (e: React.MouseEvent<HTMLDivElement>): void => {
-    if (!total) return
-    const r = e.currentTarget.getBoundingClientRect()
-    const p = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width))
-    const t = p * total
-    if (masterMode) {
-      // One continuous stream → just set currentTime; activeIdx is
-      // derived from t. No requestAnimationFrame dance.
-      const v = videoRef.current
-      if (v) { try { v.currentTime = t } catch { /* noop */ } }
-      setTime(t)
-      const i = clipAtMasterTime(t)
-      if (i !== activeIdx) setActiveIdx(i)
-      return
-    }
-    // Per-clip fallback path (single-clip preview, or reel-mode while
-    // the master is still building): seek within the active clip; if
-    // the scrub target is in a different clip, swap activeIdx and
-    // seek after the rAF tick so the new src has mounted.
-    let i = 0
-    for (; i < cumul.length; i++) if (t < cumul[i]) break
-    i = Math.min(i, playlist.length - 1)
-    const start = sliceStart(i)
-    if (i !== activeIdx) {
-      setActiveIdx(i)
-      requestAnimationFrame(() => {
-        const v = videoRef.current
-        if (v) { try { v.currentTime = t - start } catch { /* noop */ } }
-      })
-    } else if (videoRef.current) {
-      try { videoRef.current.currentTime = t - start } catch { /* noop */ }
-    }
-    setTime(t)
-  }
-
   // ---- Timeline reorder / move between sections ----
   //
   // Drop targets:
@@ -1118,7 +1083,6 @@ export function TimelinePanel({
     }
   }
 
-  const sequenceProgress = total > 0 ? time / total : 0
   const reelPlayheadPx =
     playlistMode === 'reel' && total > 0
       ? Math.max(0, Math.min(reelTrack.widthPx, time * timelinePxPerSecond))
@@ -1199,89 +1163,78 @@ export function TimelinePanel({
             </div>
           </div>
         )}
-        <div className="flex items-center gap-3 px-4 py-2 text-neutral-300">
-          <button
-            type="button"
-            onClick={togglePlay}
-            className="rounded-md border border-neutral-700 bg-neutral-900 px-3 py-1 text-xs hover:border-neutral-500"
-          >
-            {playing
-              ? '⏸ Pause'
-              : time >= total && total > 0
-                ? '↻ Replay'
-                : '▶ Play'}
-          </button>
-          <button
-            type="button"
-            onClick={restart}
-            className="rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1 text-xs hover:border-neutral-500"
-            title="Restart"
-          >
-            ↺
-          </button>
-          <div className="font-mono text-[11px] text-neutral-500 tabular-nums">
+        <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 px-4 py-2 text-neutral-300">
+          <div className="flex min-w-0 items-center gap-3">
+            <button
+              type="button"
+              onClick={togglePlay}
+              className="rounded-md border border-neutral-700 bg-neutral-900 px-3 py-1 text-xs hover:border-neutral-500"
+            >
+              {playing
+                ? '⏸ Pause'
+                : time >= total && total > 0
+                  ? '↻ Replay'
+                  : '▶ Play'}
+            </button>
+            <button
+              type="button"
+              onClick={restart}
+              className="rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1 text-xs hover:border-neutral-500"
+              title="Restart"
+            >
+              ↺
+            </button>
+          </div>
+          <div className="font-mono text-[12px] text-neutral-400 tabular-nums">
             {formatTime(time)}
-            <span className="px-1 text-neutral-700">/</span>
+            <span className="px-1.5 text-neutral-700">/</span>
             {formatTime(total)}
           </div>
-          <div
-            className="relative h-1.5 flex-1 cursor-pointer rounded bg-neutral-800"
-            onClick={scrub}
-          >
-            {cumul.slice(0, -1).map((c, i) => (
-              <div
-                key={i}
-                className="absolute top-0 h-full w-px bg-neutral-600"
-                style={{ left: `${(c / total) * 100}%` }}
+          <div className="flex min-w-0 items-center justify-end gap-3">
+            {variant === 'inline' && reel.length > 0 ? (
+              <TimelineZoomControl
+                value={timelinePxPerSecond}
+                onChange={applyTimelineZoom}
               />
-            ))}
-            <div
-              className="absolute left-0 top-0 h-full rounded bg-neutral-300"
-              style={{ width: `${sequenceProgress * 100}%` }}
-            />
+            ) : null}
+            <button
+              type="button"
+              onClick={() => void downloadReel()}
+              disabled={downloading || reel.length === 0}
+              className={
+                'inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-[11px] uppercase tracking-wide transition-colors ' +
+                (downloading
+                  ? 'cursor-wait border-neutral-700 bg-neutral-900 text-neutral-400'
+                  : reel.length === 0
+                    ? 'cursor-not-allowed border-neutral-800 bg-neutral-950 text-neutral-600'
+                    : 'border-neutral-700 bg-neutral-900 text-neutral-200 hover:border-neutral-500 hover:text-white')
+              }
+              title={
+                reel.length === 0
+                  ? 'Add at least one shot to the reel first'
+                  : downloading
+                    ? 'Stitching reel via ffmpeg…'
+                    : `Stitch ${reel.length} shot${reel.length === 1 ? '' : 's'} and download`
+              }
+            >
+              {downloading ? (
+                <>
+                  <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-neutral-400" />
+                  Stitching…
+                </>
+              ) : (
+                <>↓ Download</>
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={() => setFullscreenOpen((o) => !o)}
+              className="inline-flex items-center gap-1.5 rounded-md border border-neutral-700 bg-neutral-900 px-2.5 py-1 text-[11px] uppercase tracking-wide text-neutral-200 transition-colors hover:border-neutral-500 hover:text-white"
+              title={expandTitle}
+            >
+              {expandLabel}
+            </button>
           </div>
-          <div className="font-mono text-[11px] text-neutral-500 tabular-nums">
-            {playlistMode === 'reel'
-              ? `shot ${activeIdx + 1}/${playlist.length}`
-              : 'single'}
-          </div>
-          <button
-            type="button"
-            onClick={() => void downloadReel()}
-            disabled={downloading || reel.length === 0}
-            className={
-              'ml-1 inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-[11px] uppercase tracking-wide transition-colors ' +
-              (downloading
-                ? 'cursor-wait border-neutral-700 bg-neutral-900 text-neutral-400'
-                : reel.length === 0
-                  ? 'cursor-not-allowed border-neutral-800 bg-neutral-950 text-neutral-600'
-                  : 'border-neutral-700 bg-neutral-900 text-neutral-200 hover:border-neutral-500 hover:text-white')
-            }
-            title={
-              reel.length === 0
-                ? 'Add at least one shot to the reel first'
-                : downloading
-                  ? 'Stitching reel via ffmpeg…'
-                  : `Stitch ${reel.length} shot${reel.length === 1 ? '' : 's'} and download`
-            }
-          >
-            {downloading ? (
-              <>
-                <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-neutral-400" />
-                Stitching…
-              </>
-            ) : (
-              <>↓ Download</>
-            )}
-          </button>
-          <button
-            type="button"
-            onClick={() => setFullscreenOpen((o) => !o)}
-            className="inline-flex items-center gap-1.5 rounded-md border border-neutral-700 bg-neutral-900 px-2.5 py-1 text-[11px] uppercase tracking-wide text-neutral-200 transition-colors hover:border-neutral-500 hover:text-white"
-            title={expandTitle}
-          >
-            {expandLabel}
-          </button>
         </div>
       </>
     )
@@ -1321,21 +1274,7 @@ export function TimelinePanel({
         >
           {/* Reel section */}
           <div className="border-b border-neutral-900">
-            <div className="flex items-center justify-between gap-3 px-4 py-2">
-              <div className="min-w-0 text-[11px] uppercase tracking-wide text-neutral-500">
-                On reel ({reel.length})
-                <span className="ml-2 normal-case tracking-normal text-neutral-700">
-                  · drag to reorder · drop from Available to add
-                </span>
-              </div>
-              {reel.length > 0 ? (
-                <TimelineZoomControl
-                  value={timelinePxPerSecond}
-                  onChange={applyTimelineZoom}
-                />
-              ) : null}
-            </div>
-            <div className="min-h-[88px] px-4 pb-3">
+            <div className="min-h-[88px] px-4 py-3">
               {/* ReelAreaDroppable is always mounted (id 'reel-area').
                   Drop on it = "append at end of current reel" — handles
                   both the empty-reel case (drag a clip onto the
