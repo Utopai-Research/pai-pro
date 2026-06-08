@@ -101,13 +101,7 @@ function isKeyboardShortcutTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false
   if (target.isContentEditable) return true
   const tag = target.tagName
-  return (
-    tag === 'INPUT' ||
-    tag === 'TEXTAREA' ||
-    tag === 'SELECT' ||
-    tag === 'BUTTON' ||
-    tag === 'A'
-  )
+  return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT'
 }
 
 const TIMELINE_DEFAULT_PX_PER_SECOND = 20
@@ -623,10 +617,11 @@ export function TimelinePanel({
       if (event.code !== 'Space' && event.key !== ' ') return
       if (isKeyboardShortcutTarget(event.target)) return
       event.preventDefault()
+      event.stopPropagation()
       togglePlay()
     }
-    window.addEventListener('keydown', onKeyDown)
-    return (): void => window.removeEventListener('keydown', onKeyDown)
+    window.addEventListener('keydown', onKeyDown, { capture: true })
+    return (): void => window.removeEventListener('keydown', onKeyDown, { capture: true })
   }, [togglePlay])
 
   const restart = (): void => {
