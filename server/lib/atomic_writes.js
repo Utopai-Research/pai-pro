@@ -28,35 +28,35 @@ export async function writeFileAtomic(target, contents) {
   }
 }
 
-async function renameOnceWithLock(tmp, target) {
-  const lock = `${target}.lock`;
+// Fallback for filesystems where `fsp.link` is unsupported (EXDEV on a
+// cross-mount target, EPERM/ENOTSUP on some overlay or bind mounts — the
+// shipped Docker layout). Claim the target directly with an exclusive
+// create: the first opener wins and writes the bytes, every later opener
+// sees EEXIST and reports the loss. There is no separate lock file, so a
+// crash mid-write cannot orphan a lock and permanently wedge the target.
+// The trade-off is a small partial-write-on-crash window — a crash between
+// the create and the bytes landing leaves a short or empty file — which is
+// strictly better than a lock that could never be reclaimed.
+async function createOnce(target, contents) {
   let handle = null;
   try {
-    handle = await fsp.open(lock, "wx");
+    handle = await fsp.open(target, "wx");
   } catch (e) {
     if (e.code === "EEXIST") return false;
     throw e;
   }
-
   try {
-    try {
-      await fsp.access(target);
-      return false;
-    } catch (e) {
-      if (e.code !== "ENOENT") throw e;
-    }
-    await fsp.rename(tmp, target);
+    await handle.writeFile(contents);
+    await handle.sync();
     return true;
   } finally {
-    try { await handle?.close(); } catch {}
-    try { await fsp.unlink(lock); } catch {}
+    try { await handle.close(); } catch {}
   }
 }
 
 export async function writeFileOnce(target, contents) {
   await fsp.mkdir(path.dirname(target), { recursive: true });
   const tmp = tempPathFor(target);
-  let removeTmp = true;
   try {
     await fsp.writeFile(tmp, contents);
     try {
@@ -66,12 +66,8 @@ export async function writeFileOnce(target, contents) {
       if (e.code === "EEXIST") return false;
       if (!LINK_FALLBACK_CODES.has(e.code)) throw e;
     }
-    const wrote = await renameOnceWithLock(tmp, target);
-    if (wrote) removeTmp = false;
-    return wrote;
+    return await createOnce(target, contents);
   } finally {
-    if (removeTmp) {
-      try { await fsp.unlink(tmp); } catch {}
-    }
+    try { await fsp.unlink(tmp); } catch {}
   }
 }
