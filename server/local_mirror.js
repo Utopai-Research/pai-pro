@@ -67,6 +67,19 @@ function basenameFromUrl(url) {
 
 const TMP_DIRNAME = ".tmp";
 
+function classifiedError(klass, message, cause) {
+  const e = new Error(message);
+  e.klass = klass;
+  if (cause) e.cause = cause;
+  return e;
+}
+
+function isLocalWriteError(e, targetPath) {
+  if (e?.path === targetPath) return true;
+  return (e?.syscall === "open" || e?.syscall === "write")
+    && (e?.code === "EACCES" || e?.code === "ENOENT" || e?.code === "ENOSPC" || e?.code === "EPERM");
+}
+
 // Download a remote URL straight to a tmp file by streaming the response
 // body to disk — the bytes never accumulate in a single Buffer. Used for
 // large write-only assets (e.g. generate_video.js's MP4, tens of MB per
@@ -84,9 +97,16 @@ export async function streamUrlToTmp({ url, mimeType, projectId, filename, timeo
   const relPath = path.posix.join("assets", TMP_DIRNAME, fname);
   const absPath = path.join(PAI_REPO_ROOT, "projects", proj, relPath);
 
-  const res = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) });
+  let res;
+  try {
+    res = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) });
+  } catch (e) {
+    throw classifiedError("transient", `stream download failed: ${e.message}`, e);
+  }
   if (!res.ok || !res.body) {
-    throw new Error(`stream download failed (${res.status} ${res.statusText}): ${url}`);
+    const body = await res.text().catch(() => "");
+    const detail = body ? body.slice(0, 200) : url;
+    throw classifiedError("transient", `stream download failed (${res.status} ${res.statusText}): ${detail}`);
   }
   await fs.mkdir(path.dirname(absPath), { recursive: true });
   try {
@@ -95,6 +115,9 @@ export async function streamUrlToTmp({ url, mimeType, projectId, filename, timeo
   } catch (e) {
     // Leave no half-written tmp file behind on a mid-stream error.
     await fs.unlink(absPath).catch(() => {});
+    if (!isLocalWriteError(e, absPath)) {
+      throw classifiedError("transient", `stream download failed: ${e.message}`, e);
+    }
     throw e;
   }
   return { local_path: relPath, absolute_path: absPath, filename: fname };
@@ -247,4 +270,3 @@ export async function buildProviderRefs({ sourceIds = [], projectId } = {}) {
   }
   return out;
 }
-

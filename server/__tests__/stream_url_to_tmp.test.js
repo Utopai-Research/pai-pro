@@ -124,7 +124,11 @@ test("streamUrlToTmp rejects on a non-2xx response and writes no file", async (t
 
   await assert.rejects(
     () => streamUrlToTmp({ url: remote.url, mimeType: "video/mp4", projectId }),
-    /stream download failed \(500/,
+    (e) => {
+      assert.equal(e.klass, "transient");
+      assert.match(e.message, /stream download failed \(500/);
+      return true;
+    },
   );
   // No project dir / tmp file should have been created — the throw happens
   // before mkdir + the write stream open.
@@ -157,6 +161,10 @@ test("streamUrlToTmp unlinks the partial tmp file when the stream errors mid-bod
       projectId,
       filename: "partial_clip.mp4",
     });
+  }, (e) => {
+    assert.equal(e.klass, "transient");
+    assert.match(e.message, /stream download failed/);
+    return true;
   });
 
   await assert.rejects(
