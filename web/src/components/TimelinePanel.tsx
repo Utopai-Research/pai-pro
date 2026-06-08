@@ -25,7 +25,15 @@
  * PATCH all affected nodes in one batch via /projects/:id/nodes/batch-data
  * so the server emits a single canvas-state update.
  */
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+} from 'react'
 import { createPortal } from 'react-dom'
 import {
   DndContext,
@@ -88,6 +96,19 @@ function formatTime(secs: number): string {
   return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
 }
 
+function isKeyboardShortcutTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false
+  if (target.isContentEditable) return true
+  const tag = target.tagName
+  return (
+    tag === 'INPUT' ||
+    tag === 'TEXTAREA' ||
+    tag === 'SELECT' ||
+    tag === 'BUTTON' ||
+    tag === 'A'
+  )
+}
+
 const TIMELINE_DEFAULT_PX_PER_SECOND = 20
 const TIMELINE_MIN_PX_PER_SECOND = 8
 const TIMELINE_MAX_PX_PER_SECOND = 80
@@ -116,10 +137,12 @@ function TimelineRuler({
   totalSeconds,
   widthPx,
   pxPerSecond,
+  onPointerDown,
 }: {
   totalSeconds: number
   widthPx: number
   pxPerSecond: number
+  onPointerDown?: (event: ReactPointerEvent<HTMLDivElement>) => void
 }): JSX.Element {
   if (totalSeconds <= 0) {
     return (
@@ -146,8 +169,10 @@ function TimelineRuler({
 
   return (
     <div
-      className="relative h-7 border-t border-neutral-900 bg-neutral-950/80"
+      className="relative h-7 touch-none cursor-ew-resize border-t border-neutral-900 bg-neutral-950/80"
+      onPointerDown={onPointerDown}
       style={{ width: widthPx }}
+      title="Click or drag to seek"
     >
       {marks.map(({ time: markTime, major }) => {
         const left = markTime * pxPerSecond
@@ -591,6 +616,18 @@ export function TimelinePanel({
     }
     setPlaying((p) => !p)
   }
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (event.defaultPrevented || event.repeat) return
+      if (event.code !== 'Space' && event.key !== ' ') return
+      if (isKeyboardShortcutTarget(event.target)) return
+      event.preventDefault()
+      togglePlay()
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return (): void => window.removeEventListener('keydown', onKeyDown)
+  }, [togglePlay])
+
   const restart = (): void => {
     setActiveIdx(0)
     setTime(0)
@@ -613,6 +650,62 @@ export function TimelinePanel({
     setTime(0)
     setPlaying(true)
   }
+
+  const seekReelTo = (nextTime: number): void => {
+    if (playlistMode !== 'reel' || total <= 0) return
+    const t = Math.max(0, Math.min(total, nextTime))
+    if (masterMode) {
+      const v = videoRef.current
+      if (v) { try { v.currentTime = t } catch { /* noop */ } }
+      setTime(t)
+      const i = clipAtMasterTime(t)
+      if (i !== activeIdx) setActiveIdx(i)
+      return
+    }
+
+    let i = 0
+    for (; i < cumul.length; i++) if (t < cumul[i]) break
+    i = Math.min(i, playlist.length - 1)
+    const start = sliceStart(i)
+    if (i !== activeIdx) {
+      setActiveIdx(i)
+      requestAnimationFrame(() => {
+        const v = videoRef.current
+        if (v) { try { v.currentTime = t - start } catch { /* noop */ } }
+      })
+    } else if (videoRef.current) {
+      try { videoRef.current.currentTime = t - start } catch { /* noop */ }
+    }
+    setTime(t)
+  }
+
+  const seekReelFromClientX = (clientX: number): void => {
+    const el = timelineScrollRef.current
+    if (!el) return
+    const rect = el.getBoundingClientRect()
+    const contentX = el.scrollLeft + clientX - rect.left
+    seekReelTo(contentX / timelinePxPerSecond)
+  }
+
+  const beginTimelineSeek = (event: ReactPointerEvent<HTMLElement>): void => {
+    if (event.button !== 0) return
+    event.preventDefault()
+    event.stopPropagation()
+    seekReelFromClientX(event.clientX)
+
+    const onMove = (moveEvent: PointerEvent): void => {
+      seekReelFromClientX(moveEvent.clientX)
+    }
+    const stopSeeking = (): void => {
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', stopSeeking)
+      window.removeEventListener('pointercancel', stopSeeking)
+    }
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', stopSeeking, { once: true })
+    window.addEventListener('pointercancel', stopSeeking, { once: true })
+  }
+
   // ---- Timeline reorder / move between sections ----
   //
   // Drop targets:
@@ -1298,13 +1391,19 @@ export function TimelinePanel({
                         totalSeconds={reelTrack.totalSeconds}
                         widthPx={reelTrack.widthPx}
                         pxPerSecond={timelinePxPerSecond}
+                        onPointerDown={beginTimelineSeek}
                       />
                       {reelPlayheadPx !== null ? (
                         <div
                           className="pointer-events-none absolute bottom-0 top-0 z-20"
                           style={{ left: reelPlayheadPx }}
                         >
-                          <div className="absolute -top-px left-1/2 h-3 w-3 -translate-x-1/2 rounded-b-sm bg-neutral-100 shadow-[0_0_12px_rgba(255,255,255,0.45)]" />
+                          <div
+                            aria-hidden
+                            title="Drag playhead"
+                            onPointerDown={beginTimelineSeek}
+                            className="pointer-events-auto absolute -top-px left-1/2 h-3 w-3 -translate-x-1/2 touch-none cursor-ew-resize rounded-b-sm bg-neutral-100 shadow-[0_0_12px_rgba(255,255,255,0.45)]"
+                          />
                           <div className="h-full w-px bg-neutral-100 shadow-[0_0_10px_rgba(255,255,255,0.55)]" />
                         </div>
                       ) : null}
