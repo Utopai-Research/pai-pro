@@ -93,7 +93,7 @@ test("streamUrlToTmp streams the response body to a tmp file byte-for-byte", asy
   assert.ok(onDisk.equals(payload), "bytes match the served payload exactly");
 });
 
-test("streamUrlToTmp falls back to the URL extension when no mimeType is given", async (t) => {
+test("streamUrlToTmp falls back to the URL extension when mimeType is unknown", async (t) => {
   const projectId = uniqueProjectId();
   t.after(() => cleanupProject(projectId));
 
@@ -108,6 +108,7 @@ test("streamUrlToTmp falls back to the URL extension when no mimeType is given",
 
   const staged = await streamUrlToTmp({
     url: `http://127.0.0.1:${port}/clip.webm`,
+    mimeType: "application/octet-stream",
     projectId,
   });
   assert.match(staged.local_path, /\.webm$/, "ext taken from the URL path");

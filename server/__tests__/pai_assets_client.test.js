@@ -422,11 +422,9 @@ test("circuit breaker open → infra (regression signal)", withFakeTimers(async 
   }
 }));
 
-// _assetCache is an LRUCache(max: 2000), not an unbounded Map (audit N23):
-// over a long viewer uptime the old Map only ever grew. Seed more than max
-// distinct keys (via reseedFromCanvas, which needs no network) and assert
-// the cache evicts the oldest while keeping the most recent — and that the
-// resident set never exceeds the bound.
+// _assetCache is an LRUCache(max: 2000), not an unbounded Map (audit N23).
+// Seed more than max distinct keys (via reseedFromCanvas, no network)
+// and assert the resident set stays capped.
 test("_assetCache evicts least-recently-used entries past its max", async () => {
   const client = await freshClient();
   const MAX = 2000;

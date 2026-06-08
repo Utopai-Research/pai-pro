@@ -394,9 +394,8 @@ export async function pollStatus(jobId, {
 }
 
 /**
- * Download a public URL to a Buffer. Used by pai_video_client.js to pull
- * the MP4 from output_url. PAI's signed GCS URLs are publicly fetchable
- * within their TTL — no auth needed.
+ * Download a public URL to a Buffer. Use only when the caller needs the
+ * bytes in memory; write-only asset paths should stream straight to disk.
  */
 export async function downloadUrlToBuffer(url, { timeoutMs = 120_000 } = {}) {
   if (typeof url !== "string" || !url) throw err("bad_args", "downloadUrlToBuffer: url required");

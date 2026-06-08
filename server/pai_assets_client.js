@@ -26,7 +26,7 @@
 // services/asset_sync.js bridge dispatches mutator updateNode patches in
 // response to paiAssetEvents 'update' (active / rejected) so workflow.json
 // becomes the durable cache. On boot, services/projects.js calls
-// reseedFromCanvas to re-prime the in-process Map from that metadata.
+// reseedFromCanvas to re-prime the in-process cache from that metadata.
 //
 // **Wire shapes (post-fix):**
 //   CreateAsset → 200 { Result: { Id } }                        (no Status)
@@ -78,16 +78,10 @@ function emitUpdate(url, status, extra = {}) {
 
 // LRUCache<canonicalKey, { status, assetId?, reason?, promise? }>
 //
-// Bounded so the viewer's RSS can't grow without limit over a long uptime:
-// the old plain Map only ever added entries (one per distinct asset URL
-// across every project the session ever touched). Entries are tiny (a
-// status enum + an id/reason string), so 2000 keeps realistic working
-// sets — several projects, each with a few hundred assets — fully resident
-// for dedupe while hard-capping growth at well under a megabyte. Eviction
-// is least-recently-used (get/set both mark recency), so the assets a
-// session is actively re-referencing stay warm. No TTL: an asset_id stays
-// valid for the asset's lifetime; expired *groups* are handled separately
-// via the groupExpired retry in doUpload.
+// Bounded so viewer RSS cannot grow across long uptime. Entries are tiny;
+// 2000 keeps several projects' working sets resident while capping growth.
+// No TTL: asset IDs do not expire on a clock; expired groups are retried
+// in doUpload.
 const _assetCache = new LRUCache({ max: 2000 });
 
 // Collapse the five URL forms that flow through the system onto one cache

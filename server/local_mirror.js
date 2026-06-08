@@ -74,12 +74,6 @@ function classifiedError(klass, message, cause) {
   return e;
 }
 
-function isLocalWriteError(e, targetPath) {
-  if (e?.path === targetPath) return true;
-  return (e?.syscall === "open" || e?.syscall === "write")
-    && (e?.code === "EACCES" || e?.code === "ENOENT" || e?.code === "ENOSPC" || e?.code === "EPERM");
-}
-
 // Download a remote URL straight to a tmp file by streaming the response
 // body to disk — the bytes never accumulate in a single Buffer. Used for
 // large write-only assets (e.g. generate_video.js's MP4, tens of MB per
@@ -90,9 +84,8 @@ function isLocalWriteError(e, targetPath) {
 export async function streamUrlToTmp({ url, mimeType, projectId, filename, timeoutMs = 120_000 }) {
   if (!url) throw new Error("streamUrlToTmp: url required");
   const proj = projectId || await readActiveProject();
-  const ext = mimeType
-    ? extensionForMime(mimeType)
-    : (path.extname(basenameFromUrl(url)).replace(/^\./, "") || "bin");
+  const urlExt = path.extname(basenameFromUrl(url)).replace(/^\./, "") || "bin";
+  const ext = extensionForMime(mimeType, urlExt);
   const fname = filename || `tmp_${crypto.randomBytes(8).toString("hex")}.${ext}`;
   const relPath = path.posix.join("assets", TMP_DIRNAME, fname);
   const absPath = path.join(PAI_REPO_ROOT, "projects", proj, relPath);
@@ -115,7 +108,9 @@ export async function streamUrlToTmp({ url, mimeType, projectId, filename, timeo
   } catch (e) {
     // Leave no half-written tmp file behind on a mid-stream error.
     await fs.unlink(absPath).catch(() => {});
-    if (!isLocalWriteError(e, absPath)) {
+    const localWriteError = e?.path === absPath
+      || ["EACCES", "ENOENT", "ENOSPC", "EPERM"].includes(e?.code);
+    if (!localWriteError) {
       throw classifiedError("transient", `stream download failed: ${e.message}`, e);
     }
     throw e;
