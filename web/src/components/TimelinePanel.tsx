@@ -885,7 +885,7 @@ export function TimelinePanel({
         return
       }
 
-      if (event.shiftKey && Math.abs(event.deltaY) > Math.abs(event.deltaX)) {
+      if (el.scrollWidth > el.clientWidth && Math.abs(event.deltaY) > Math.abs(event.deltaX)) {
         event.preventDefault()
         el.scrollLeft += event.deltaY
         updateTimelineScrollState()
@@ -894,7 +894,7 @@ export function TimelinePanel({
 
     el.addEventListener('wheel', onWheel, { passive: false })
     return () => el.removeEventListener('wheel', onWheel)
-  }, [applyTimelineZoom, updateTimelineScrollState])
+  }, [applyTimelineZoom, effectiveOrder.length, updateTimelineScrollState])
 
   // Sparse renumber: only PATCH the cards whose shot_id actually changes.
   const applyOptimisticOrder = useCallback(
