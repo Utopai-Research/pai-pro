@@ -1,15 +1,4 @@
-/**
- * Wraps the Available section's outer div with dnd-kit's useDroppable
- * so a reel card dragged onto it commits a "remove from reel" mutation
- * on release.
- *
- * The droppable id is `'archive'` — matched by handleDragEnd in
- * TimelinePanel.tsx (sourceInReel && overId === 'archive' →
- * applyOptimisticOrder(baseline.filter(...))).
- *
- * Visual feedback: subtle bg-tint when `isOver`, matching the legacy
- * HTML5 highlight tone (bg-neutral-900/40).
- */
+/** Drop target for moving reel clips back into Available. */
 import type { ReactNode } from 'react'
 import { useDroppable } from '@dnd-kit/core'
 
@@ -20,7 +9,7 @@ interface AvailableDroppableProps {
 export default function AvailableDroppable({
   children,
 }: AvailableDroppableProps): JSX.Element {
-  const { setNodeRef, isOver } = useDroppable({ id: 'archive' })
+  const { setNodeRef, isOver } = useDroppable({ id: 'available-drop' })
   return (
     <div
       ref={setNodeRef}

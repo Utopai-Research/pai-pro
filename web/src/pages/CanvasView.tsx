@@ -27,19 +27,25 @@ import { Group, Panel, Separator } from 'react-resizable-panels'
 import { Link, useParams } from 'react-router-dom'
 import CanvasPage from './CanvasPage'
 import { DraftGateModal } from './CanvasPage/DraftGateModal'
-import { AssetRail } from '@/components/AssetRail'
+import { AssetRail, type AssetRailRevealRequest } from '@/components/AssetRail'
 import { TerminalPanel } from '@/components/TerminalPanel'
 import { TimelinePanel } from '@/components/TimelinePanel'
 import { CanvasFocusProvider } from '@/contexts/CanvasFocusContext'
 import { ChatComposerProvider } from '@/contexts/ChatComposerContext'
 import { MediaExpandProvider } from '@/contexts/MediaExpandContext'
 import { useWorkflow } from '@/hooks/useWorkflow'
+import {
+  patchCanvasNodeDataBatch,
+  type CanvasNodeDataUpdate,
+} from '@/lib/canvas-stub'
 import { getSocket, VIEWER_URL } from '@/lib/socket'
 import { ModelsProvider } from '@/lib/useModels'
+import type { CanvasNode, VideoResultNode } from '@/types/canvas'
 
 type CanvasTab = 'canvas' | 'timeline'
 
 const LS_RAIL_HIDDEN = 'pai-pro:asset-rail:hidden'
+const LS_ARCHIVE_RAIL_GUIDE_SHOWN = 'pai-pro:archive-rail-guide-shown'
 
 function readRailHidden(): boolean {
   try {
@@ -55,6 +61,40 @@ function writeRailHidden(hidden: boolean): void {
     /* private mode etc — silent no-op */
   }
 }
+function readArchiveRailGuideShown(): boolean {
+  try {
+    return window.localStorage.getItem(LS_ARCHIVE_RAIL_GUIDE_SHOWN) === '1'
+  } catch {
+    return false
+  }
+}
+function writeArchiveRailGuideShown(): void {
+  try {
+    window.localStorage.setItem(LS_ARCHIVE_RAIL_GUIDE_SHOWN, '1')
+  } catch {
+    /* private mode etc — silent no-op */
+  }
+}
+
+function archiveKind(node: CanvasNode): AssetRailRevealRequest['kind'] {
+  if (node.type === 'image_result') return 'images'
+  if (node.type === 'video_result') return 'videos'
+  if (node.type === 'audio_result') return 'audios'
+  return 'notes'
+}
+
+function isVideoNode(node: CanvasNode): node is VideoResultNode {
+  return node.type === 'video_result'
+}
+
+function isTypingTarget(target: Element | null): boolean {
+  const tagName = target?.tagName
+  return (
+    tagName === 'INPUT' ||
+    tagName === 'TEXTAREA' ||
+    (target as HTMLElement | null)?.isContentEditable === true
+  )
+}
 
 export default function CanvasView(): JSX.Element {
   const { projectId = null } = useParams<{ projectId: string }>()
@@ -63,6 +103,10 @@ export default function CanvasView(): JSX.Element {
   // Owned at CanvasView so the toggle button in CanvasHeader (always
   // visible) can flip the same state the rail itself reads.
   const [railHidden, setRailHidden] = useState<boolean>(readRailHidden)
+  const archiveHistoryRef = useRef<string[][]>([])
+  const archiveRailGuideShownRef = useRef(readArchiveRailGuideShown())
+  const [railRevealRequest, setRailRevealRequest] =
+    useState<AssetRailRevealRequest | null>(null)
   const toggleRail = useCallback(() => {
     setRailHidden((prev) => {
       const next = !prev
@@ -77,15 +121,7 @@ export default function CanvasView(): JSX.Element {
     const handler = (e: globalThis.KeyboardEvent): void => {
       if (e.key !== '[') return
       if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return
-      const a = document.activeElement
-      const tagName = a?.tagName
-      if (
-        tagName === 'INPUT' ||
-        tagName === 'TEXTAREA' ||
-        (a as HTMLElement | null)?.isContentEditable === true
-      ) {
-        return
-      }
+      if (isTypingTarget(document.activeElement)) return
       e.preventDefault()
       toggleRail()
     }
@@ -95,6 +131,113 @@ export default function CanvasView(): JSX.Element {
   // Subscribe at the outer layer so the Timeline tab gets workflow
   // updates without remounting CanvasPage's own subscription.
   const { workflow, bundle } = useWorkflow(projectId)
+
+  const archiveNodes = useCallback(
+    (ids: string[]): void => {
+      if (projectId === null || workflow === null || ids.length === 0) return
+      const idSet = new Set(ids)
+      const nodesById = new Map(workflow.nodes.map((node) => [node.id, node]))
+      const targets = ids
+        .map((id) => nodesById.get(id))
+        .filter((node): node is CanvasNode => node !== undefined)
+      if (targets.length === 0) return
+
+      archiveHistoryRef.current.push(targets.map((node) => node.id))
+      const archivedAt = new Date().toISOString()
+      const updates: CanvasNodeDataUpdate[] = targets.map((node) => ({
+        nodeId: node.id,
+        data:
+          node.type === 'video_result'
+            ? { archived: true, archived_at: archivedAt, shot_id: null }
+            : { archived: true, archived_at: archivedAt },
+      }))
+
+      if (
+        targets.some(
+          (node) =>
+            node.type === 'video_result' &&
+            typeof node.data.shot_id === 'number',
+        )
+      ) {
+        workflow.nodes
+          .filter(isVideoNode)
+          .filter(
+            (node) =>
+              node.data.archived !== true &&
+              !idSet.has(node.id) &&
+              typeof node.data.shot_id === 'number',
+          )
+          .sort((a, b) => (a.data.shot_id ?? 0) - (b.data.shot_id ?? 0))
+          .forEach((node, index) => {
+            const shotId = index + 1
+            if (node.data.shot_id !== shotId) {
+              updates.push({ nodeId: node.id, data: { shot_id: shotId } })
+            }
+          })
+      }
+
+      const revealTarget = targets[0]
+      const shouldRevealInRail = !railHidden || !archiveRailGuideShownRef.current
+      if (shouldRevealInRail) {
+        if (railHidden && !archiveRailGuideShownRef.current) {
+          archiveRailGuideShownRef.current = true
+          writeArchiveRailGuideShown()
+          setRailHidden(false)
+          writeRailHidden(false)
+        }
+        setRailRevealRequest({
+          id: revealTarget.id,
+          kind: archiveKind(revealTarget),
+        })
+      }
+
+      void patchCanvasNodeDataBatch(projectId, updates).catch((err) => {
+        console.warn(
+          `[canvas:${projectId}] archive failed: ${err instanceof Error ? err.message : String(err)}`,
+        )
+      })
+    },
+    [projectId, workflow, railHidden],
+  )
+
+  const restoreLastArchive = useCallback((): boolean => {
+    if (projectId === null) return false
+    const ids = archiveHistoryRef.current.pop()
+    if (ids === undefined || ids.length === 0) return false
+    void patchCanvasNodeDataBatch(
+      projectId,
+      ids.map((id) => ({
+        nodeId: id,
+        data: { archived: null, archived_at: null },
+      })),
+    ).catch((err) => {
+      console.warn(
+        `[canvas:${projectId}] restore failed: ${err instanceof Error ? err.message : String(err)}`,
+      )
+    })
+    return true
+  }, [projectId])
+
+  useEffect(() => {
+    archiveHistoryRef.current = []
+    setRailRevealRequest(null)
+  }, [projectId])
+
+  useEffect(() => {
+    const handler = (e: globalThis.KeyboardEvent): void => {
+      const isCmdZ =
+        (e.metaKey || e.ctrlKey) &&
+        e.key.toLowerCase() === 'z' &&
+        !e.shiftKey &&
+        !e.altKey
+      if (!isCmdZ) return
+      if (isTypingTarget(document.activeElement)) return
+      if (!restoreLastArchive()) return
+      e.preventDefault()
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [restoreLastArchive])
 
   // Project title tracked locally so we can show optimistic edits +
   // listen for the server's `title` broadcasts (which fire on meta
@@ -221,6 +364,7 @@ export default function CanvasView(): JSX.Element {
                 workflow={workflow}
                 hidden={railHidden}
                 onToggleHidden={toggleRail}
+                revealRequest={railRevealRequest}
               />
               <div className="relative h-full flex-1 overflow-hidden">
                 {/*
@@ -234,7 +378,7 @@ export default function CanvasView(): JSX.Element {
                     (canvasTab === 'canvas' ? 'block' : 'hidden')
                   }
                 >
-                  <CanvasPage />
+                  <CanvasPage onArchiveNodes={archiveNodes} />
                 </div>
                 <div
                   className={
@@ -242,7 +386,11 @@ export default function CanvasView(): JSX.Element {
                     (canvasTab === 'timeline' ? 'block' : 'hidden')
                   }
                 >
-                  <TimelinePanel projectId={projectId} workflow={workflow} />
+                  <TimelinePanel
+                    projectId={projectId}
+                    workflow={workflow}
+                    onArchiveNodes={archiveNodes}
+                  />
                 </div>
               </div>
             </div>

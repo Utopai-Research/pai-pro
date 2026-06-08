@@ -713,9 +713,8 @@
 
 /* Top-left amber chip on a video_result thumbnail, indicating the clip
    is assigned to a numeric reel slot. Read-only: assign/clear both
-   live in the TimelinePanel (drag from Available to assign, Remove
-   button to clear), so this element is non-interactive. Unassigned
-   clips render no badge.
+   live in the TimelinePanel, so this element is non-interactive.
+   Unassigned clips render no badge.
    Adapted from pai_agentic_canvas/web/src/styles.css:2280-2307 — the
    original two-state hover-reveal `#+` / `#N` button was flattened to
    a single indicator once the timeline took over reel curation. */

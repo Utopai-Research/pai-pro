@@ -49,6 +49,11 @@ import {
   horizontalListSortingStrategy,
   sortableKeyboardCoordinates,
 } from '@dnd-kit/sortable'
+import { useChatComposer } from '@/contexts/ChatComposerContext'
+import {
+  patchCanvasNodeDataBatch,
+  type CanvasNodeDataUpdate,
+} from '@/lib/canvas-stub'
 import { VIEWER_URL } from '@/lib/socket'
 import type { Workflow, VideoResultNode } from '@/types/canvas'
 import SortableClip from './timeline/SortableClip'
@@ -70,11 +75,7 @@ function arraysEqual(a: string[] | null, b: string[] | null): boolean {
 interface TimelinePanelProps {
   projectId: string | null
   workflow: Workflow | null
-}
-
-interface BatchUpdate {
-  nodeId: string
-  data: Record<string, unknown>
+  onArchiveNodes: (ids: string[]) => void
 }
 
 function isVideoNode(n: { type: string }): n is VideoResultNode {
@@ -88,29 +89,15 @@ function formatTime(secs: number): string {
   return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
 }
 
-async function patchBatch(projectId: string, updates: BatchUpdate[]) {
-  if (updates.length === 0) return
-  const res = await fetch(
-    `${VIEWER_URL}/projects/${encodeURIComponent(projectId)}/nodes/batch-data`,
-    {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ updates }),
-    },
-  )
-  if (!res.ok) {
-    const txt = await res.text().catch(() => '')
-    throw new Error(`PATCH /nodes/batch-data failed: ${res.status} ${res.statusText}${txt ? ` ${txt}` : ''}`)
-  }
-}
-
 export function TimelinePanel({
   projectId,
   workflow,
+  onArchiveNodes,
 }: TimelinePanelProps): JSX.Element {
+  const composer = useChatComposer()
   const { reel, available } = useMemo(() => {
     // Defense-in-depth: exclude archived video nodes. The canonical archive
-    // path also clears `shot_id` in the same mutation (see CanvasPage's
+    // path also clears `shot_id` in the same mutation (see CanvasView's
     // archiveNodes), so this filter is belt-and-suspenders against any
     // future archive code path that forgets to clear shot_id atomically.
     const all = (workflow?.nodes ?? [])
@@ -495,7 +482,7 @@ export function TimelinePanel({
   // assigns shot_id = i+1 to each reel node (skip if already correct)
   // and shot_id = null to anything that left the reel.
   //
-  // Still used by the Remove and +Reel buttons (additive paths the
+  // Still used by the explicit remove/add buttons (additive paths the
   // dnd-kit migration kept). Cross-region drag goes through
   // applyOptimisticOrder instead and bypasses this function.
   const reorderTo = async (
@@ -531,28 +518,41 @@ export function TimelinePanel({
       newReel = [...newReel.slice(0, dest), sourceNode, ...newReel.slice(dest)]
     }
 
-    const updates: BatchUpdate[] = []
+    const updates: CanvasNodeDataUpdate[] = []
     newReel.forEach((n, i) => {
       const want = i + 1
       if (n.data.shot_id !== want) updates.push({ nodeId: n.id, data: { shot_id: want } })
     })
     if (removed) updates.push({ nodeId: sourceId, data: { shot_id: null } })
-    await patchBatch(projectId, updates)
+    await patchCanvasNodeDataBatch(projectId, updates)
   }
 
   const removeFromReel = async (nodeId: string) => {
-    if (projectId === null) return
     await reorderTo(nodeId, { kind: 'available' })
   }
   const addToReelTail = async (nodeId: string) => {
-    if (projectId === null) return
     await reorderTo(nodeId, { kind: 'slot', index: reel.length })
+  }
+  const referClip = (nodeId: string): void => {
+    composer?.insertAtCursor(`@${nodeId} `)
+  }
+  const archiveClip = (nodeId: string): void => {
+    if (playlistMode === 'reel' && reel[activeIdx]?.id === nodeId) {
+      setPlaying(false)
+    }
+    if (singleClip?.id === nodeId) {
+      setSingleClip(null)
+      setActiveIdx(0)
+      setTime(0)
+      setPlaying(false)
+    }
+    onArchiveNodes([nodeId])
   }
 
   // ---- dnd-kit reorder + cross-region drag -------------------------
   //
-  // Dnd-kit owns every drag surface. Remove and +Reel remain as explicit
-  // button-driven alternatives to dragging.
+  // Dnd-kit owns every drag surface. Action buttons remain as explicit
+  // alternatives to dragging.
   //
   // The user sees the new order instantly via `optimisticOrder`
   // overriding the truth-derived order; PATCH fires in the background;
@@ -610,7 +610,7 @@ export function TimelinePanel({
         return
       }
       setOptimisticOrder(nextIds)
-      const updates: BatchUpdate[] = []
+      const updates: CanvasNodeDataUpdate[] = []
       // Sparse renumber: emit shot_id = i+1 for any id whose current
       // value differs. Look up in BOTH reel and available — a cross-
       // region drag inserts an Available source id into nextIds; the
@@ -638,7 +638,7 @@ export function TimelinePanel({
         if (nextIds.includes(id)) return
         updates.push({ nodeId: id, data: { shot_id: null } })
       })
-      void patchBatch(projectId, updates).catch(() => {
+      void patchCanvasNodeDataBatch(projectId, updates).catch(() => {
         // Rollback on failure; truth-derived order resumes next render.
         setOptimisticOrder(null)
       })
@@ -715,7 +715,7 @@ export function TimelinePanel({
           // wraps both empty-state and SortableContext — drop outside
           // a specific card = "append," consistent across both cases.
           desired = [...baseline, sourceId]
-        } else if (overId !== 'archive') {
+        } else if (overId !== 'available-drop') {
           const overIndex = baseline.indexOf(overId)
           if (overIndex >= 0) {
             desired = [
@@ -770,7 +770,7 @@ export function TimelinePanel({
       const overInReel = newIndex >= 0
 
       // Four drag classes, using the pre-drag truth as the baseline:
-      //   1. Reel → Available (overId === 'archive'): clear shot_id via
+      //   1. Reel → Available (overId === 'available-drop'): clear shot_id via
       //      applyOptimisticOrder with the source filtered out. The
       //      null-clear branch of applyOptimisticOrder emits
       //      { shot_id: null } for the removed id.
@@ -782,7 +782,7 @@ export function TimelinePanel({
       //      would no-op because baseline = [] and overInReel = false.
       // Anything else (no over, source/over in unknown regions): restore
       // baseline (preview was non-committal).
-      if (sourceInReel && overId === 'archive') {
+      if (sourceInReel && overId === 'available-drop') {
         applyOptimisticOrder(baseline.filter((id) => id !== sourceId))
       } else if (!sourceInReel && overId === 'reel-area') {
         // Append at end. Empty reel → [sourceId]; non-empty → [...baseline, sourceId].
@@ -1113,7 +1113,6 @@ export function TimelinePanel({
                             node={n}
                             active={isActive}
                             isPlaying={isActive && playing}
-                            dropEdge={null}
                             onClick={() => {
                               if (isActive) {
                                 togglePlay()
@@ -1127,7 +1126,9 @@ export function TimelinePanel({
                               if (truthIdx >= 0) playReelFrom(truthIdx)
                             }}
                             onAction={() => removeFromReel(n.id)}
-                            actionLabel="Remove"
+                            onRefer={() => referClip(n.id)}
+                            onArchive={() => archiveClip(n.id)}
+                            referDisabled={composer === null}
                           />
                         </SortableClip>
                       )
@@ -1138,11 +1139,8 @@ export function TimelinePanel({
             </div>
           </div>
 
-          {/* Available section, wrapped in AvailableDroppable: a reel
-              card dragged here commits a "remove from reel" via the
-              handleDragEnd `sourceInReel && overId === 'archive'`
-              branch. The Remove ✕ on each reel card is still the
-              explicit alternative. */}
+          {/* AvailableDroppable handles reel-card drops that remove a
+              clip from the reel; hover actions cover explicit commands. */}
           <AvailableDroppable>
             <div className="px-4 py-2 text-[11px] uppercase tracking-wide text-neutral-500">
               Available clips ({effectiveAvailable.length})
@@ -1167,6 +1165,9 @@ export function TimelinePanel({
                         isPlaying={isActive && playing}
                         onClick={() => (isActive ? togglePlay() : playSingle(n))}
                         onAdd={() => addToReelTail(n.id)}
+                        onRefer={() => referClip(n.id)}
+                        onArchive={() => archiveClip(n.id)}
+                        referDisabled={composer === null}
                       />
                     </DraggableCompactCard>
                   )
@@ -1220,18 +1221,20 @@ function ReelCard({
   node,
   active,
   isPlaying,
-  dropEdge,
   onClick,
   onAction,
-  actionLabel,
+  onRefer,
+  onArchive,
+  referDisabled,
 }: {
   node: VideoResultNode
   active: boolean
   isPlaying: boolean
-  dropEdge: 'left' | 'right' | null
   onClick: () => void
   onAction: () => void
-  actionLabel: 'Remove'
+  onRefer: () => void
+  onArchive: () => void
+  referDisabled: boolean
 }): JSX.Element {
   const url = node.data.video_url
   const shotId = node.data.shot_id
@@ -1247,16 +1250,6 @@ function ReelCard({
           : 'border-neutral-800 hover:border-neutral-700')
       }
     >
-      {/* Insertion-slot indicator: a thin vertical bar at the edge of the
-          card where the dragged clip will land. */}
-      {dropEdge !== null ? (
-        <div
-          className={
-            'pointer-events-none absolute inset-y-0 z-10 w-[3px] rounded-full bg-sky-300 shadow-[0_0_10px_rgba(125,211,252,0.7)] ' +
-            (dropEdge === 'left' ? '-left-[5px]' : '-right-[5px]')
-          }
-        />
-      ) : null}
       <button type="button" onClick={onClick} className="block w-full text-left">
         <div
           className="relative mx-auto bg-black"
@@ -1301,31 +1294,132 @@ function ReelCard({
           ) : null}
         </div>
       </button>
-      {/* Stacked density (picked from pick-variation V5 / reel-card-density):
-          label on its own row above a metadata + ✕-icon row. Fits the full
-          "aspect · Ns" without truncation on narrow cards, since the ✕
-          button is ~40px slimmer than the prior text "REMOVE" pill. */}
+      <TimelineActionCluster
+        referDisabled={referDisabled}
+        onRefer={onRefer}
+        onArchive={onArchive}
+      >
+        <TimelineIconButton
+          label="Remove from reel"
+          ariaLabel="Remove from reel"
+          onClick={onAction}
+          className="grid h-5 w-5 shrink-0 place-items-center rounded border border-neutral-600/80 bg-neutral-950/90 text-[14px] leading-none text-neutral-200 shadow-sm shadow-black/30 backdrop-blur transition-colors hover:border-neutral-400 hover:bg-neutral-900 hover:text-white"
+        >
+          ×
+        </TimelineIconButton>
+      </TimelineActionCluster>
       <div className="px-2 py-1.5">
         <div className="truncate text-xs text-neutral-200">{label}</div>
-        <div className="mt-0.5 flex items-center justify-between gap-2">
-          <div className="truncate font-mono text-[10px] text-neutral-500">
-            {aspect}
-            {typeof duration === 'number' ? ` · ${duration}s` : ''}
-          </div>
-          <button
-            type="button"
-            title={actionLabel}
-            onClick={(e) => {
-              e.stopPropagation()
-              onAction()
-            }}
-            className="grid h-4 w-4 shrink-0 place-items-center rounded text-[12px] leading-none text-neutral-500 transition-colors hover:bg-red-500/10 hover:text-red-300"
-          >
-            ×
-          </button>
+        <div className="mt-0.5 truncate font-mono text-[10px] text-neutral-500">
+          {aspect}
+          {typeof duration === 'number' ? ` · ${duration}s` : ''}
         </div>
       </div>
     </div>
+  )
+}
+
+function TimelineActionCluster({
+  referDisabled,
+  onRefer,
+  onArchive,
+  children,
+}: {
+  referDisabled: boolean
+  onRefer: () => void
+  onArchive: () => void
+  children: JSX.Element
+}): JSX.Element {
+  const buttonBase =
+    'grid h-5 w-5 shrink-0 place-items-center rounded border border-neutral-600/80 bg-neutral-950/90 text-neutral-200 shadow-sm shadow-black/30 backdrop-blur transition-colors hover:border-neutral-400 hover:bg-neutral-900 hover:text-white'
+  return (
+    <div className="absolute right-0.5 top-1 z-20 flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+      <TimelineIconButton
+        label="Refer"
+        ariaLabel="Refer clip"
+        disabled={referDisabled}
+        onClick={onRefer}
+        className={`${buttonBase} font-mono text-[11px] font-semibold ${
+          referDisabled
+            ? 'cursor-not-allowed border-neutral-800 text-neutral-600'
+            : ''
+        }`}
+      >
+        @
+      </TimelineIconButton>
+      <TimelineIconButton
+        label="Archive"
+        ariaLabel="Archive clip"
+        onClick={onArchive}
+        className={`${buttonBase} hover:border-red-400/70 hover:bg-red-500/15 hover:text-red-200`}
+      >
+        <ArchiveIcon />
+      </TimelineIconButton>
+      {children}
+    </div>
+  )
+}
+
+function TimelineIconButton({
+  label,
+  ariaLabel,
+  disabled = false,
+  onClick,
+  className,
+  children,
+}: {
+  label: string
+  ariaLabel: string
+  disabled?: boolean
+  onClick: () => void
+  className: string
+  children: JSX.Element | string
+}): JSX.Element {
+  const ref = useRef<HTMLButtonElement | null>(null)
+  const [tooltip, setTooltip] = useState<{ x: number; y: number } | null>(null)
+  const showTooltip = (): void => {
+    const rect = ref.current?.getBoundingClientRect()
+    if (!rect) return
+    setTooltip({ x: rect.left + rect.width / 2, y: rect.top - 6 })
+  }
+  const hideTooltip = (): void => setTooltip(null)
+  return (
+    <>
+      <button
+        ref={ref}
+        type="button"
+        aria-label={ariaLabel}
+        aria-disabled={disabled}
+        onMouseEnter={showTooltip}
+        onMouseLeave={hideTooltip}
+        onFocus={showTooltip}
+        onBlur={hideTooltip}
+        onPointerDown={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation()
+          if (!disabled) onClick()
+        }}
+        className={className}
+      >
+        {children}
+      </button>
+      {tooltip !== null
+        ? createPortal(
+            <div
+              role="tooltip"
+              className="pointer-events-none fixed z-[80] rounded border border-neutral-700 bg-neutral-950 px-2 py-1 text-[10px] font-medium uppercase tracking-wide text-neutral-100 shadow-lg shadow-black/40"
+              style={{
+                left: tooltip.x,
+                top: tooltip.y,
+                transform: 'translate(-50%, -100%)',
+              }}
+            >
+              {label}
+            </div>,
+            document.body,
+          )
+        : null}
+    </>
   )
 }
 
@@ -1335,12 +1429,18 @@ function CompactCard({
   isPlaying,
   onClick,
   onAdd,
+  onRefer,
+  onArchive,
+  referDisabled,
 }: {
   node: VideoResultNode
   active: boolean
   isPlaying: boolean
   onClick: () => void
   onAdd: () => void
+  onRefer: () => void
+  onArchive: () => void
+  referDisabled: boolean
 }): JSX.Element {
   const url = node.data.video_url
   const label = node.data.label ?? 'untitled'
@@ -1395,20 +1495,43 @@ function CompactCard({
           </div>
         </div>
       </button>
-      <button
-        type="button"
-        onClick={(e) => {
-          e.stopPropagation()
-          onAdd()
-        }}
-        className="absolute right-1 top-1 rounded border border-neutral-700 bg-neutral-900/80 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-neutral-300 opacity-0 transition-opacity hover:border-neutral-500 group-hover:opacity-100"
-        title="Add to reel"
+      <TimelineActionCluster
+        referDisabled={referDisabled}
+        onRefer={onRefer}
+        onArchive={onArchive}
       >
-        + reel
-      </button>
+        <TimelineIconButton
+          label="Put on reel"
+          ariaLabel="Put on reel"
+          onClick={onAdd}
+          className="grid h-5 w-5 shrink-0 place-items-center rounded border border-neutral-600/80 bg-neutral-950/90 text-[13px] font-semibold leading-none text-neutral-100 shadow-sm shadow-black/30 backdrop-blur transition-colors hover:border-neutral-400 hover:bg-neutral-900 hover:text-white"
+        >
+          +
+        </TimelineIconButton>
+      </TimelineActionCluster>
       <div className="truncate px-1.5 py-1 text-[10px] text-neutral-400">
         {label}
       </div>
     </div>
+  )
+}
+
+function ArchiveIcon(): JSX.Element {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 16 16"
+      className="h-3 w-3"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M3 5.5h10" />
+      <path d="M4 5.5v8h8v-8" />
+      <path d="M2.75 2.5h10.5v3H2.75z" />
+      <path d="M6.5 8h3" />
+    </svg>
   )
 }
