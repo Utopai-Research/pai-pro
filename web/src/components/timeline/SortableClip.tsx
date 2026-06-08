@@ -31,19 +31,14 @@ import StripedPlaceholder from './StripedPlaceholder'
 
 interface SortableClipProps {
   id: string
-  /** Aspect ratio string like "16:9" — used to size the placeholder so
-   *  it matches the card it replaces. */
-  aspect: string
-  /** Optional fixed timeline width. When present, the reel lays out as
-   *  a single duration-scaled row instead of an auto-sized grid card. */
-  widthPx?: number
+  /** Duration-scaled timeline width for this clip. */
+  widthPx: number
   /** The live card content rendered when this clip is NOT being dragged. */
   children: ReactNode
 }
 
 export default function SortableClip({
   id,
-  aspect,
   widthPx,
   children,
 }: SortableClipProps): JSX.Element {
@@ -68,11 +63,11 @@ export default function SortableClip({
       ref={setNodeRef}
       {...listeners}
       {...attributes}
-      className="relative outline-none focus:outline-none"
+      className="relative h-full outline-none focus:outline-none"
       style={{
-        width: widthPx !== undefined ? `${widthPx}px` : undefined,
-        minWidth: widthPx !== undefined ? `${widthPx}px` : undefined,
-        flexShrink: widthPx !== undefined ? 0 : undefined,
+        width: `${widthPx}px`,
+        minWidth: `${widthPx}px`,
+        flexShrink: 0,
         transform: CSS.Translate.toString(transform),
         // Pass dnd-kit's transition verbatim — see file-level comment.
         transition: transition ?? undefined,
@@ -83,14 +78,7 @@ export default function SortableClip({
       }}
     >
       {isDragging ? (
-        <div
-          className="relative"
-          style={{
-            aspectRatio: aspect.replace(':', ' / '),
-            maxHeight: '80px',
-            width: '100%',
-          }}
-        >
+        <div className="relative h-full w-full">
           <StripedPlaceholder />
         </div>
       ) : (

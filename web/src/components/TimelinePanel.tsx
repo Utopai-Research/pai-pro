@@ -651,12 +651,8 @@ export function TimelinePanel({
   // ---- Timeline reorder / move between sections ----
   //
   // Drop targets:
-  //   - slot N        → insert source at position N (0..reel.length).
-  //                     N is derived from the cursor's X within the
-  //                     reel-card it's over: left half = before this
-  //                     card, right half = after it. Drops on empty
-  //                     grid space past the last card resolve to
-  //                     N = reel.length (append).
+  //   - reel item     → insert/reorder at the item dnd-kit resolves.
+  //   - reel-area     → append to the end of the row.
   //   - available     → set source.shot_id = null (remove from reel).
   //
   // After computing the new reel ordering, send one batch PATCH that
@@ -773,7 +769,7 @@ export function TimelinePanel({
   }, [reel, available, optimisticOrder])
 
   // When the cross-region preview engages, optimisticOrder includes
-  // the source id and the source is rendered inside the reel grid. Keep
+  // the source id and the source is rendered inside the reel row. Keep
   // it out of Available so it is not visible in both sections.
   const effectiveAvailable = useMemo<VideoResultNode[]>(() => {
     if (optimisticOrder == null) return available
@@ -783,20 +779,14 @@ export function TimelinePanel({
 
   const reelTrack = useMemo(() => {
     let totalSeconds = 0
-    let widthPx = 0
-    const widthsById = new Map<string, number>()
 
     for (const node of effectiveReel) {
       totalSeconds += timelineDurationSeconds(node)
-      const width = timelineClipWidth(node, timelinePxPerSecond)
-      widthsById.set(node.id, width)
-      widthPx += width
     }
 
     return {
       totalSeconds,
-      widthPx: Math.max(widthPx, 1),
-      widthsById,
+      widthPx: Math.max(totalSeconds * timelinePxPerSecond, 1),
     }
   }, [effectiveReel, timelinePxPerSecond])
 
@@ -1030,9 +1020,8 @@ export function TimelinePanel({
       //   2. Intra-reel reorder (both in reel): arrayMove + apply.
       //   3. Available → reel slot (source not in reel, over IS in
       //      reel): splice the source into baseline at the over index.
-      //   4. Available → empty reel (overId === 'reel-empty'): source
-      //      becomes reel #1. Without this branch, an empty-reel target
-      //      would no-op because baseline = [] and overInReel = false.
+      //   4. Available → reel-area: append. For an empty reel this
+      //      becomes reel #1.
       // Anything else (no over, source/over in unknown regions): restore
       // baseline (preview was non-committal).
       if (sourceInReel && overId === 'available-drop') {
@@ -1085,7 +1074,7 @@ export function TimelinePanel({
 
   // When a cross-region drag previews an Available clip in the reel, the
   // source card unmounts from Available. Keep a placeholder in its slot
-  // so the grid does not reflow under the pointer.
+  // so Available does not reflow under the pointer.
   //
   // ghostClipId === null when no cross-region preview is in flight.
   const ghostClipId =
@@ -1320,9 +1309,6 @@ export function TimelinePanel({
       ) : null}
 
       <div className="scrollbar-subtle flex-1 overflow-y-auto">
-        {/* Reel section: the whole grid is one drop target. Position is
-            taken from the cursor's left/right half of whichever card
-            it's over; empty trailing space falls through to "append". */}
         {/* One DndContext wraps both reel and Available so cross-region drag
             can transition the same id between useDraggable and useSortable. */}
         <DndContext
@@ -1400,8 +1386,7 @@ export function TimelinePanel({
                               <SortableClip
                                 key={n.id}
                                 id={n.id}
-                                aspect={n.data.aspect ?? '16:9'}
-                                widthPx={reelTrack.widthsById.get(n.id) ?? timelineClipWidth(n, timelinePxPerSecond)}
+                                widthPx={timelineClipWidth(n, timelinePxPerSecond)}
                               >
                                 <ReelCard
                                   node={n}
@@ -1548,8 +1533,6 @@ function ReelCard({
   const url = node.data.video_url
   const shotId = node.data.shot_id
   const label = node.data.label ?? 'untitled'
-  const aspect = node.data.aspect ?? '16:9'
-  const duration = node.data.duration
   return (
     <div
       className={
@@ -1614,10 +1597,6 @@ function ReelCard({
       </TimelineActionCluster>
       <div className="px-2 py-1.5">
         <div className="truncate text-xs text-neutral-200">{label}</div>
-        <div className="mt-0.5 truncate font-mono text-[10px] text-neutral-500">
-          {aspect}
-          {typeof duration === 'number' ? ` · ${duration}s` : ''}
-        </div>
       </div>
     </div>
   )

@@ -7,7 +7,7 @@
  * Why always-mounted (vs the prior ReelEmptyDroppable which only
  * rendered when reel was empty): with the conditional approach, the
  * "append at end" case for a non-empty reel had no drop target — the
- * trailing empty grid space past the last card had no useDroppable
+ * trailing empty space past the last card had no useDroppable
  * registered. The cursor's sticky-over (collision killer C) would
  * resolve to the last reel card, which caused drops past the last
  * card to insert BEFORE the last card (splice at index N-1) instead
@@ -17,8 +17,7 @@
  * Within the wrapper, the SortableClips' own droppables take precedence
  * via pointerWithin — so a cursor on a specific card still resolves to
  * that card's slot (not 'reel-area'). The wrapper only fires when
- * cursor is in the empty space (past the last card, between rows of
- * the wrapping grid, etc.).
+ * cursor is in empty row space such as the area past the last card.
  */
 import type { ReactNode } from 'react'
 import { useDroppable } from '@dnd-kit/core'
