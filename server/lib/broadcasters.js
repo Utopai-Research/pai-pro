@@ -104,6 +104,47 @@ export function createBroadcasters({ io, projects }) {
     });
   }
 
+  // Garbage-collect a deleted node's id out of the positions sidecar:
+  // its drag position and any group-frame membership. workflow.json
+  // (mutator PQueue) and canvas_positions.json (withProjectMutationLock)
+  // are separate stores, so deleteNode otherwise leaves the id lingering
+  // in positions{} and groupFrames[*].memberIds — a frame keeps sizing a
+  // ghost member until that frame is next re-saved (audit N45).
+  //
+  // Unlike handoffPendingPosition (N41), the read-modify-write happens
+  // ENTIRELY inside the lock: we read proj.canvasPositions, mutate it, and
+  // persist within the same callback so no other sidecar writer can
+  // interleave. Broadcast only after the write commits.
+  async function pruneDeletedNodesFromPositions(proj, envelope, reply) {
+    if (envelope.op !== "deleteNode") return;
+    const deletedIds = reply?.assigned?.deleted_node_ids;
+    if (!Array.isArray(deletedIds) || deletedIds.length === 0) return;
+    const deleted = new Set(deletedIds);
+    let changed = false;
+    await withProjectMutationLock(proj.id, async () => {
+      const pos = proj.canvasPositions;
+      if (!pos) return;
+      for (const id of deleted) {
+        if (Object.prototype.hasOwnProperty.call(pos.positions ?? {}, id)) {
+          delete pos.positions[id];
+          changed = true;
+        }
+      }
+      for (const [frameId, frame] of Object.entries(pos.groupFrames ?? {})) {
+        if (!frame || !Array.isArray(frame.memberIds)) continue;
+        const kept = frame.memberIds.filter((m) => !deleted.has(m));
+        if (kept.length === frame.memberIds.length) continue;
+        changed = true;
+        // A frame needs >=2 members to render (see canvas_layout.js
+        // normalizeFrame); drop one that falls below after pruning.
+        if (kept.length < 2) delete pos.groupFrames[frameId];
+        else frame.memberIds = kept;
+      }
+      if (changed) await writeCanvasPositions(proj.id, pos);
+    });
+    if (changed) broadcastPositions(proj.id);
+  }
+
   async function mirrorTitleToMeta(proj, envelope) {
     if (envelope?.op !== "setTitle") return;
     const title = envelope?.payload?.title;
@@ -128,6 +169,7 @@ export function createBroadcasters({ io, projects }) {
   const mutatorHooks = {
     onApply: async (proj, envelope, reply) => {
       handoffPendingPosition(proj, envelope, reply);
+      await pruneDeletedNodesFromPositions(proj, envelope, reply);
       await mirrorTitleToMeta(proj, envelope);
       broadcastCanvas(proj.id);
     },

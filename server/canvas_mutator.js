@@ -206,7 +206,10 @@ function reduceDeleteNode(draft, { id }) {
   if (idx === -1) throw new MutatorError("not_found", `node not found: ${id}`);
   draft.nodes.splice(idx, 1);
   draft.edges = draft.edges.filter((e) => e.from !== id && e.to !== id);
-  return {};
+  // Surfaced so the onApply hook can prune the id from canvas_positions.json
+  // (its drag position + any group-frame membership). workflow.json and the
+  // positions sidecar are separate stores under separate locks.
+  return { deleted_node_ids: [id] };
 }
 
 function reduceAddEdge(draft, { edge }) {
