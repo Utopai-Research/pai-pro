@@ -172,6 +172,25 @@ export async function readNodeArchived({ nodeId, projectId }) {
   return node?.data?.archived === true;
 }
 
+// Best-effort clip / track length in seconds for a ref node. Used by
+// generate_video.js to enforce VIDEO_LIMITS durations before any paid
+// upload. video_result carries data.duration (integer seconds); audio_result
+// carries metadata.duration_sec. Both fall back to the other field for older
+// workflow shapes. Returns null when no usable number is present (the caller
+// treats unknown durations as un-enforceable rather than rejecting).
+export async function readNodeDurationSec({ nodeId, projectId }) {
+  const node = await readNodeFromWorkflow({ nodeId, projectId });
+  const candidates = [
+    node?.data?.duration,
+    node?.data?.metadata?.duration_sec,
+    node?.data?.metadata?.duration,
+  ];
+  for (const c of candidates) {
+    if (typeof c === "number" && Number.isFinite(c)) return c;
+  }
+  return null;
+}
+
 function makeBadArgs(message) {
   const e = new Error(message);
   e.klass = "bad_args";

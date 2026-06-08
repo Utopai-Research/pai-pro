@@ -7,7 +7,10 @@ import {
 } from "../image_pro_sizes.js";
 
 export const VIDEO_LIMITS = {
-  // video-generation. Duration caps are asymmetric across audio / video:
+  // video-generation. generate_video.js enforces every rule below locally,
+  // before any paid asset upload; the provider behaviour noted in parens is
+  // the fallback that motivated each value, not the first line of defense.
+  // Duration caps are asymmetric across audio / video:
   //  - Each audio / video ref must be 1.8s-15.2s per file (the asset-upload
   //    step rejects with DurationTooLong / DurationTooShort if outside).
   //  - Audio refs: NO aggregate cap (verified: 3 audios totaling 37.84s succeed).

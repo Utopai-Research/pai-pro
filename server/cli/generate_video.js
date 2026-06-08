@@ -24,6 +24,7 @@ import {
   buildProviderRefs,
   readActiveProject,
   readNodeType,
+  readNodeDurationSec,
 } from "../local_mirror.js";
 import { postNodeAddBatch } from "./_mutate_helper.js";
 import {
@@ -232,6 +233,43 @@ try {
     fail("bad_args", `reference cap exceeded: ${overCaps.join("; ")}`);
     exitCode = 2;
     throw new Error("bad_args: ref cap exceeded");
+  }
+
+  // Enforce the VIDEO_LIMITS duration + anchor rules BEFORE buildProviderRefs
+  // and uploadReferences below — those upload each ref through
+  // video-generation-assets (~$0.01/ref) and the job then runs for minutes,
+  // so a duration / anchor overrun the provider would reject must fail here,
+  // unpaid. Durations come off the canvas nodes (video data.duration, audio
+  // metadata.duration_sec); unknown durations are skipped, not rejected.
+  const durFaults = [];
+  // Audio refs can't be the only reference input — they need an image or
+  // video visual anchor (a starting frame is just an image ref).
+  if (audSrcIds.length && !imgSrcIds.length && !vidSrcIds.length) {
+    durFaults.push("reference_audio cannot be the only reference input — add an image or video anchor");
+  }
+  let totalVideoSec = 0;
+  for (const sid of vidSrcIds) {
+    const sec = await readNodeDurationSec({ nodeId: sid, projectId });
+    if (sec === null) continue;
+    totalVideoSec += sec;
+    if (sec < VIDEO_LIMITS.min_video_sec || sec > VIDEO_LIMITS.max_video_sec) {
+      durFaults.push(`video ref ${sid} is ${sec}s, outside per-file ${VIDEO_LIMITS.min_video_sec}s–${VIDEO_LIMITS.max_video_sec}s`);
+    }
+  }
+  if (totalVideoSec > VIDEO_LIMITS.max_total_video_sec) {
+    durFaults.push(`video refs total ${+totalVideoSec.toFixed(2)}s > max_total_video_sec ${VIDEO_LIMITS.max_total_video_sec}s`);
+  }
+  for (const sid of audSrcIds) {
+    const sec = await readNodeDurationSec({ nodeId: sid, projectId });
+    if (sec === null) continue;
+    if (sec < VIDEO_LIMITS.min_audio_sec || sec > VIDEO_LIMITS.max_audio_sec) {
+      durFaults.push(`audio ref ${sid} is ${sec}s, outside per-file ${VIDEO_LIMITS.min_audio_sec}s–${VIDEO_LIMITS.max_audio_sec}s`);
+    }
+  }
+  if (durFaults.length) {
+    fail("bad_args", `reference limits violated: ${durFaults.join("; ")}`);
+    exitCode = 2;
+    throw new Error("bad_args: ref limits violated");
   }
 
   const resolvedImages = await buildProviderRefs({ sourceIds: imgSrcIds, projectId });
