@@ -38,6 +38,7 @@ import { createPortal } from 'react-dom'
 import {
   DndContext,
   DragOverlay,
+  KeyboardCode,
   KeyboardSensor,
   MouseSensor,
   TouchSensor,
@@ -950,7 +951,14 @@ export function TimelinePanel({
   const sensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { distance: 4 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+      keyboardCodes: {
+        start: [KeyboardCode.Enter],
+        cancel: [KeyboardCode.Esc],
+        end: [KeyboardCode.Enter, KeyboardCode.Tab],
+      },
+    }),
   )
 
   // Once the cursor commits to a droppable, stay committed until it
