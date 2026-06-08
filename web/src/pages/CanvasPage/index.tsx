@@ -145,20 +145,28 @@ function buildExpandPayload(node: CanvasNode, workflow: Workflow | null): MediaP
   return null
 }
 
-export default function CanvasPage(): JSX.Element | null {
+interface CanvasPageProps {
+  onArchiveNodes: (ids: string[]) => void
+}
+
+export default function CanvasPage({
+  onArchiveNodes,
+}: CanvasPageProps): JSX.Element | null {
   const { projectId = null } = useParams<{ projectId: string }>()
   return (
     <ProjectProvider projectId={projectId}>
       <CanvasSaveStatusProvider>
         <ReactFlowProvider>
-          <CanvasPageInner />
+          <CanvasPageInner onArchiveNodes={onArchiveNodes} />
         </ReactFlowProvider>
       </CanvasSaveStatusProvider>
     </ProjectProvider>
   )
 }
 
-function CanvasPageInner(): JSX.Element | null {
+function CanvasPageInner({
+  onArchiveNodes,
+}: CanvasPageProps): JSX.Element | null {
   const { projectId = null } = useParams<{ projectId: string }>()
   const {
     workflow,
@@ -449,41 +457,10 @@ function CanvasPageInner(): JSX.Element | null {
     return () => window.removeEventListener('keydown', handler)
   }, [rfNodes, openCreateModal])
 
-  // ── Archive (Del) + restore (Cmd+Z) ────────────────────────────────
+  // ── Archive (Del) ─────────────────────────────────────────────────
   //
-  // Del flips `archived: true`; Cmd+Z pops the last batch and restores
-  // via `archived: null` (deepMergePatch deletes the key). Silent — no
-  // toast; Cmd+Z is OS-native.
-
-  const archiveHistoryRef = useRef<string[][]>([])
-
-  const archiveNodes = useCallback(
-    (ids: string[]): void => {
-      if (projectId === null || ids.length === 0) return
-      archiveHistoryRef.current.push([...ids])
-      const archivedAt = new Date().toISOString()
-      void Promise.all(
-        ids.map((id) => {
-          // For video_result nodes, atomically clear shot_id alongside the
-          // archive flag so the clip vanishes from BOTH timeline and reel
-          // in a single mutation. Without this, archived clips can leak
-          // into "Available clips" (no shot_id) or stay in "On reel" /
-          // master MP4 (had shot_id). Restore brings them back off-reel;
-          // user re-drags onto reel if they want a specific slot.
-          const node = rfNodes.find((n) => n.id === id)
-          const patch = node?.type === 'video_result'
-            ? { archived: true, archived_at: archivedAt, shot_id: null }
-            : { archived: true, archived_at: archivedAt }
-          return mutateCanvas(projectId, 'updateNode', { id, patch }).catch((err) => {
-            console.warn(
-              `[canvas:${projectId}] archive ${id} failed: ${err instanceof Error ? err.message : String(err)}`,
-            )
-          })
-        }),
-      )
-    },
-    [projectId, rfNodes],
-  )
+  // Archive state and Cmd+Z restore live in CanvasView so Canvas and
+  // Timeline share one undo stack.
 
   useEffect(() => {
     const handler = (e: KeyboardEvent): void => {
@@ -511,55 +488,11 @@ function CanvasPageInner(): JSX.Element | null {
       )
       if (targets.length === 0) return
       e.preventDefault()
-      archiveNodes(targets.map((n) => n.id))
+      onArchiveNodes(targets.map((n) => n.id))
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [rfNodes, archiveNodes])
-
-  useEffect(() => {
-    const handler = (e: KeyboardEvent): void => {
-      const isCmdZ =
-        (e.metaKey || e.ctrlKey) &&
-        e.key.toLowerCase() === 'z' &&
-        !e.shiftKey &&
-        !e.altKey
-      if (!isCmdZ) return
-      const a = document.activeElement
-      const tag = a?.tagName
-      if (
-        tag === 'INPUT' ||
-        tag === 'TEXTAREA' ||
-        (a as HTMLElement | null)?.isContentEditable === true
-      ) {
-        return
-      }
-      const ids = archiveHistoryRef.current.pop()
-      if (ids === undefined || ids.length === 0) return
-      if (projectId === null) return
-      e.preventDefault()
-      void Promise.all(
-        ids.map((id) =>
-          mutateCanvas(projectId, 'updateNode', {
-            id,
-            patch: { archived: null, archived_at: null },
-          }).catch((err) => {
-            console.warn(
-              `[canvas:${projectId}] restore ${id} failed: ${err instanceof Error ? err.message : String(err)}`,
-            )
-          }),
-        ),
-      )
-    }
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
-  }, [projectId])
-
-  // Archive history is scoped to the current project. Switching wipes
-  // the stack so a Cmd+Z in project B can't restore a node from project A.
-  useEffect(() => {
-    archiveHistoryRef.current = []
-  }, [projectId])
+  }, [rfNodes, onArchiveNodes])
 
   // ── AssetRail drag-archived-to-cursor ──────────────────────────────
   //
@@ -913,7 +846,7 @@ function CanvasPageInner(): JSX.Element | null {
               nodeBorderRadius={2}
             />
             <ZoomBar onTidy={onTidy} />
-            <SelectionToolbar onGroup={openCreateModal} onArchive={archiveNodes} />
+            <SelectionToolbar onGroup={openCreateModal} onArchive={onArchiveNodes} />
           </ReactFlow>
           {/* Inside NodeActionsProvider so the overlay's useNodeActions() resolves.
               Inside FireConfirmProvider so the overlay's Generate button can

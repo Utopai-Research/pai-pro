@@ -7,7 +7,7 @@
  * restores at the original position; dragging the row places it at
  * the cursor. Single-click is a no-op (nothing to scroll to).
  */
-import { memo, useState } from 'react'
+import { memo, useEffect, useRef, useState } from 'react'
 import { useMediaExpand } from '@/contexts/MediaExpandContext'
 import type { AssetItem } from './useAssets'
 
@@ -18,6 +18,7 @@ export const DRAG_MIME = 'application/x-pai-archived-node'
 
 interface AssetRowProps {
   item: AssetItem
+  highlighted: boolean
   onClick: (item: AssetItem) => void
   onRestore: (id: string) => Promise<void> | void
 }
@@ -110,9 +111,22 @@ function AudioInline({ url }: { url: string }): JSX.Element {
   )
 }
 
-function AssetRowImpl({ item, onClick, onRestore }: AssetRowProps): JSX.Element {
+function AssetRowImpl({
+  item,
+  highlighted,
+  onClick,
+  onRestore,
+}: AssetRowProps): JSX.Element {
   const [restoring, setRestoring] = useState(false)
+  const rowRef = useRef<HTMLDivElement | null>(null)
   const expand = useMediaExpand()
+
+  useEffect(() => {
+    if (!highlighted) return
+    requestAnimationFrame(() => {
+      rowRef.current?.scrollIntoView({ block: 'center' })
+    })
+  }, [highlighted, item.archived, item.archived_at])
 
   const handleRestore = async (e: React.MouseEvent): Promise<void> => {
     e.stopPropagation()
@@ -145,6 +159,7 @@ function AssetRowImpl({ item, onClick, onRestore }: AssetRowProps): JSX.Element 
 
   return (
     <div
+      ref={rowRef}
       role="button"
       tabIndex={0}
       draggable={item.archived}
@@ -161,7 +176,12 @@ function AssetRowImpl({ item, onClick, onRestore }: AssetRowProps): JSX.Element 
         }
       }}
       title="Double-click to expand"
-      className="group flex cursor-pointer gap-2 rounded-md border border-transparent p-2 transition-colors hover:bg-neutral-900"
+      className={
+        'group flex cursor-pointer gap-2 rounded-md border p-2 transition-colors ' +
+        (highlighted
+          ? 'border-amber-300/70 bg-amber-300/10 shadow-[0_0_0_1px_rgba(252,211,77,0.18)]'
+          : 'border-transparent hover:bg-neutral-900')
+      }
     >
       <ThumbnailBox item={item} />
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">

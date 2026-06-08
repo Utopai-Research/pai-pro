@@ -1,11 +1,11 @@
 /**
- * ChatComposerContext — bridge between canvas controls and the terminal.
+ * ChatComposerContext — bridge between canvas/timeline controls and the terminal.
  *
- * The canvas's "📎 Refer" button needs to inject `@<nodeId>` text into
- * the mounted agent terminal. The canvas + terminal sit as siblings under
- * separate layout subtrees, so lifting a ref through every intermediate
- * would be invasive. Context fits: TerminalPanel registers its imperative
- * handle on mount; canvas controls consume it.
+ * Refer buttons need to inject `@<nodeId>` text into the mounted agent
+ * terminal. The terminal and controls sit as siblings under separate
+ * layout subtrees, so lifting a ref through every intermediate would be
+ * invasive. Context fits: TerminalPanel registers its imperative handle
+ * on mount; canvas and timeline controls consume it.
  */
 import {
   createContext,
@@ -60,7 +60,7 @@ export function ChatComposerProvider({ children }: { children: ReactNode }): JSX
 
 /**
  * Consumer hook for siblings that want to call into the composer
- * (e.g. SelectionToolbar's Refer button). Returns null when no
+ * (e.g. SelectionToolbar or timeline Refer buttons). Returns null when no
  * composer is mounted — callers should treat null as "Refer is a
  * no-op right now" rather than crashing.
  */

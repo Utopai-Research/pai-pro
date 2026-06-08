@@ -145,6 +145,22 @@ export async function mutateCanvas(
   return reply as { ok: true; [key: string]: unknown }
 }
 
+export interface CanvasNodeDataUpdate {
+  nodeId: string
+  data: Record<string, unknown>
+}
+
+export async function patchCanvasNodeDataBatch(
+  projectId: string | null,
+  updates: ReadonlyArray<CanvasNodeDataUpdate>,
+): Promise<void> {
+  if (!projectId || updates.length === 0) return
+  await patch(
+    `${VIEWER_URL}/projects/${encodeURIComponent(projectId)}/nodes/batch-data`,
+    { updates },
+  )
+}
+
 // ────────────────────────────────────────────────────────────────────
 // Pending-draft mutations. Each round-trip is fire-and-forget HTTP;
 // the viewer's chokidar watcher fans the resulting sidecar

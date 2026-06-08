@@ -39,9 +39,8 @@ export function VideoResultNode({ id, data, selected }: NodeProps): JSX.Element 
 
   const { onExpandMedia } = useNodeActions()
   // Read-only indicator: shown only when the clip is assigned to a reel
-  // slot. Assign + clear both live in the TimelinePanel (drag from
-  // Available to assign, Remove button to clear) so this badge has no
-  // click handler.
+  // slot. Assign + clear both live in the TimelinePanel, so this badge
+  // has no click handler.
   const showShotBadge = url !== null && url !== '' && shotId !== null
   const canExpand = url !== null && url !== '' && onExpandMedia !== undefined
   const expandVideo = (e: React.MouseEvent): void => {

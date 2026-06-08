@@ -12,8 +12,8 @@
  *   socket.on('pty:exit')           → annotate the terminal
  *   socket.on('pty:error', msg)     → annotate (e.g. node-pty missing)
  *
- * Registers a ChatComposerHandle so CanvasPage's SelectionToolbar
- * "Refer" button can type `@<nodeId>` text into the terminal directly.
+ * Registers a ChatComposerHandle so Refer actions can type `@<nodeId>`
+ * text into the terminal directly.
  */
 import { useEffect, useMemo, useRef } from 'react'
 import { io } from 'socket.io-client'

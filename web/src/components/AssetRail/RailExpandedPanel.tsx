@@ -14,6 +14,7 @@ import type { AssetItem, AssetKind } from './useAssets'
 interface RailExpandedPanelProps {
   kind: AssetKind
   items: AssetItem[]
+  highlightedId: string | null
   onRowClick: (item: AssetItem) => void
   onRestore: (id: string) => Promise<void> | void
   onHide: () => void
@@ -22,6 +23,7 @@ interface RailExpandedPanelProps {
 export function RailExpandedPanel({
   kind,
   items,
+  highlightedId,
   onRowClick,
   onRestore,
   onHide,
@@ -51,7 +53,12 @@ export function RailExpandedPanel({
                 <span className="flex-1 border-t border-neutral-800" />
               </div>
             ) : null}
-            <AssetRow item={item} onClick={onRowClick} onRestore={onRestore} />
+            <AssetRow
+              item={item}
+              highlighted={item.id === highlightedId}
+              onClick={onRowClick}
+              onRestore={onRestore}
+            />
           </Fragment>
         ))}
       </div>

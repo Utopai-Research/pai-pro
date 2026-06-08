@@ -5,8 +5,7 @@
  * missing handler as a noop.
  *
  * Reel assign/clear are NOT in this context — both live in the
- * TimelinePanel (drag from Available to assign, Remove button to
- * clear). The canvas video_result node renders a read-only `#N`
+ * TimelinePanel. The canvas video_result node renders a read-only `#N`
  * indicator when assigned, without any click handler.
  */
 import { createContext, useContext, type ReactNode } from 'react'

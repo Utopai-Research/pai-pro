@@ -65,6 +65,12 @@ interface AssetRailProps {
   workflow: Workflow | null
   hidden: boolean
   onToggleHidden: () => void
+  revealRequest: AssetRailRevealRequest | null
+}
+
+export interface AssetRailRevealRequest {
+  id: string
+  kind: AssetKind
 }
 
 export function AssetRail({
@@ -72,6 +78,7 @@ export function AssetRail({
   workflow,
   hidden,
   onToggleHidden,
+  revealRequest,
 }: AssetRailProps): JSX.Element | null {
   const groups = useAssets(workflow)
   const canvasFocus = useCanvasFocus()
@@ -82,6 +89,7 @@ export function AssetRail({
     readActiveTab(projectId),
   )
   const [panelWidth, setPanelWidth] = useState<number>(() => readWidth(projectId))
+  const [highlightedId, setHighlightedId] = useState<string | null>(null)
 
   useEffect(() => {
     setActiveTab(readActiveTab(projectId))
@@ -95,6 +103,16 @@ export function AssetRail({
     },
     [projectId],
   )
+
+  useEffect(() => {
+    if (revealRequest === null) return
+    persistTab(revealRequest.kind)
+    setHighlightedId(revealRequest.id)
+    const timer = window.setTimeout(() => {
+      setHighlightedId((curr) => (curr === revealRequest.id ? null : curr))
+    }, 3200)
+    return () => window.clearTimeout(timer)
+  }, [revealRequest, persistTab])
 
   // Tab-click semantics: open the panel if it's closed; close it if
   // clicking the already-active tab; just switch tabs otherwise. The
@@ -195,6 +213,7 @@ export function AssetRail({
             <RailExpandedPanel
               kind={activeTab}
               items={groups[activeTab]}
+              highlightedId={highlightedId}
               onRowClick={onRowClick}
               onRestore={onRestore}
               onHide={onToggleHidden}
