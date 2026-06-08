@@ -713,9 +713,8 @@ export function TimelinePanel({
   // assigns shot_id = i+1 to each reel node (skip if already correct)
   // and shot_id = null to anything that left the reel.
   //
-  // Still used by the explicit remove/add buttons (additive paths the
-  // dnd-kit migration kept). Cross-region drag goes through
-  // applyOptimisticOrder instead and bypasses this function.
+  // Explicit add/remove buttons use this path. Cross-region drag goes
+  // through applyOptimisticOrder instead.
   const reorderTo = async (
     sourceId: string,
     destination:
@@ -895,10 +894,9 @@ export function TimelinePanel({
 
     el.addEventListener('wheel', onWheel, { passive: false })
     return () => el.removeEventListener('wheel', onWheel)
-  }, [applyTimelineZoom, effectiveOrder.length, updateTimelineScrollState])
+  }, [applyTimelineZoom, updateTimelineScrollState])
 
-  // Sparse renumber: only PATCH the cards whose shot_id actually
-  // changes. 1-based, matching the existing reorderTo at line ~504.
+  // Sparse renumber: only PATCH the cards whose shot_id actually changes.
   const applyOptimisticOrder = useCallback(
     (nextIds: string[]) => {
       if (projectId === null) return
@@ -908,15 +906,8 @@ export function TimelinePanel({
       }
       setOptimisticOrder(nextIds)
       const updates: CanvasNodeDataUpdate[] = []
-      // Sparse renumber: emit shot_id = i+1 for any id whose current
-      // value differs. Look up in BOTH reel and available — a cross-
-      // region drag inserts an Available source id into nextIds; the
-      // source is in `available`, not `reel`. Without checking
-      // available, the source is silently skipped from the PATCH,
-      // never gets a shot_id, never joins the reel — and the
-      // optimistic preview gets stuck forever (truth never matches).
-      // Downstream symptoms: × Remove and playback both no-op on the
-      // ghost card because reel.findIndex returns -1.
+      // Cross-region drag inserts an Available source id into nextIds,
+      // so look up candidates in both sections before assigning shot_id.
       nextIds.forEach((id, i) => {
         const node =
           reel.find((n) => n.id === id) ??
@@ -1051,17 +1042,9 @@ export function TimelinePanel({
       }
       const sourceId = String(active.id)
       const overId = String(over.id)
-      // `sourceId === overId` has TWO meanings depending on whether
-      // source was in the pre-drag reel:
-      //   - Intra-reel (source IN baseline): dropped on own original
-      //     slot — true no-op.
-      //   - Cross-region (source NOT in baseline): handleDragOver has
-      //     spliced source into the reel's optimistic preview at the
-      //     cursor position. dnd-kit's collision then picks the source's
-      //     own preview-position <SortableClip> as the over target on
-      //     release. THIS IS A COMMIT, not a no-op. Returning here was
-      //     the root cause of the "drag-up doesn't assign shot_id" bug
-      //     — handleDragOver's preview was stuck and never persisted.
+      // Dropping on itself is only a no-op for pre-existing reel clips.
+      // A cross-region source can be over its optimistic preview slot;
+      // commit that preview instead of treating it as unchanged.
       if (sourceId === overId) {
         if (baseline.includes(sourceId)) return
         if (optimisticOrder) applyOptimisticOrder(optimisticOrder)
@@ -1371,14 +1354,8 @@ export function TimelinePanel({
           {/* Reel section */}
           <div className="border-b border-neutral-900">
             <div className="min-h-[88px] px-4 py-3">
-              {/* ReelAreaDroppable is always mounted (id 'reel-area').
-                  Drop on it = "append at end of current reel" — handles
-                  both the empty-reel case (drag a clip onto the
-                  placeholder, becomes reel #1) and the non-empty append
-                  case (drop past the last card, becomes reel #N+1).
-                  Specific-card drops still take precedence via
-                  pointerWithin against each SortableClip's own
-                  droppable. */}
+              {/* ReelAreaDroppable handles empty-reel drops and appends
+                  past the last card; card drops still take precedence. */}
               <ReelAreaDroppable showEmptyHint={effectiveOrder.length === 0}>
                 <div className="relative rounded-md border border-neutral-900 bg-neutral-950/40">
                   <div

@@ -1,6 +1,6 @@
 /**
  * The dashed-border + diagonal-striped tile that replaces a clip's
- * visible body for the duration of a drag (handover §10.1). Communicates
+ * visible body for the duration of a drag. Communicates
  * "the dragged clip's slot lives here; neighbors slide around it" — the
  * Premiere/CapCut convention.
  *

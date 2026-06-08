@@ -1,7 +1,5 @@
 /**
- * Per-clip sortable wrapper for the reel. Adapted from pai-next's
- * handover §10.3 to pai-pro's duration-scaled row + VideoResultNode
- * shape.
+ * Per-clip sortable wrapper for the duration-scaled reel row.
  *
  * Responsibilities:
  *   - Register the clip with dnd-kit via useSortable so the parent
@@ -13,16 +11,11 @@
  *     "the clip is travelling; it'll land back here on cancel" — the
  *     Premiere/CapCut convention.
  *
- * The cursor-following ghost is rendered separately in <DragOverlay>
- * (see ClipGhostBody in TimelinePanel.tsx) — this wrapper only owns
- * the source-slot rendering.
+ * The cursor-following ghost is rendered separately in <DragOverlay>;
+ * this wrapper only owns the source-slot rendering.
  *
- * The post-drop "transition trust" rule (handover §5.4): pass
- * useSortable's returned `transition` string verbatim. Do NOT replace
- * it with your own duration string conditional on isDragging — dnd-kit
- * returns 'transform 0ms linear' on the post-drop frame as a sentinel
- * to disable animation, and overriding it produces a visible "twitch"
- * where the dropped clip overshoots its destination and eases back.
+ * Pass useSortable's returned `transition` string verbatim. dnd-kit
+ * uses a 0ms post-drop transition to prevent a visible overshoot.
  */
 import type { ReactNode } from 'react'
 import { useSortable } from '@dnd-kit/sortable'
@@ -69,7 +62,6 @@ export default function SortableClip({
         minWidth: `${widthPx}px`,
         flexShrink: 0,
         transform: CSS.Translate.toString(transform),
-        // Pass dnd-kit's transition verbatim — see file-level comment.
         transition: transition ?? undefined,
         // Hide the dragged clip's own slot visual (the placeholder fills
         // the same box) without collapsing layout — the wrapper's box
