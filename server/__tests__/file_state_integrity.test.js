@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import fsp from "node:fs/promises";
 import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -23,6 +24,67 @@ test("writeFileOnce preserves the first writer and removes temp artifacts", asyn
   assert.equal(typeof parsed.writer, "number");
   const leftovers = (await readdir(dir)).filter((name) => name.endsWith(".tmp") || name.endsWith(".lock"));
   assert.deepEqual(leftovers, []);
+});
+
+// Forces the no-hardlink fallback for the rest of the block by making
+// `fsp.link` raise EXDEV (cross-mount) — the shipped Docker bind-mount mode.
+// Each test restores the real implementation in its own `t.after`.
+function stubLinkUnsupported(t) {
+  const realLink = fsp.link;
+  t.after(() => {
+    fsp.link = realLink;
+  });
+  fsp.link = async () => {
+    const err = new Error("EXDEV: cross-device link not permitted");
+    err.code = "EXDEV";
+    throw err;
+  };
+}
+
+test("writeFileOnce fallback lands the bytes when hardlink is unsupported", async (t) => {
+  stubLinkUnsupported(t);
+  const dir = await mkdtemp(join(tmpdir(), "file-state-integrity-"));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const target = join(dir, "result.json");
+
+  const wrote = await writeFileOnce(target, JSON.stringify({ writer: "fallback" }) + "\n");
+
+  assert.equal(wrote, true);
+  assert.deepEqual(JSON.parse(await readFile(target, "utf8")), { writer: "fallback" });
+  const leftovers = (await readdir(dir)).filter(
+    (name) => name.endsWith(".tmp") || name.endsWith(".lock"),
+  );
+  assert.deepEqual(leftovers, []);
+});
+
+test("writeFileOnce fallback is not wedged by an orphaned .lock", async (t) => {
+  stubLinkUnsupported(t);
+  const dir = await mkdtemp(join(tmpdir(), "file-state-integrity-"));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const target = join(dir, "result.json");
+
+  // Simulate a crash that orphaned the old lock file: the lock exists but the
+  // target never landed. The pre-fix fallback returned false here forever.
+  await writeFile(`${target}.lock`, "");
+
+  const wrote = await writeFileOnce(target, JSON.stringify({ writer: "after-crash" }) + "\n");
+
+  assert.equal(wrote, true);
+  assert.deepEqual(JSON.parse(await readFile(target, "utf8")), { writer: "after-crash" });
+});
+
+test("writeFileOnce fallback keeps once-semantics for an existing target", async (t) => {
+  stubLinkUnsupported(t);
+  const dir = await mkdtemp(join(tmpdir(), "file-state-integrity-"));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const target = join(dir, "result.json");
+
+  const first = await writeFileOnce(target, JSON.stringify({ writer: "first" }) + "\n");
+  const second = await writeFileOnce(target, JSON.stringify({ writer: "second" }) + "\n");
+
+  assert.equal(first, true);
+  assert.equal(second, false);
+  assert.deepEqual(JSON.parse(await readFile(target, "utf8")), { writer: "first" });
 });
 
 test("writeResultSidecar uses the shared write-once result helper", async (t) => {
