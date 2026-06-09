@@ -2,23 +2,13 @@
 
 For one polished cinematic clip. Patterns 1, 2, 3 dispatch here for polish.
 
-## Contents
-
-- When to skip
-- Slot-by-slot bracket scaffold
-- Adjacent roles
-- Worked examples
-- What to lock vs. what to change
-- Troubleshooting
-- Fallback branch
-
 ## When to skip
 
 A quick T2V request where a direct sentence works ("a runner at sunset, slow dolly-in"). Don't add the bracket scaffold reflex — direct prose is faster and produces the same result.
 
 ## Slot-by-slot bracket scaffold
 
-For ordinary single-shot polish (non-storyboard), use this scaffold. Fill each slot deliberately:
+For ordinary single-shot polish (non-storyboard), choose emotion, power holder, and key visual first, then fill:
 
 ```
 [Style] one dense one-liner — camera, palette, grain, lens
@@ -37,43 +27,27 @@ For ordinary single-shot polish (non-storyboard), use this scaffold. Fill each s
 - **Scene** — one paragraph; weather and time matter (fog, golden hour, dusk).
 - **Character** — name each character's face / build / wardrobe; if there's a canvas character, reference it as `@Image1` and bind by role.
 - **Shot.Action** — one motion beat, one sentence.
-- **Sound / Atmosphere** — diegetic sounds (rain, footsteps), ambient mood; mention BGM only if you're attaching audio.
+- **Sound / Atmosphere** — ambient + action SFX + music, or `No Music`.
 - **Negative** — closing line every time for brand / portrait work.
 
 ## Adjacent roles
 
 Pattern-specific notes (the role vocabulary itself is in SKILL.md):
 
-- **Lip-sync:** combine character image ref + spoken audio. Use *`The character in @Image1 says exactly: "...". Use @Audio1 for timing, cadence, and voice. Keep the words unchanged.`* Never `@Image1 says` (images don't talk).
+- **Lip-sync:** character voice sample uses *`Use @Audio1 as the voice/timbre reference only. Speak the quoted line exactly once, no echo.`* Final line audio uses *`Use @Audio1 for timing, cadence, and voice. Keep the words unchanged.`* Never `@Image1 says`.
 - **Camera-move source:** borrow camera grammar from `@Video1` without re-rendering the source.
 
-## Worked examples
-
-**1. Character close-up:**
+## Example
 
 ```
-[Style] Photoreal cinematic look. Full-frame cinema camera, 50mm prime, shallow DOF, soft key light with ambient fill, restrained palette, subtle film grain.
+[Style] Intimate close-up, 50mm prime, shallow DOF, handheld, subtle, cool window light.
 [Duration] 6 seconds
-[Scene] Empty diner at 3am, blue-green fluorescents, drizzle out the window.
-[Character] The character in @Image1: middle-aged detective, trench coat, three-day stubble, focused gaze.
+[Scene] Rainy apartment hallway at night, elevator glow behind the character.
+[Character] The character in @Image1, same face and wardrobe.
 [Shot]
-  Visuals: Medium close-up on the detective's face, slight tilt down to a coffee cup as he sets it on the formica.
-  Action: He looks up slowly, eyes lifting into focus.
-  Sound: Distant rain, quiet diner ambience, the faint clink of the cup.
-[Negative] no captions, watermarks, distortion, stretching.
-```
-
-**2. Brand / product:**
-
-```
-[Style] High-fashion product film. Macro lens, 24fps, soft rim light + warm fill, glossy palette, no oversaturation.
-[Duration] 5 seconds
-[Scene] Matte black turntable against a deep navy seamless backdrop.
-[Character] (none — product hero shot.)
-[Shot]
-  Visuals: A perfume bottle in slow rotation, dust motes catching the rim light.
-  Action: One slow 180° rotation; the label glides into frame and stops centered.
-  Sound: Low ambient drone, single faint chime as the label centers.
+  Visuals: Medium close-up; her eyes lock on someone off-camera.
+  Action: She says exactly: "Stay with me." Use @Audio1 as the voice/timbre reference only. Speak the quoted line exactly once, no echo.
+  Sound / Atmosphere: rain on glass, elevator hum. No Music.
 [Negative] no captions, watermarks, distortion, stretching.
 ```
 

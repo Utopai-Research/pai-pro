@@ -78,8 +78,8 @@ The same CLI flag can serve different semantic roles depending on how the prompt
 - Dialogue scenes: keep the shot/script dialogue in the prompt; use one approved voice sample per speaker as a timbre anchor. Do not generate per-line audio refs unless the user explicitly wants separate final audio.
 - Final audio exception: if an audio node is the approved narration/line read, use `audio_result.data.text` verbatim. If it is just a character voice sample, do not replace the shot dialogue with the sample text.
 - Add dialogue guards for model-spoken lines: *"each line spoken exactly once, no echo, no repeated reads."* Add phonetic spelling for names or words likely to slur.
-- Camera language is **rules, not adjectives** — *"one-take"*, *"steady follow shot"*, *"Iaijutsu draw"* not *"cinematic"*, *"fast"*, *"high-quality"*.
-- Avoid conflicting instructions ("static camera" + "orbit shot").
+- Direction beats adjectives: one camera move, one action speed, concrete sound/music (`No Music` if none). Use exact terms: `locked off`, `handheld, subtle`, `slow dolly in`, `slow orbit`, `whip pan`, `speed ramp`.
+- Avoid conflicts ("static camera" + "orbit shot").
 - For brand / MV / ad work, end the prompt with a negative line: *"no captions, watermarks, distortion, stretching."*
 - For polish on a single-shot clip: see [`references/video-single-shot.md`](references/video-single-shot.md).
 
