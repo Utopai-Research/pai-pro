@@ -9,7 +9,7 @@ For ad / MV / brand pieces, or short scripts that need ≥2 distinct beats insid
 
 ## Cross-skill source — script shot notes
 
-When script shot notes exist on canvas (from `script-compose`), the 4-section timeline below can be populated from their verbatim bodies instead of fresh prompt design. Locate shot notes structurally via `data.subtype === "shot"` (the truth source); fall back to the legacy `label: "Shot N (a–b s)"` pattern for pre-subtype notes. For each canvas shot note:
+When script shot notes exist on canvas, populate the timeline from their verbatim bodies. Locate them by `data.subtype === "shot"`; fall back to legacy `label: "Shot N (a–b s)"`.
 
 - The note's body is a verbatim screenplay slice (slug + action + dialogue).
 - Translate the action lines into Visuals + Action wording in the timeline.
@@ -65,6 +65,23 @@ Pattern-specific notes (the role vocabulary itself is in SKILL.md):
 - **Character image refs:** identity locks across all shots in the timeline.
 - **Spoken audio:** assign to shots. Voice sample: *`Use @Audio1 as the voice/timbre reference only; speak the quoted line once, no echo.`* Final read: *`Use @Audio1 for timing, cadence, and voice. Keep the words unchanged.`*
 - **Camera-move source:** rare — borrow camera grammar into one specific shot.
+
+## Examples
+```
+Timeline:
+SHOT 1 (0-2s) — hook: bottle already falling toward wet stone. Locked off macro. Speed ramp (deceleration). Sound: glass rush, sub hit. No Music.
+SHOT 2 (2-5s) — catch: the character in @Image1 catches it before impact. Handheld, subtle. Sound: breath, rain.
+SHOT 3 (5-8s) — reveal: slow orbit as the label faces camera. Bloom flash. Sound: clean chime.
+Effects inventory: speed ramp x1 (shot 1), bloom flash x1 (shot 3).
+Density map: 0-2s HIGH, 2-5s LOW, 5-8s MED.
+Energy arc: impact save, human beat, product reveal.
+Storyboard:
+Multi-shot sequence built from the storyboard panels in @Image1; follow panel order and do not render the grid. The detective in @Image2 stays in the same coat and rain-damp lighting.
+SHOT 1 (0-5s) — panel 1: he enters the diner. Slow handheld follow. Sound: rain, bell.
+SHOT 2 (5-10s) — panel 2: coffee lands beside the clue. Static close-up. Sound: ceramic tap.
+SHOT 3 (10-15s) — panel 3: his eyes register the door opening. Slow dolly in. Sound: room tone drops. No Music.
+No captions, subtitles, storyboard grid, panel numbers, or guide marks.
+```
 
 ## What to lock vs. what to change
 

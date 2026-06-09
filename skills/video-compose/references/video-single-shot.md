@@ -37,6 +37,20 @@ Pattern-specific notes (the role vocabulary itself is in SKILL.md):
 - **Lip-sync:** character voice sample uses *`Use @Audio1 as the voice/timbre reference only. Speak the quoted line exactly once, no echo.`* Final line audio uses *`Use @Audio1 for timing, cadence, and voice. Keep the words unchanged.`* Never `@Image1 says`.
 - **Camera-move source:** borrow camera grammar from `@Video1` without re-rendering the source.
 
+## Example
+
+```
+[Style] Intimate close-up, 50mm prime, shallow DOF, handheld, subtle, cool window light.
+[Duration] 6 seconds
+[Scene] Rainy apartment hallway at night, elevator glow behind the character.
+[Character] The character in @Image1, same face and wardrobe.
+[Shot]
+  Visuals: Medium close-up; her eyes lock on someone off-camera.
+  Action: She says exactly: "Stay with me." Use @Audio1 as the voice/timbre reference only. Speak the quoted line exactly once, no echo.
+  Sound / Atmosphere: rain on glass, elevator hum. No Music.
+[Negative] no captions, watermarks, distortion, stretching.
+```
+
 ## What to lock vs. what to change
 
 - **Lock from refs:** identity, wardrobe, location continuity, lighting state.
