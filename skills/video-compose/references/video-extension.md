@@ -33,7 +33,7 @@ Continue from @Video1 — start AFTER its final frame; do not include any frames
 
 Then write what happens next, in plain language.
 
-For script-driven links, copy dialogue/VO from the shot note exactly. If an audio ref is attached for the line, still include the exact text and add: *"Use @Audio1 for timing, cadence, and voice. Keep the words unchanged."*
+For script-driven links, copy dialogue/VO exactly. If an audio ref is a final read, add: *"Use @Audio1 for timing, cadence, and voice. Keep the words unchanged."* If it is a voice sample, use it only as a timbre anchor.
 
 **Anti-pattern: re-describing the world.** The reference video provides composition, location, lighting, character pose; the prompt provides the *new action*.
 
@@ -47,7 +47,7 @@ For script-driven links, copy dialogue/VO from the shot note exactly. If an audi
 Pattern-specific notes (the role vocabulary itself is in SKILL.md):
 
 - **Character image ref:** locks identity across links — the source video may drift, the explicit ref reinforces.
-- **Spoken audio:** include the exact continuing dialogue/VO text and use the same `@Audio1` for timing, cadence, and voice.
+- **Spoken audio:** include exact dialogue/VO. Use `@Audio1` as final read or timbre anchor per `SKILL.md`.
 - **Camera-move source:** rare — switch camera grammar mid-chain.
 
 ## What to lock vs. what to change

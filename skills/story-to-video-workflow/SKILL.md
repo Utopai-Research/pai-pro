@@ -62,8 +62,7 @@ Capability skills own CLI flags, node grammar, reference flags, and domain-speci
 - Spoken words live on script/shot notes and `audio_result.data.text`.
 - `voice-compose` owns generating or preserving the exact spoken text.
 - `audio_result.data.text` is the exact speech source of truth after voice generation.
-- `video-compose` should include spoken text verbatim in the video prompt and use audio nodes for timing, cadence, and voice. It should not rewrite, paraphrase, or invent dialogue when an audio node already carries the speech.
-- `video-compose` Pattern 6 owns the narration and on-screen dialogue prompt wording; defer to it for exact templates.
+- `video-compose` includes spoken text verbatim; Pattern 6 distinguishes final reads from timbre anchors.
 
 ## Recommendation shape
 
