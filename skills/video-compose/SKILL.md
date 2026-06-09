@@ -69,13 +69,15 @@ The same CLI flag can serve different semantic roles depending on how the prompt
 | Camera-move source | `--ref-source-id` (video) | "camera moves match @Video1" |
 | Action source | `--ref-source-id` (video) | "action choreography matches @Video1" |
 | VFX template | `--ref-source-id` (video) | "use the visual-effects template from @Video1" |
-| Spoken audio / voice | `--ref-audio-source-id` | "Use @Audio1 for timing, cadence, and voice." |
+| Voice / timbre anchor | `--ref-audio-source-id` | "Use @Audio1 as the voice/timbre reference. Speak the quoted line exactly once, no echo." |
 
 ## Prompt-language conventions
 
 - Reference syntax: `@Image1` / `@Video1` / `@Audio1`, positional, in `--ref-source-id` / `--ref-audio-source-id` order (image and video refs share the `@Image…` / `@Video…` slot per their source node type).
-- Spoken text rule: when a script note, shot note, user dialogue, or `audio_result.data.text` contains spoken words, include those words in the video prompt verbatim. Do not summarize, translate, shorten, polish, or invent dialogue/VO.
-- Spoken source priority: use `audio_result.data.text` when present; otherwise use the exact script/shot-note dialogue. If audio text and note text disagree, ask unless the audio node is clearly the approved final read. For audio uploads without text, reference the audio but do not invent transcript text.
+- Spoken text rule: when a script note, shot note, or user request contains dialogue/VO, include those words in the video prompt verbatim. Do not summarize, translate, shorten, polish, or invent dialogue/VO.
+- Dialogue scenes: keep the shot/script dialogue in the prompt; use one approved voice sample per speaker as a timbre anchor. Do not generate per-line audio refs unless the user explicitly wants separate final audio.
+- Final audio exception: if an audio node is the approved narration/line read, use `audio_result.data.text` verbatim. If it is just a character voice sample, do not replace the shot dialogue with the sample text.
+- Add dialogue guards for model-spoken lines: *"each line spoken exactly once, no echo, no repeated reads."* Add phonetic spelling for names or words likely to slur.
 - Camera language is **rules, not adjectives** — *"one-take"*, *"steady follow shot"*, *"Iaijutsu draw"* not *"cinematic"*, *"fast"*, *"high-quality"*.
 - Avoid conflicting instructions ("static camera" + "orbit shot").
 - For brand / MV / ad work, end the prompt with a negative line: *"no captions, watermarks, distortion, stretching."*
@@ -133,11 +135,10 @@ Pick the one that fits. For source lookup, follow the project `PROJECT_AGENT.md`
 **Source:** any canvas `audio_result` node — agent-generated or user-uploaded.
 **Call:** `node "$PAI_REPO_ROOT/server/cli/generate_video.js" --prompt "..." --ref-audio-source-id <audio_id>`. Often combined with character image refs for face + voice — pass both `--ref-source-id <character_id>` (for the character image) and `--ref-audio-source-id <audio_id>` (for the voice).
 **Prompt:**
-- If the audio node contains speech (`audio_result.data.text`), include that exact text in the video prompt and bind `@Audio1` to timing/cadence/voice.
-- For off-screen narration: *`V.O. says exactly: "..." Use @Audio1 for narration timing, cadence, and voice. Visuals should pace to the narration. Do not render captions or on-screen transcript text.`*
-- For on-screen dialogue with a character image: *`The character in @Image1 says exactly: "...". Use @Audio1 for timing, cadence, and voice. Keep the words unchanged.`*
-- If there is no audio node yet and the user wants the video model to generate speech directly, preserve the requested dialogue verbatim in the prompt as `[Character] says exactly: "..."`; prefer routing to `voice-compose` first when exact VO/dialogue matters.
-- For audio uploads without `data.text`, reference the audio for sound/timing but do not invent transcript text.
+- Character voice sample: *`The character in @Image1 says exactly: "...". Use @Audio1 as the voice/timbre reference only. Speak the quoted line exactly once, no echo, no repeated reads.`*
+- Approved final narration/line read: use `audio_result.data.text` exactly and bind it with *`Use @Audio1 for timing, cadence, and voice. Keep the words unchanged.`*
+- No audio node: preserve requested dialogue verbatim as `[Character] says exactly: "..."`; add the once/no-echo guard and phonetic spellings for risky words.
+- Audio uploads without `data.text`: reference the audio for sound/timing only; do not invent transcript text.
 - Never treat an image as the speech source; images can identify the speaker, but the spoken words come from the audio node, script/shot note, or user-provided dialogue.
 
 **Edges:** depends on which character refs attach (one `kind: "derived"` per ref).
