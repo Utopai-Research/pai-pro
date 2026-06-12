@@ -679,6 +679,18 @@ export function TimelinePanel({
     setTime(t)
   }
 
+  const seekPreviewTo = (nextTime: number): void => {
+    if (total <= 0) return
+    const t = Math.max(0, Math.min(total, nextTime))
+    if (playlistMode === 'reel') {
+      seekReelTo(t)
+      return
+    }
+    const v = videoRef.current
+    if (v) { try { v.currentTime = t } catch { /* noop */ } }
+    setTime(t)
+  }
+
   const seekReelFromClientX = (clientX: number): void => {
     const el = timelineScrollRef.current
     if (!el) return
@@ -1178,9 +1190,14 @@ export function TimelinePanel({
   // panel, or inside the fullscreen modal. Keeping a single render
   // path avoids the JSX duplication that drifts under maintenance.
   const renderPreviewChrome = (variant: 'inline' | 'modal'): JSX.Element => {
-    const expandTitle =
-      variant === 'modal' ? 'Close (Esc)' : 'Expand to fullscreen modal'
-    const expandLabel = variant === 'modal' ? '✕ Close' : '⛶ Expand'
+    const expandTooltip = variant === 'modal' ? 'Close' : 'Expand'
+    const expandIcon = variant === 'modal' ? '✕' : '⛶'
+    const playTooltip =
+      playing ? 'Pause' : time >= total && total > 0 ? 'Replay' : 'Play'
+    const playIcon =
+      playing ? '⏸' : time >= total && total > 0 ? '↻' : '▶'
+    const toolbarIconClass =
+      'grid h-8 w-10 shrink-0 place-items-center rounded-md border border-neutral-700 bg-neutral-900 text-[13px] leading-none text-neutral-200 transition-colors hover:border-neutral-500 hover:text-white'
     // Master-build status overlay. Only meaningful in reel
     // mode — single-clip preview never waits on a master.
     const overlays = (
@@ -1246,29 +1263,42 @@ export function TimelinePanel({
             </div>
           </div>
         )}
+        {variant === 'modal' ? (
+          <div className="px-5 pb-1 pt-3">
+            <input
+              type="range"
+              min={0}
+              max={Math.max(total, 0.01)}
+              step={0.01}
+              value={Math.max(0, Math.min(total, time))}
+              disabled={total <= 0}
+              aria-label="Seek preview"
+              title="Seek preview"
+              onChange={(e) => seekPreviewTo(Number(e.target.value))}
+              className="h-1 w-full cursor-pointer accent-neutral-200 disabled:cursor-not-allowed disabled:opacity-40"
+            />
+          </div>
+        ) : null}
         <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 px-4 py-2 text-neutral-300">
           <div className="flex min-w-0 items-center gap-3">
-            <button
-              type="button"
+            <TimelineIconButton
+              label={playTooltip}
+              ariaLabel={playTooltip}
               onClick={togglePlay}
-              className="rounded-md border border-neutral-700 bg-neutral-900 px-3 py-1 text-xs hover:border-neutral-500"
+              className={toolbarIconClass}
             >
-              {playing
-                ? '⏸ Pause'
-                : time >= total && total > 0
-                  ? '↻ Replay'
-                  : '▶ Play'}
-            </button>
-            <button
-              type="button"
+              <span aria-hidden>{playIcon}</span>
+            </TimelineIconButton>
+            <TimelineIconButton
+              label="Restart"
+              ariaLabel="Restart"
               onClick={restart}
-              className="rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1 text-xs hover:border-neutral-500"
-              title="Restart"
+              className={toolbarIconClass}
             >
-              ↺
-            </button>
+              <span aria-hidden>↺</span>
+            </TimelineIconButton>
           </div>
-          <div className="font-mono text-[12px] text-neutral-400 tabular-nums">
+          <div className="font-mono text-[11px] text-neutral-400 tabular-nums">
             {formatTime(time)}
             <span className="px-1.5 text-neutral-700">/</span>
             {formatTime(total)}
@@ -1280,43 +1310,30 @@ export function TimelinePanel({
                 onChange={applyTimelineZoom}
               />
             ) : null}
-            <button
-              type="button"
-              onClick={() => void downloadReel()}
+            <TimelineIconButton
+              label="Download"
+              ariaLabel="Download"
               disabled={downloading || reel.length === 0}
+              onClick={() => void downloadReel()}
               className={
-                'inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-[11px] uppercase tracking-wide transition-colors ' +
+                'grid h-8 w-10 shrink-0 place-items-center rounded-md border text-[13px] leading-none transition-colors ' +
                 (downloading
                   ? 'cursor-wait border-neutral-700 bg-neutral-900 text-neutral-400'
                   : reel.length === 0
                     ? 'cursor-not-allowed border-neutral-800 bg-neutral-950 text-neutral-600'
                     : 'border-neutral-700 bg-neutral-900 text-neutral-200 hover:border-neutral-500 hover:text-white')
               }
-              title={
-                reel.length === 0
-                  ? 'Add at least one shot to the reel first'
-                  : downloading
-                    ? 'Stitching reel via ffmpeg…'
-                    : `Stitch ${reel.length} shot${reel.length === 1 ? '' : 's'} and download`
-              }
             >
-              {downloading ? (
-                <>
-                  <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-neutral-400" />
-                  Stitching…
-                </>
-              ) : (
-                <>↓ Download</>
-              )}
-            </button>
-            <button
-              type="button"
+              <span aria-hidden className={downloading ? 'animate-pulse' : ''}>↓</span>
+            </TimelineIconButton>
+            <TimelineIconButton
+              label={expandTooltip}
+              ariaLabel={variant === 'modal' ? 'Close fullscreen preview' : 'Expand'}
               onClick={() => setFullscreenOpen((o) => !o)}
-              className="inline-flex items-center gap-1.5 rounded-md border border-neutral-700 bg-neutral-900 px-2.5 py-1 text-[11px] uppercase tracking-wide text-neutral-200 transition-colors hover:border-neutral-500 hover:text-white"
-              title={expandTitle}
+              className={toolbarIconClass}
             >
-              {expandLabel}
-            </button>
+              <span aria-hidden>{expandIcon}</span>
+            </TimelineIconButton>
           </div>
         </div>
       </>

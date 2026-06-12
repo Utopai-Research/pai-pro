@@ -1,5 +1,5 @@
 /**
- * RailIconColumn — always-visible 48 px tab bar.
+ * RailIconColumn — always-visible 44 px tab bar.
  *
  * Four monochrome SVG icons (images / videos / audios / notes) with
  * neutral count badges. Clicking a tab calls `onTabClick(kind)`; the
@@ -33,7 +33,7 @@ export function RailIconColumn({
   onTabClick,
 }: RailIconColumnProps): JSX.Element {
   return (
-    <div className="flex h-full w-12 shrink-0 flex-col items-center border-r border-neutral-800 bg-[#0a0a0a] py-2">
+    <div className="flex h-full w-11 shrink-0 flex-col items-center border-r border-neutral-800 bg-[#0a0a0a] py-2">
       <div className="flex flex-col items-center gap-1">
         {TABS.map(({ kind, label, Icon }) => {
           const total = groups.counts[kind]
@@ -57,7 +57,7 @@ export function RailIconColumn({
               aria-label={tip}
               aria-pressed={active}
               className={
-                'relative flex h-9 w-9 items-center justify-center rounded-md transition-colors ' +
+                'relative flex h-8 w-8 items-center justify-center rounded-md transition-colors ' +
                 (active
                   ? 'bg-neutral-800 text-neutral-100'
                   : 'text-neutral-500 hover:bg-neutral-900 hover:text-neutral-200')
