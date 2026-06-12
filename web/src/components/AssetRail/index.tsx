@@ -1,7 +1,7 @@
 /**
  * AssetRail — persistent left rail showing the project's asset library.
  *
- * The 48 px icon column is always visible. The expanded panel toggles
+ * The 44 px icon column is always visible. The expanded panel toggles
  * via clicking a tab icon (open + switch, or close if it's already
  * the active tab), the `‹` button in the panel header, or `[`.
  * `hidden` here means "panel closed" — icons stay; owned at CanvasView
@@ -20,9 +20,10 @@ import { RailExpandedPanel } from './RailExpandedPanel'
 import { RailIconColumn } from './RailIconColumn'
 import { useAssets, type AssetItem, type AssetKind } from './useAssets'
 
-const PANEL_MIN_WIDTH = 220
+const RAIL_ICON_WIDTH = 44
+const PANEL_MIN_WIDTH = 200
 const PANEL_MAX_WIDTH = 380
-const PANEL_DEFAULT_WIDTH = 260
+const PANEL_DEFAULT_WIDTH = 240
 
 const lsWidthKey = (projectId: string): string =>
   `pai-pro:asset-rail:width:${projectId}`
@@ -199,7 +200,7 @@ export function AssetRail({
   return (
     <aside
       className="relative flex h-full shrink-0 bg-[#0a0a0a]"
-      style={{ width: hidden ? 48 : 48 + panelWidth }}
+      style={{ width: hidden ? RAIL_ICON_WIDTH : RAIL_ICON_WIDTH + panelWidth }}
     >
       <RailIconColumn
         groups={groups}

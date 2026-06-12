@@ -1178,9 +1178,8 @@ export function TimelinePanel({
   // panel, or inside the fullscreen modal. Keeping a single render
   // path avoids the JSX duplication that drifts under maintenance.
   const renderPreviewChrome = (variant: 'inline' | 'modal'): JSX.Element => {
-    const expandTitle =
-      variant === 'modal' ? 'Close (Esc)' : 'Expand to fullscreen modal'
-    const expandLabel = variant === 'modal' ? '✕ Close' : '⛶ Expand'
+    const expandTooltip = variant === 'modal' ? 'Close' : 'Expand'
+    const expandIcon = variant === 'modal' ? '✕' : '⛶'
     // Master-build status overlay. Only meaningful in reel
     // mode — single-clip preview never waits on a master.
     const overlays = (
@@ -1280,43 +1279,30 @@ export function TimelinePanel({
                 onChange={applyTimelineZoom}
               />
             ) : null}
-            <button
-              type="button"
-              onClick={() => void downloadReel()}
+            <TimelineIconButton
+              label="Download"
+              ariaLabel="Download"
               disabled={downloading || reel.length === 0}
+              onClick={() => void downloadReel()}
               className={
-                'inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-[11px] uppercase tracking-wide transition-colors ' +
+                'grid h-8 w-10 shrink-0 place-items-center rounded-md border text-[15px] leading-none transition-colors ' +
                 (downloading
                   ? 'cursor-wait border-neutral-700 bg-neutral-900 text-neutral-400'
                   : reel.length === 0
                     ? 'cursor-not-allowed border-neutral-800 bg-neutral-950 text-neutral-600'
                     : 'border-neutral-700 bg-neutral-900 text-neutral-200 hover:border-neutral-500 hover:text-white')
               }
-              title={
-                reel.length === 0
-                  ? 'Add at least one shot to the reel first'
-                  : downloading
-                    ? 'Stitching reel via ffmpeg…'
-                    : `Stitch ${reel.length} shot${reel.length === 1 ? '' : 's'} and download`
-              }
             >
-              {downloading ? (
-                <>
-                  <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-neutral-400" />
-                  Stitching…
-                </>
-              ) : (
-                <>↓ Download</>
-              )}
-            </button>
-            <button
-              type="button"
+              <span aria-hidden className={downloading ? 'animate-pulse' : ''}>↓</span>
+            </TimelineIconButton>
+            <TimelineIconButton
+              label={expandTooltip}
+              ariaLabel={variant === 'modal' ? 'Close fullscreen preview' : 'Expand'}
               onClick={() => setFullscreenOpen((o) => !o)}
-              className="inline-flex items-center gap-1.5 rounded-md border border-neutral-700 bg-neutral-900 px-2.5 py-1 text-[11px] uppercase tracking-wide text-neutral-200 transition-colors hover:border-neutral-500 hover:text-white"
-              title={expandTitle}
+              className="grid h-8 w-10 shrink-0 place-items-center rounded-md border border-neutral-700 bg-neutral-900 text-[15px] leading-none text-neutral-200 transition-colors hover:border-neutral-500 hover:text-white"
             >
-              {expandLabel}
-            </button>
+              <span aria-hidden>{expandIcon}</span>
+            </TimelineIconButton>
           </div>
         </div>
       </>
