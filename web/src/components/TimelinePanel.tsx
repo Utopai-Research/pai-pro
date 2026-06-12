@@ -84,6 +84,7 @@ interface TimelinePanelProps {
   projectId: string | null
   workflow: Workflow | null
   onArchiveNodes: (ids: string[]) => void
+  isVisible: boolean
 }
 
 function isVideoNode(n: { type: string }): n is VideoResultNode {
@@ -254,6 +255,7 @@ export function TimelinePanel({
   projectId,
   workflow,
   onArchiveNodes,
+  isVisible,
 }: TimelinePanelProps): JSX.Element {
   const composer = useChatComposer()
   const { reel, available } = useMemo(() => {
@@ -612,6 +614,8 @@ export function TimelinePanel({
     setPlaying((p) => !p)
   }
   useEffect(() => {
+    if (!isVisible) return undefined
+
     const onKeyDown = (event: KeyboardEvent): void => {
       if (event.defaultPrevented || event.repeat) return
       if (event.code !== 'Space' && event.key !== ' ') return
@@ -622,7 +626,7 @@ export function TimelinePanel({
     }
     window.addEventListener('keydown', onKeyDown, { capture: true })
     return (): void => window.removeEventListener('keydown', onKeyDown, { capture: true })
-  }, [togglePlay])
+  }, [isVisible, togglePlay])
 
   const restart = (): void => {
     setActiveIdx(0)
