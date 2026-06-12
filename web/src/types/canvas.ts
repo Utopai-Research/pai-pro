@@ -14,6 +14,7 @@ export type NodeType = 'note' | 'image_result' | 'video_result' | 'audio_result'
 export interface NodeMetadataBase {
   source?: string
   task_type?: string
+  mode?: string
   generated_at?: string
   /** Generation job that minted this node; used for exact pending-card handoff. */
   pending_job_id?: string
@@ -125,6 +126,12 @@ export interface VideoResultMetadata extends NodeMetadataBase {
    * re-download paths; never used as the canvas URL (which always
    * resolves via local_path). */
   provider_output_url?: string
+  /** Video upscaler provenance. */
+  source_node_id?: string
+  source_resolution?: string
+  requested_output_resolution?: string
+  output_resolution?: string
+  estimated_cost_usd?: number
 }
 
 export interface VideoResultData {
@@ -248,6 +255,11 @@ export interface PendingGeneration {
   duration?: number
   /** Draft-only: USD price snapshot at staging time, for the card chip. */
   cost_usd?: number
+  /** Provider or task mode label, e.g. "4K upscale". */
+  mode?: string
+  /** Upscaler-only source and requested target dimensions. */
+  source_resolution?: string
+  target_resolution?: string
   /** Draft-only: CLI filename for replay (e.g. "generate_image.js"). Opaque to UI. */
   script?: string
   /** Audio-only: the spoken line for voice drafts. */
@@ -292,6 +304,9 @@ export interface GenerationResult {
   resolution?: string
   duration?: number
   cost_usd?: number
+  mode?: string
+  source_resolution?: string
+  target_resolution?: string
   text?: string
   position?: { x: number; y: number }
   reference_source_ids?: string[]

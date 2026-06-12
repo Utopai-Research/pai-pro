@@ -313,6 +313,9 @@ async function pendingContextForResult(jobId, cwd) {
       "resolution",
       "duration",
       "cost_usd",
+      "mode",
+      "source_resolution",
+      "target_resolution",
       "text",
       "position",
       "reference_source_ids",
@@ -364,6 +367,9 @@ export async function writePending({
   model, size, imageSize, resolution, duration,
   stage = "running",
   costUsd,
+  mode,
+  sourceResolution,
+  targetResolution,
   script,
   argv,
   text,
@@ -386,6 +392,9 @@ export async function writePending({
   if (typeof resolution === "string" && resolution !== "") payload.resolution = resolution;
   if (typeof duration === "number" && Number.isFinite(duration)) payload.duration = duration;
   if (typeof costUsd === "number" && Number.isFinite(costUsd)) payload.cost_usd = costUsd;
+  if (typeof mode === "string" && mode !== "") payload.mode = mode;
+  if (typeof sourceResolution === "string" && sourceResolution !== "") payload.source_resolution = sourceResolution;
+  if (typeof targetResolution === "string" && targetResolution !== "") payload.target_resolution = targetResolution;
   if (typeof script === "string" && script !== "") payload.script = script;
   if (Array.isArray(argv)) payload.argv = argv;
   if (typeof text === "string" && text !== "") payload.text = text;
@@ -407,7 +416,10 @@ export async function writePending({
     // fire path having to thread them through.
     if (payload.position === undefined
         || payload.reference_source_ids === undefined
-        || payload.source_node_id === undefined) {
+        || payload.source_node_id === undefined
+        || payload.mode === undefined
+        || payload.source_resolution === undefined
+        || payload.target_resolution === undefined) {
       try {
         const prev = JSON.parse(await fsp.readFile(pendingPath(jobId), "utf8"));
         if (payload.position === undefined && prev?.position &&
@@ -419,6 +431,15 @@ export async function writePending({
         }
         if (payload.source_node_id === undefined && typeof prev?.source_node_id === "string" && prev.source_node_id !== "") {
           payload.source_node_id = prev.source_node_id;
+        }
+        if (payload.mode === undefined && typeof prev?.mode === "string" && prev.mode !== "") {
+          payload.mode = prev.mode;
+        }
+        if (payload.source_resolution === undefined && typeof prev?.source_resolution === "string" && prev.source_resolution !== "") {
+          payload.source_resolution = prev.source_resolution;
+        }
+        if (payload.target_resolution === undefined && typeof prev?.target_resolution === "string" && prev.target_resolution !== "") {
+          payload.target_resolution = prev.target_resolution;
         }
       } catch { /* no prior sidecar, or unreadable — fresh write */ }
     }

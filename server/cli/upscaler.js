@@ -97,6 +97,7 @@ const routeOwnedPending = !!args["existing-job-id"];
 const OUTPUT_DOWNLOAD_TIMEOUT_MS = 30 * 60_000;
 const OUTPUT_DOWNLOAD_ATTEMPTS = 3;
 const OUTPUT_DOWNLOAD_RETRY_DELAY_MS = 5_000;
+const UPSCALE_MODE_LABEL = "4K upscale";
 
 function parseRate(v) {
   if (typeof v !== "string" || v === "") return null;
@@ -224,6 +225,10 @@ function aspectString({ width, height }) {
   return `${Math.round(width / d)}:${Math.round(height / d)}`;
 }
 
+function resolutionString({ width, height }) {
+  return `${Math.round(width)}x${Math.round(height)}`;
+}
+
 function buildCreatePayload(sourceSpec, outputResolution) {
   return {
     source: {
@@ -319,6 +324,9 @@ if (args.stage && !routeOwnedPending) {
       resolution: "4K",
       duration: resolved.durationInt,
       costUsd,
+      mode: UPSCALE_MODE_LABEL,
+      sourceResolution: resolutionString(resolved.sourceSpec),
+      targetResolution: resolutionString(resolved.outputResolution),
       script: "upscaler.js",
       argv: replayArgvWithEstimate(requestId, costUsd),
     });
@@ -371,6 +379,10 @@ try {
     model: UPSCALE_COMPLETE_MODEL,
     resolution: "4K",
     duration: resolved.durationInt,
+    costUsd,
+    mode: UPSCALE_MODE_LABEL,
+    sourceResolution: resolutionString(resolved.sourceSpec),
+    targetResolution: resolutionString(resolved.outputResolution),
   });
 
   const { requestId, costUsd } = await ensureUpscaleRequest(resolved.sourceSpec, resolved.outputResolution);
@@ -410,13 +422,14 @@ try {
     metadata: {
       source: "pai",
       task_type: "video_upscale",
+      mode: UPSCALE_MODE_LABEL,
       model: UPSCALE_COMPLETE_MODEL,
       resolution: "4K",
       aspect_ratio: actualAspectRatio,
       source_node_id: args["source-node-id"],
-      source_resolution: `${resolved.sourceSpec.width}x${resolved.sourceSpec.height}`,
-      requested_output_resolution: `${resolved.outputResolution.width}x${resolved.outputResolution.height}`,
-      output_resolution: `${actualOutputResolution.width}x${actualOutputResolution.height}`,
+      source_resolution: resolutionString(resolved.sourceSpec),
+      requested_output_resolution: resolutionString(resolved.outputResolution),
+      output_resolution: resolutionString(actualOutputResolution),
       upscale_request_id: requestId,
       ...(typeof costUsd === "number" ? { estimated_cost_usd: costUsd } : {}),
       provider_output_url: videoUrl,

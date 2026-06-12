@@ -92,6 +92,9 @@ export async function readPendingEntry(id, jobId) {
     // snapshot for the price chip. `text` carries the spoken line for
     // voice drafts (kind="audio").
     if (typeof parsed.cost_usd === "number" && Number.isFinite(parsed.cost_usd)) out.cost_usd = parsed.cost_usd;
+    if (typeof parsed.mode === "string" && parsed.mode !== "") out.mode = parsed.mode;
+    if (typeof parsed.source_resolution === "string" && parsed.source_resolution !== "") out.source_resolution = parsed.source_resolution;
+    if (typeof parsed.target_resolution === "string" && parsed.target_resolution !== "") out.target_resolution = parsed.target_resolution;
     if (typeof parsed.script === "string" && parsed.script !== "") out.script = parsed.script;
     if (Array.isArray(parsed.argv)) out.argv = parsed.argv.filter((v) => typeof v === "string");
     if (typeof parsed.text === "string" && parsed.text !== "") out.text = parsed.text;
@@ -216,6 +219,9 @@ export function normalizeResultEntry(jobId, raw, { mtimeMs = 0 } = {}) {
   if (typeof raw.resolution === "string" && raw.resolution !== "") out.resolution = raw.resolution;
   if (typeof raw.duration === "number" && Number.isFinite(raw.duration)) out.duration = raw.duration;
   if (typeof raw.cost_usd === "number" && Number.isFinite(raw.cost_usd)) out.cost_usd = raw.cost_usd;
+  if (typeof raw.mode === "string" && raw.mode !== "") out.mode = raw.mode;
+  if (typeof raw.source_resolution === "string" && raw.source_resolution !== "") out.source_resolution = raw.source_resolution;
+  if (typeof raw.target_resolution === "string" && raw.target_resolution !== "") out.target_resolution = raw.target_resolution;
   if (typeof raw.text === "string" && raw.text !== "") out.text = raw.text;
   if (raw.position && typeof raw.position === "object"
       && typeof raw.position.x === "number" && Number.isFinite(raw.position.x)

@@ -46,6 +46,7 @@ export interface MediaRef {
 export interface MediaMetadata {
   model?: string
   source?: string
+  mode?: string
   /** Exact provider size for image-generation-pro, e.g. "2560x1440". */
   size?: string
   aspect_ratio?: string
@@ -53,6 +54,11 @@ export interface MediaMetadata {
   resolution?: string
   generate_audio?: boolean
   generated_at?: string
+  source_node_id?: string
+  source_resolution?: string
+  requested_output_resolution?: string
+  output_resolution?: string
+  estimated_cost_usd?: number
 }
 
 export interface MediaPayload {
@@ -68,6 +74,8 @@ export interface MediaPayload {
   references?: MediaRef[]
   nodeType?: 'image_result' | 'video_result' | 'audio_result' | 'note'
   metadata?: MediaMetadata
+  /** Pending/provider estimate. Prefer this over static model-registry cost. */
+  costUsd?: number
   /** Top-level duration on video_result (not in metadata). */
   duration?: number | string
   /** Note-only: markdown body, rendered + editable in the overlay. */
@@ -154,7 +162,7 @@ export function MediaExpandOverlay({
   const mediaMetadata = media?.metadata
   const mediaDuration = media?.duration
   const mediaHasMetadata = mediaMetadata !== undefined
-  const cost = useCost(
+  const registryCost = useCost(
     mediaHasMetadata ? mediaMetadata?.model : null,
     mediaHasMetadata
       ? {
@@ -165,6 +173,10 @@ export function MediaExpandOverlay({
         }
       : undefined,
   )
+  const cost =
+    typeof media?.costUsd === 'number' ? media.costUsd
+    : typeof mediaMetadata?.estimated_cost_usd === 'number' ? mediaMetadata.estimated_cost_usd
+    : registryCost
 
   if (media === null) return null
 
@@ -553,6 +565,11 @@ function formatCost(c: number | null | undefined): string | null {
   return `~$${c.toFixed(2)}`
 }
 
+function joinDetail(parts: Array<string | undefined | null>): string | null {
+  const values = parts.filter((v): v is string => typeof v === 'string' && v !== '')
+  return values.length > 0 ? values.join(' · ') : null
+}
+
 function TopStrip({ prompt, text, refs, refsByKind, expanded, onToggle, nodeType, metadata, duration, cost, failure, onSavePrompt, onSaveText, forceExpanded = false }: TopStripProps): JSX.Element {
   const modelChip =
     nodeType === 'video_result' ? 'video'
@@ -853,12 +870,17 @@ function MetaTable({ nodeType, metadata, duration, cost }: MetaTableProps): JSX.
   if (typeof metadata.source === 'string' && metadata.source !== '') {
     rows.push(['provider', metadata.source])
   }
+  if (typeof metadata.mode === 'string' && metadata.mode !== '') {
+    rows.push(['mode', metadata.mode])
+  }
   // Row layout: provenance (model/provider/generated) then specs (aspect/size/...) then cost.
   const generated = formatRelativeTime(metadata.generated_at)
   if (generated !== null) rows.push(['generated', generated])
   if (typeof metadata.aspect_ratio === 'string' && metadata.aspect_ratio !== '') {
     rows.push(['aspect', metadata.aspect_ratio])
   }
+  const sourceDetail = joinDetail([metadata.source_node_id, metadata.source_resolution])
+  if (sourceDetail !== null) rows.push(['source', sourceDetail])
   if (nodeType === 'image_result' && typeof metadata.size === 'string' && metadata.size !== '') {
     rows.push(['provider size', metadata.size])
   }
@@ -868,6 +890,17 @@ function MetaTable({ nodeType, metadata, duration, cost }: MetaTableProps): JSX.
   if (nodeType === 'video_result') {
     if (typeof metadata.resolution === 'string' && metadata.resolution !== '') {
       rows.push(['resolution', metadata.resolution])
+    }
+    const targetResolution = metadata.requested_output_resolution || metadata.output_resolution
+    if (typeof targetResolution === 'string' && targetResolution !== '') {
+      rows.push(['target', targetResolution])
+    }
+    if (
+      typeof metadata.output_resolution === 'string' && metadata.output_resolution !== ''
+      && typeof metadata.requested_output_resolution === 'string' && metadata.requested_output_resolution !== ''
+      && metadata.output_resolution !== metadata.requested_output_resolution
+    ) {
+      rows.push(['output', metadata.output_resolution])
     }
     if (duration !== undefined && duration !== '' && duration !== null) {
       rows.push(['duration', `${duration}s`])

@@ -32,6 +32,10 @@ interface PendingGenerationData {
   duration?: number
   /** Draft-only: snapshot price for the card chip. */
   cost_usd?: number
+  mode?: string
+  source_resolution?: string
+  target_resolution?: string
+  source_node_id?: string
   /** Audio drafts: the spoken line for voice generations. */
   text?: string
   klass?: string
@@ -180,6 +184,11 @@ export function PendingGenerationNode({ id, data, selected }: NodeProps): JSX.El
       ...(kind === 'video' ? { resolution: d.resolution }
         : kind === 'image' ? { image_size: d.image_size }
         : {}),
+      ...(typeof d.cost_usd === 'number' ? { estimated_cost_usd: d.cost_usd } : {}),
+      mode: d.mode,
+      source_node_id: d.source_node_id,
+      source_resolution: d.source_resolution,
+      requested_output_resolution: d.target_resolution,
     }
     const overlayKind: 'image-generation' | 'video-generation' | 'audio-generation' =
       kind === 'video' ? 'video-generation'
@@ -199,6 +208,7 @@ export function PendingGenerationNode({ id, data, selected }: NodeProps): JSX.El
       references: d.references ?? [],
       nodeType: overlayNodeType,
       metadata,
+      costUsd: d.cost_usd,
       duration: kind === 'video' ? d.duration : undefined,
       stage,
       failure: isFailed
