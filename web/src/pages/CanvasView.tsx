@@ -130,7 +130,7 @@ export default function CanvasView(): JSX.Element {
   }, [toggleRail])
   // Subscribe at the outer layer so the Timeline tab gets workflow
   // updates without remounting CanvasPage's own subscription.
-  const { workflow, bundle } = useWorkflow(projectId)
+  const { workflow, pendingGenerations, bundle } = useWorkflow(projectId)
 
   const archiveNodes = useCallback(
     (ids: string[]): void => {
@@ -389,6 +389,7 @@ export default function CanvasView(): JSX.Element {
                   <TimelinePanel
                     projectId={projectId}
                     workflow={workflow}
+                    pendingGenerations={pendingGenerations}
                     onArchiveNodes={archiveNodes}
                     isVisible={canvasTab === 'timeline'}
                   />

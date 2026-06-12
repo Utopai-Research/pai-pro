@@ -122,7 +122,7 @@ const { mutatorHooks } = broadcasters;
 
 registerSystemRoutes({ app, projects, nodePty });
 registerProjectsRoutes({ app, io, projects, mutatorHooks });
-registerReelRoutes({ app, projects });
+registerReelRoutes({ app, projects, mutatorHooks });
 registerCanvasRoutes({ app, io, projects, mutatorHooks });
 registerUploadRoutes({ app, io, projects, mutatorHooks });
 registerPendingRoutes({ app, projects, broadcasters });
