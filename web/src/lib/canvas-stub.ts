@@ -231,14 +231,12 @@ export async function discardPendingDraft(
 }
 
 export interface ReelUpscaleDraft {
-  reel_node_id: string
   job_id: string
   cost_usd?: number
   shot_count?: number
   source_resolution?: string
   target_resolution?: string
   duration?: number
-  prompt?: string
 }
 
 export async function stageReelUpscaleDraft(

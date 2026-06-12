@@ -97,22 +97,6 @@ function runUpscalerStage({ id, sourceNodeId, label }) {
   });
 }
 
-function commonAspect(reel) {
-  const aspects = reel
-    .map((n) => typeof n.data?.aspect === "string" ? n.data.aspect : "")
-    .filter(Boolean);
-  if (!aspects.length) return "16:9";
-  return aspects.every((a) => a === aspects[0]) ? aspects[0] : aspects[0];
-}
-
-async function stageReelFileForMutator({ id, sourcePath }) {
-  const tmpDir = path.join(projectDir(id), "assets", ".tmp");
-  await fsp.mkdir(tmpDir, { recursive: true });
-  const tmpPath = path.join(tmpDir, `timeline-reel-${crypto.randomUUID()}.mp4`);
-  await fsp.copyFile(sourcePath, tmpPath);
-  return tmpPath;
-}
-
 export function registerReelRoutes({ app, projects, mutatorHooks }) {
   // GET /projects/:id/reel.mp4 — stitch every video_result with a numeric
   // shot_id (ordered by shot_id) and stream the concatenated MP4 back as a
@@ -183,15 +167,18 @@ export function registerReelRoutes({ app, projects, mutatorHooks }) {
 
     let cleanup = null;
     let tmpPath = null;
-    let reelNodeId = null;
     try {
       const stitched = await stitchReel(state, projectDir(id), id);
       cleanup = stitched.cleanup;
-      tmpPath = await stageReelFileForMutator({ id, sourcePath: stitched.path });
+      const tmpDir = path.join(projectDir(id), "assets", ".tmp");
+      await fsp.mkdir(tmpDir, { recursive: true });
+      tmpPath = path.join(tmpDir, `timeline-reel-${crypto.randomUUID()}.mp4`);
+      await fsp.copyFile(stitched.path, tmpPath);
       const manifest = computeReelManifest(state);
       const shotIds = reel.map((n) => n.id);
       const generatedAt = new Date().toISOString();
       const duration = Math.max(1, Math.round(Number(manifest.total_duration) || 0));
+      const aspect = typeof reel[0]?.data?.aspect === "string" ? reel[0].data.aspect : "16:9";
       const label = `Timeline reel (${reel.length} clip${reel.length === 1 ? "" : "s"})`;
       const reply = await mutate(
         p,
@@ -206,7 +193,7 @@ export function registerReelRoutes({ app, projects, mutatorHooks }) {
                 label,
                 prompt: `Stitched timeline reel from ${reel.length} clip${reel.length === 1 ? "" : "s"}`,
                 duration,
-                aspect: commonAspect(reel),
+                aspect,
                 shot_id: null,
                 metadata: {
                   source: "viewer",
@@ -232,7 +219,7 @@ export function registerReelRoutes({ app, projects, mutatorHooks }) {
         return res.status(statusForKlass(reply.klass)).json({ ok: false, error: reply.message });
       }
       tmpPath = null;
-      reelNodeId = reply.assigned?.node_ids?.[0] ?? null;
+      const reelNodeId = reply.assigned?.node_ids?.[0] ?? null;
       if (!reelNodeId) {
         return res.status(500).json({ ok: false, error: "stitched reel node was not assigned" });
       }
@@ -246,15 +233,16 @@ export function registerReelRoutes({ app, projects, mutatorHooks }) {
         const klass = stage?.klass || "infra";
         return res.status(statusForKlass(klass)).json({
           ok: false,
-          reel_node_id: reelNodeId,
           klass,
           error: stage?.message || "failed to prepare 4K upscale quote",
         });
       }
+      if (typeof stage.job_id !== "string" || stage.job_id === "") {
+        return res.status(500).json({ ok: false, error: "upscaler stage did not return a job id" });
+      }
       const pending = await readPendingEntry(id, stage.job_id);
       res.status(201).json({
         ok: true,
-        reel_node_id: reelNodeId,
         job_id: stage.job_id,
         cost_usd: stage.cost_usd,
         shot_count: reel.length,
@@ -262,7 +250,6 @@ export function registerReelRoutes({ app, projects, mutatorHooks }) {
           source_resolution: pending.source_resolution,
           target_resolution: pending.target_resolution,
           duration: pending.duration,
-          prompt: pending.prompt,
         } : {}),
       });
     } catch (e) {
@@ -273,7 +260,6 @@ export function registerReelRoutes({ app, projects, mutatorHooks }) {
       console.warn(`[viewer] POST /projects/${id}/reel/upscale-4k/draft failed:`, e.message);
       return res.status(500).json({
         ok: false,
-        ...(reelNodeId ? { reel_node_id: reelNodeId } : {}),
         error: e.message,
       });
     } finally {
