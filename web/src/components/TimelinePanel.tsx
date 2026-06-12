@@ -1180,6 +1180,12 @@ export function TimelinePanel({
   const renderPreviewChrome = (variant: 'inline' | 'modal'): JSX.Element => {
     const expandTooltip = variant === 'modal' ? 'Close' : 'Expand'
     const expandIcon = variant === 'modal' ? '✕' : '⛶'
+    const playTooltip =
+      playing ? 'Pause' : time >= total && total > 0 ? 'Replay' : 'Play'
+    const playIcon =
+      playing ? '⏸' : time >= total && total > 0 ? '↻' : '▶'
+    const toolbarIconClass =
+      'grid h-8 w-10 shrink-0 place-items-center rounded-md border border-neutral-700 bg-neutral-900 text-[14px] leading-none text-neutral-200 transition-colors hover:border-neutral-500 hover:text-white'
     // Master-build status overlay. Only meaningful in reel
     // mode — single-clip preview never waits on a master.
     const overlays = (
@@ -1247,25 +1253,22 @@ export function TimelinePanel({
         )}
         <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 px-4 py-2 text-neutral-300">
           <div className="flex min-w-0 items-center gap-3">
-            <button
-              type="button"
+            <TimelineIconButton
+              label={playTooltip}
+              ariaLabel={playTooltip}
               onClick={togglePlay}
-              className="rounded-md border border-neutral-700 bg-neutral-900 px-3 py-1 text-xs hover:border-neutral-500"
+              className={toolbarIconClass}
             >
-              {playing
-                ? '⏸ Pause'
-                : time >= total && total > 0
-                  ? '↻ Replay'
-                  : '▶ Play'}
-            </button>
-            <button
-              type="button"
+              <span aria-hidden>{playIcon}</span>
+            </TimelineIconButton>
+            <TimelineIconButton
+              label="Restart"
+              ariaLabel="Restart"
               onClick={restart}
-              className="rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1 text-xs hover:border-neutral-500"
-              title="Restart"
+              className={toolbarIconClass}
             >
-              ↺
-            </button>
+              <span aria-hidden>↺</span>
+            </TimelineIconButton>
           </div>
           <div className="font-mono text-[12px] text-neutral-400 tabular-nums">
             {formatTime(time)}
@@ -1285,7 +1288,7 @@ export function TimelinePanel({
               disabled={downloading || reel.length === 0}
               onClick={() => void downloadReel()}
               className={
-                'grid h-8 w-10 shrink-0 place-items-center rounded-md border text-[15px] leading-none transition-colors ' +
+                'grid h-8 w-10 shrink-0 place-items-center rounded-md border text-[14px] leading-none transition-colors ' +
                 (downloading
                   ? 'cursor-wait border-neutral-700 bg-neutral-900 text-neutral-400'
                   : reel.length === 0
@@ -1299,7 +1302,7 @@ export function TimelinePanel({
               label={expandTooltip}
               ariaLabel={variant === 'modal' ? 'Close fullscreen preview' : 'Expand'}
               onClick={() => setFullscreenOpen((o) => !o)}
-              className="grid h-8 w-10 shrink-0 place-items-center rounded-md border border-neutral-700 bg-neutral-900 text-[15px] leading-none text-neutral-200 transition-colors hover:border-neutral-500 hover:text-white"
+              className={toolbarIconClass}
             >
               <span aria-hidden>{expandIcon}</span>
             </TimelineIconButton>
