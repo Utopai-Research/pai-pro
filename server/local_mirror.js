@@ -261,12 +261,9 @@ export async function readNodeAssetInfo({ nodeId, projectId }) {
   const node = await readNodeFromWorkflow({ nodeId, projectId });
   if (!node) return null;
   return {
-    id: node.id,
-    type: node.type,
     localPath: typeof node?.data?.local_path === "string" ? node.data.local_path : null,
     label: typeof node?.data?.label === "string" ? node.data.label : null,
     archived: node?.data?.archived === true,
-    metadata: node?.data?.metadata && typeof node.data.metadata === "object" ? node.data.metadata : {},
   };
 }
 

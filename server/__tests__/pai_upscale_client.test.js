@@ -30,7 +30,7 @@ function installPaiFetch(t, handler) {
     try { body = JSON.parse(opts.body || "null"); } catch {}
     const entry = { url: String(url), method: opts.method, body };
     calls.push(entry);
-    return handler(entry, calls.length - 1);
+    return handler(entry);
   };
   process.env.PAI_KEY = "PAI_test";
   process.env.PAI_API_BASE = "https://pai.test";

@@ -14,7 +14,6 @@ export type NodeType = 'note' | 'image_result' | 'video_result' | 'audio_result'
 export interface NodeMetadataBase {
   source?: string
   task_type?: string
-  mode?: string
   generated_at?: string
   /** Generation job that minted this node; used for exact pending-card handoff. */
   pending_job_id?: string
@@ -115,6 +114,7 @@ export interface ImageResultNode {
 
 export interface VideoResultMetadata extends NodeMetadataBase {
   model?: string
+  mode?: string
   duration?: number
   aspect_ratio?: string
   resolution?: string
@@ -253,7 +253,7 @@ export interface PendingGeneration {
   resolution?: string
   /** Video-only: requested duration in seconds. */
   duration?: number
-  /** Draft-only: USD price snapshot at staging time, for the card chip. */
+  /** USD price snapshot when known, for the card chip. */
   cost_usd?: number
   /** Provider or task mode label, e.g. "4K upscale". */
   mode?: string

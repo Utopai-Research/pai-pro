@@ -356,12 +356,9 @@ export async function writeResultSidecar(jobId, result, { cwd = process.cwd() } 
 // user approval, in which case `argv` + `script` + `costUsd` carry the replay
 // context.
 //
-// `position`, `referenceSourceIds`, and `sourceNodeId` are sticky —
-// when a CLI calls writePending against an existing sidecar (e.g.,
-// draft → running on fire), the previous values survive even if the
-// caller didn't pass them. That lets the browser-side drag position
-// persist across the stage transition and lets the lineage captured at
-// stage time carry through to the running phase.
+// Some sidecar context is sticky: when a CLI calls writePending against
+// an existing sidecar (e.g. draft → running on fire), prior position,
+// lineage, and display details survive if the caller doesn't pass them.
 export async function writePending({
   jobId, kind, prompt, aspectRatio,
   model, size, imageSize, resolution, duration,

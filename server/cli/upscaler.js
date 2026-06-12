@@ -1,7 +1,6 @@
 #!/usr/bin/env node
-// CLI wrapper for PAI video upscaling. Initial implementation follows the
-// documented upscale-* flow and writes the result as a normal
-// video_result node.
+// CLI wrapper for PAI video upscaling. Follows the documented upscale-*
+// flow and writes the result as a normal video_result node.
 
 import { spawn } from "node:child_process";
 import fs from "node:fs/promises";
@@ -66,11 +65,12 @@ function providerHost(url) {
 }
 
 function failureContext(e) {
+  const outputHost = providerHost(lastProviderOutputUrl);
   return {
     ...(e.retryAfterSec ? { retryAfterSec: e.retryAfterSec } : {}),
     ...(lastUpscaleTaskId ? { task_id: lastUpscaleTaskId } : {}),
     ...(lastProviderOutputUrl ? { provider_output_url: lastProviderOutputUrl } : {}),
-    ...(providerHost(lastProviderOutputUrl) ? { provider_output_url_host: providerHost(lastProviderOutputUrl) } : {}),
+    ...(outputHost ? { provider_output_url_host: outputHost } : {}),
     ...(e.downloadAttempts ? { download_attempts: e.downloadAttempts } : {}),
     ...(e.downloadCause ? { download_cause: e.downloadCause } : {}),
   };
@@ -369,6 +369,8 @@ let exitCode = 0;
 let tmpAbsPath = null;
 try {
   const resolved = await resolveSource();
+  const { requestId, costUsd } = await ensureUpscaleRequest(resolved.sourceSpec, resolved.outputResolution);
+  lastUpscaleRequestId = requestId;
   await writePending({
     jobId,
     kind: "video",
@@ -385,8 +387,6 @@ try {
     targetResolution: resolutionString(resolved.outputResolution),
   });
 
-  const { requestId, costUsd } = await ensureUpscaleRequest(resolved.sourceSpec, resolved.outputResolution);
-  lastUpscaleRequestId = requestId;
   const { uploadUrl } = await acceptUpscale(requestId);
   const uploadResult = await uploadUpscaleSource({
     uploadUrl,

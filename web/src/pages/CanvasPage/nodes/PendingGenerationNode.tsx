@@ -30,7 +30,7 @@ interface PendingGenerationData {
   image_size?: string
   resolution?: string
   duration?: number
-  /** Draft-only: snapshot price for the card chip. */
+  /** Snapshot price for the card chip when known. */
   cost_usd?: number
   mode?: string
   source_resolution?: string

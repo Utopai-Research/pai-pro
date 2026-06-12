@@ -87,10 +87,8 @@ export async function readPendingEntry(id, jobId) {
     if (typeof parsed.image_size === "string" && parsed.image_size !== "") out.image_size = parsed.image_size;
     if (typeof parsed.resolution === "string" && parsed.resolution !== "") out.resolution = parsed.resolution;
     if (typeof parsed.duration === "number" && Number.isFinite(parsed.duration)) out.duration = parsed.duration;
-    // Draft-only fields. `script` + `argv` let the viewer's POST
-    // /generate route replay the captured call; `cost_usd` is a
-    // snapshot for the price chip. `text` carries the spoken line for
-    // voice drafts (kind="audio").
+    // `script` + `argv` let the viewer's POST /generate route replay
+    // drafts. The remaining fields enrich pending/result cards.
     if (typeof parsed.cost_usd === "number" && Number.isFinite(parsed.cost_usd)) out.cost_usd = parsed.cost_usd;
     if (typeof parsed.mode === "string" && parsed.mode !== "") out.mode = parsed.mode;
     if (typeof parsed.source_resolution === "string" && parsed.source_resolution !== "") out.source_resolution = parsed.source_resolution;
