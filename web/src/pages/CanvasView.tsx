@@ -390,6 +390,7 @@ export default function CanvasView(): JSX.Element {
                     projectId={projectId}
                     workflow={workflow}
                     onArchiveNodes={archiveNodes}
+                    isVisible={canvasTab === 'timeline'}
                   />
                 </div>
               </div>
