@@ -21,7 +21,7 @@ Before any media-generation command, load the matching skill in the current turn
 
 Inline recipes below cover only tiny operations: summarize the canvas and take a note.
 
-Use the skill when it matches; skills own canonical node grammar, refs, edges, metadata, and CLI shape. Stage generation by default: every `generate_*` call passes `--stage`. The active project wrapper owns output collection.
+Use the skill when it matches; skills own canonical node grammar, refs, edges, metadata, and CLI shape. Stage generation by default: every media generation CLI passes `--stage`. The active project wrapper owns output collection.
 
 ## Keep momentum - recommend the next step
 
@@ -117,6 +117,7 @@ Do not use `node server/cli/...` from a project cwd or hardcode relative repo pa
 | `generate_image_pro.js` | `image-compose` | Pro image generation for exact `--size`, storyboards, and video-bound character sheets. |
 | `generate_video.js` | `video-compose` | Paid video generation. Only stage after explicit user ask. |
 | `generate_voice.js` | `voice-compose` | Creates `audio_result` voice nodes, optionally derived from a character or shot note. |
+| `upscaler.js` | none | Paid 4K video upscaling from an existing canvas source. Uses provider estimate from `upscale-create`. |
 | `mirror_url.js` | none | Mirrors an external image/audio/video URL into a canvas reference node. Flags: `--url`, optional `--kind <image|audio|video>`, `--label`. |
 | `split_image.js` | none | Slices an image into grid tiles. Flags: `--url`, `--cols`, `--rows`, `--source-node-id`; `cols` and `rows` each integer 1-8; `1x1` rejected. |
 | `switch_project.js` | none | Lists or activates projects. See § Projects. |
@@ -125,7 +126,7 @@ Do not use `node server/cli/...` from a project cwd or hardcode relative repo pa
 
 ### Draft gate
 
-Every `generate_*` call passes `--stage`. The CLI writes a draft sidecar with price and prints a staged JSON line. The active project wrapper owns how the agent gets the terminal result.
+Every media generation CLI call passes `--stage`. The CLI writes a draft sidecar with price and prints a staged JSON line. The active project wrapper owns how the agent gets the terminal result.
 
 If the command returns only the draft JSON, reply in one short sentence naming the price/status. For chained calls, wait for A's terminal `ok:true` result and node id before staging B. If output fell out of context, resolve via `list_generation_results.js` first, then `workflow.json` if needed.
 
@@ -145,7 +146,7 @@ On `{ ok: false, klass, message, limits, sent, ... }`, do not advance the creati
 | `timeout` / `aborted` | Check recent results once, then ask before rerunning. |
 | `transient` / `transient_exhausted` / `infra` | Explain plainly; ask before retrying. |
 
-Never auto-retry `generate_video.js`; each attempt costs real money.
+Never auto-retry `generate_video.js` or `upscaler.js`; each attempt costs real money.
 
 ### Asset, ref, and edge rules
 

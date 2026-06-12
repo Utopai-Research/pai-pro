@@ -58,6 +58,31 @@ function makeTruncatingServer({ head, declaredLength }) {
   });
 }
 
+function makeFailOnceServer({ bytes, contentType }) {
+  let hits = 0;
+  const server = http.createServer((req, res) => {
+    hits += 1;
+    if (hits === 1) {
+      req.socket.destroy();
+      return;
+    }
+    res.statusCode = 200;
+    if (contentType) res.setHeader("content-type", contentType);
+    res.end(bytes);
+  });
+  return new Promise((resolve) => {
+    server.listen(0, "127.0.0.1", () => {
+      const { port } = server.address();
+      resolve({
+        server,
+        port,
+        url: `http://127.0.0.1:${port}/asset`,
+        hits: () => hits,
+      });
+    });
+  });
+}
+
 function uniqueProjectId() {
   return `streamtest_${crypto.randomBytes(6).toString("hex")}`;
 }
@@ -112,6 +137,27 @@ test("streamUrlToTmp falls back to the URL extension when mimeType is unknown", 
     projectId,
   });
   assert.match(staged.local_path, /\.webm$/, "ext taken from the URL path");
+  const onDisk = await readFile(staged.absolute_path);
+  assert.ok(onDisk.equals(payload));
+});
+
+test("streamUrlToTmp retries transient connection failures", async (t) => {
+  const projectId = uniqueProjectId();
+  t.after(() => cleanupProject(projectId));
+
+  const payload = crypto.randomBytes(256 * 1024);
+  const remote = await makeFailOnceServer({ bytes: payload, contentType: "video/mp4" });
+  t.after(() => new Promise((r) => remote.server.close(r)));
+
+  const staged = await streamUrlToTmp({
+    url: remote.url,
+    mimeType: "video/mp4",
+    projectId,
+    attempts: 2,
+    retryDelayMs: 1,
+  });
+
+  assert.equal(remote.hits(), 2, "first dropped connection was retried");
   const onDisk = await readFile(staged.absolute_path);
   assert.ok(onDisk.equals(payload));
 });

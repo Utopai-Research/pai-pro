@@ -204,6 +204,7 @@ test("runningTimeoutMsForEntry keeps worker timeouts separate from 24h pending v
   assert.equal(runningTimeoutMsForEntry({ kind: "image", script: "generate_image_pro.js" }), 30 * 60 * 1000);
   assert.equal(runningTimeoutMsForEntry({ kind: "audio", script: "generate_voice.js" }), 5 * 60 * 1000);
   assert.equal(runningTimeoutMsForEntry({ kind: "video", script: "generate_video.js" }), 40 * 60 * 1000);
+  assert.equal(runningTimeoutMsForEntry({ kind: "video", script: "upscaler.js" }), 40 * 60 * 1000);
 });
 
 test("running pending sidecars remain visible for nearly 24h", async () => {

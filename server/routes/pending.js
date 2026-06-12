@@ -29,6 +29,7 @@ const ALLOWED_SCRIPTS = new Set([
   "generate_image_pro.js",
   "generate_video.js",
   "generate_voice.js",
+  "upscaler.js",
 ]);
 
 // Patch-key → CLI flag. Only these fields can be edited via PATCH;
