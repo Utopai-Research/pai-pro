@@ -32,6 +32,7 @@ test("require_background hook blocks foreground media-generation CLIs", async ()
     "generate_image_pro.js",
     "generate_video.js",
     "generate_voice.js",
+    "upscaler.js",
   ]) {
     const result = await runHook({
       command: `node "$PAI_REPO_ROOT/server/cli/${script}" --stage --prompt x`,

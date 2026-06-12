@@ -74,6 +74,36 @@ function classifiedError(klass, message, cause) {
   return e;
 }
 
+function downloadCauseDetail(e) {
+  const cause = e?.cause;
+  const nested = cause?.cause;
+  const code = cause?.code || nested?.code;
+  const message = cause?.message || nested?.message;
+  const parts = [];
+  if (code) parts.push(code);
+  if (message && message !== e?.message) parts.push(message);
+  return parts.join(": ");
+}
+
+function withDownloadDetail(message, e) {
+  const detail = downloadCauseDetail(e);
+  return detail ? `${message} (${detail})` : message;
+}
+
+function retryCount(attempts) {
+  const n = Number(attempts);
+  return Number.isFinite(n) && n > 1 ? Math.floor(n) : 1;
+}
+
+function retryDelay(retryDelayMs) {
+  const n = Number(retryDelayMs);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
+async function sleep(ms) {
+  if (ms > 0) await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 // Download a remote URL straight to a tmp file by streaming the response
 // body to disk — the bytes never accumulate in a single Buffer. Used for
 // large write-only assets (e.g. generate_video.js's MP4, tens of MB per
@@ -81,7 +111,15 @@ function classifiedError(klass, message, cause) {
 // long-lived viewer sluggish / OOM under draft-gate fan-out. Same return
 // shape as writeBytesToTmp; pick the extension from mimeType, falling back
 // to the URL's own extension.
-export async function streamUrlToTmp({ url, mimeType, projectId, filename, timeoutMs = 120_000 }) {
+export async function streamUrlToTmp({
+  url,
+  mimeType,
+  projectId,
+  filename,
+  timeoutMs = 120_000,
+  attempts = 1,
+  retryDelayMs = 1_000,
+}) {
   if (!url) throw new Error("streamUrlToTmp: url required");
   const proj = projectId || await readActiveProject();
   const urlExt = path.extname(basenameFromUrl(url)).replace(/^\./, "") || "bin";
@@ -89,33 +127,50 @@ export async function streamUrlToTmp({ url, mimeType, projectId, filename, timeo
   const fname = filename || `tmp_${crypto.randomBytes(8).toString("hex")}.${ext}`;
   const relPath = path.posix.join("assets", TMP_DIRNAME, fname);
   const absPath = path.join(PAI_REPO_ROOT, "projects", proj, relPath);
+  const maxAttempts = retryCount(attempts);
+  const delayMs = retryDelay(retryDelayMs);
 
-  let res;
-  try {
-    res = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) });
-  } catch (e) {
-    throw classifiedError("transient", `stream download failed: ${e.message}`, e);
-  }
-  if (!res.ok || !res.body) {
-    const body = await res.text().catch(() => "");
-    const detail = body ? body.slice(0, 200) : url;
-    throw classifiedError("transient", `stream download failed (${res.status} ${res.statusText}): ${detail}`);
-  }
-  await fs.mkdir(path.dirname(absPath), { recursive: true });
-  try {
-    // res.body is a WHATWG ReadableStream; pipeline wants a Node stream.
-    await pipeline(Readable.fromWeb(res.body), fsSync.createWriteStream(absPath));
-  } catch (e) {
-    // Leave no half-written tmp file behind on a mid-stream error.
-    await fs.unlink(absPath).catch(() => {});
-    const localWriteError = e?.path === absPath
-      || ["EACCES", "ENOENT", "ENOSPC", "EPERM"].includes(e?.code);
-    if (!localWriteError) {
-      throw classifiedError("transient", `stream download failed: ${e.message}`, e);
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      let res;
+      try {
+        res = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) });
+      } catch (e) {
+        throw classifiedError("transient", withDownloadDetail(`stream download failed: ${e.message}`, e), e);
+      }
+      if (!res.ok || !res.body) {
+        const body = await res.text().catch(() => "");
+        const detail = body ? body.slice(0, 200) : url;
+        throw classifiedError("transient", `stream download failed (${res.status} ${res.statusText}): ${detail}`);
+      }
+      await fs.mkdir(path.dirname(absPath), { recursive: true });
+      try {
+        // res.body is a WHATWG ReadableStream; pipeline wants a Node stream.
+        await pipeline(Readable.fromWeb(res.body), fsSync.createWriteStream(absPath));
+      } catch (e) {
+        // Leave no half-written tmp file behind on a mid-stream error.
+        await fs.unlink(absPath).catch(() => {});
+        const localWriteError = e?.path === absPath
+          || ["EACCES", "ENOENT", "ENOSPC", "EPERM"].includes(e?.code);
+        if (!localWriteError) {
+          throw classifiedError("transient", withDownloadDetail(`stream download failed: ${e.message}`, e), e);
+        }
+        throw e;
+      }
+      return { local_path: relPath, absolute_path: absPath, filename: fname };
+    } catch (e) {
+      if (e.klass !== "transient" || attempt >= maxAttempts) {
+        if (e.klass === "transient" && maxAttempts > 1) {
+          e.downloadAttempts = attempt;
+          const detail = downloadCauseDetail(e);
+          if (detail) e.downloadCause = detail;
+          e.message = `${e.message} after ${attempt} attempts`;
+        }
+        throw e;
+      }
+      await sleep(delayMs);
     }
-    throw e;
   }
-  return { local_path: relPath, absolute_path: absPath, filename: fname };
 }
 
 export async function writeBytesToTmp({ bytes, mimeType, projectId, filename }) {
@@ -200,6 +255,16 @@ async function readNodeFromWorkflow({ nodeId, projectId }) {
 export async function readNodeType({ nodeId, projectId }) {
   const node = await readNodeFromWorkflow({ nodeId, projectId });
   return typeof node?.type === "string" ? node.type : null;
+}
+
+export async function readNodeAssetInfo({ nodeId, projectId }) {
+  const node = await readNodeFromWorkflow({ nodeId, projectId });
+  if (!node) return null;
+  return {
+    localPath: typeof node?.data?.local_path === "string" ? node.data.local_path : null,
+    label: typeof node?.data?.label === "string" ? node.data.label : null,
+    archived: node?.data?.archived === true,
+  };
 }
 
 // Used by postNodeAddBatch to fail-fast before the provider call when an

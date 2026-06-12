@@ -204,6 +204,7 @@ test("runningTimeoutMsForEntry keeps worker timeouts separate from 24h pending v
   assert.equal(runningTimeoutMsForEntry({ kind: "image", script: "generate_image_pro.js" }), 30 * 60 * 1000);
   assert.equal(runningTimeoutMsForEntry({ kind: "audio", script: "generate_voice.js" }), 5 * 60 * 1000);
   assert.equal(runningTimeoutMsForEntry({ kind: "video", script: "generate_video.js" }), 40 * 60 * 1000);
+  assert.equal(runningTimeoutMsForEntry({ kind: "video", script: "upscaler.js" }), 40 * 60 * 1000);
 });
 
 test("running pending sidecars remain visible for nearly 24h", async () => {
@@ -525,13 +526,18 @@ test("PATCH position is allowed on running entries (drag persists across stages)
   assert.equal(after.stage, "running");
 });
 
-test("writePending preserves position across stage transitions", async () => {
+test("writePending preserves sticky pending context across stage transitions", async () => {
   const { jobId } = await seedDraft({
-    overrides: { position: { x: 50, y: 60 } },
+    overrides: {
+      position: { x: 50, y: 60 },
+      mode: "4K upscale",
+      source_resolution: "1280x720",
+      target_resolution: "3840x2160",
+    },
   });
   // The route-owned replay path calls writePending against the existing
   // job id. It overwrites the sidecar but should copy `position` forward
-  // from the draft sidecar (sticky field semantics).
+  // from the draft sidecar, along with pending-only detail fields.
   const originalCwd = process.cwd();
   process.chdir(projectPath());
   try {
@@ -548,6 +554,9 @@ test("writePending preserves position across stage transitions", async () => {
   }
   const after = await readSidecar(jobId);
   assert.deepEqual(after.position, { x: 50, y: 60 }, "position must survive writePending");
+  assert.equal(after.mode, "4K upscale");
+  assert.equal(after.source_resolution, "1280x720");
+  assert.equal(after.target_resolution, "3840x2160");
 });
 
 test("5x concurrent position PATCHes serialize cleanly under the project lock", async () => {

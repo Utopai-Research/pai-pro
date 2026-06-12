@@ -12,12 +12,13 @@
 import { readFileSync } from "node:fs";
 
 // Explicit allow-list of CLIs we guard. Add a filename here when you
-// add another long-running generate_* CLI under server/cli/.
+// add another long-running paid media CLI under server/cli/.
 const GUARDED_CLIS = [
   "generate_image.js",
   "generate_image_pro.js",
   "generate_video.js",
   "generate_voice.js",
+  "upscaler.js",
 ];
 
 let input;
@@ -49,7 +50,7 @@ function invokesGuardedCli(command) {
 
 if (invokesGuardedCli(cmd) && !bg) {
   console.error(
-    `generate_*.js requires run_in_background: true. Re-invoke and BashOutput-poll the bash id.`
+    `media generation CLIs require run_in_background: true. Re-invoke and BashOutput-poll the bash id.`
   );
   process.exit(2);
 }

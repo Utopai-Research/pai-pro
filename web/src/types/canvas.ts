@@ -114,6 +114,7 @@ export interface ImageResultNode {
 
 export interface VideoResultMetadata extends NodeMetadataBase {
   model?: string
+  mode?: string
   duration?: number
   aspect_ratio?: string
   resolution?: string
@@ -125,6 +126,12 @@ export interface VideoResultMetadata extends NodeMetadataBase {
    * re-download paths; never used as the canvas URL (which always
    * resolves via local_path). */
   provider_output_url?: string
+  /** Video upscaler provenance. */
+  source_node_id?: string
+  source_resolution?: string
+  requested_output_resolution?: string
+  output_resolution?: string
+  estimated_cost_usd?: number
 }
 
 export interface VideoResultData {
@@ -246,8 +253,13 @@ export interface PendingGeneration {
   resolution?: string
   /** Video-only: requested duration in seconds. */
   duration?: number
-  /** Draft-only: USD price snapshot at staging time, for the card chip. */
+  /** USD price snapshot when known, for the card chip. */
   cost_usd?: number
+  /** Provider or task mode label, e.g. "4K upscale". */
+  mode?: string
+  /** Upscaler-only source and requested target dimensions. */
+  source_resolution?: string
+  target_resolution?: string
   /** Draft-only: CLI filename for replay (e.g. "generate_image.js"). Opaque to UI. */
   script?: string
   /** Audio-only: the spoken line for voice drafts. */
@@ -292,6 +304,9 @@ export interface GenerationResult {
   resolution?: string
   duration?: number
   cost_usd?: number
+  mode?: string
+  source_resolution?: string
+  target_resolution?: string
   text?: string
   position?: { x: number; y: number }
   reference_source_ids?: string[]
