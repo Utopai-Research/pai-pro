@@ -679,6 +679,18 @@ export function TimelinePanel({
     setTime(t)
   }
 
+  const seekPreviewTo = (nextTime: number): void => {
+    if (total <= 0) return
+    const t = Math.max(0, Math.min(total, nextTime))
+    if (playlistMode === 'reel') {
+      seekReelTo(t)
+      return
+    }
+    const v = videoRef.current
+    if (v) { try { v.currentTime = t } catch { /* noop */ } }
+    setTime(t)
+  }
+
   const seekReelFromClientX = (clientX: number): void => {
     const el = timelineScrollRef.current
     if (!el) return
@@ -1251,6 +1263,22 @@ export function TimelinePanel({
             </div>
           </div>
         )}
+        {variant === 'modal' ? (
+          <div className="px-5 pb-1 pt-3">
+            <input
+              type="range"
+              min={0}
+              max={Math.max(total, 0.01)}
+              step={0.01}
+              value={Math.max(0, Math.min(total, time))}
+              disabled={total <= 0}
+              aria-label="Seek preview"
+              title="Seek preview"
+              onChange={(e) => seekPreviewTo(Number(e.target.value))}
+              className="h-1 w-full cursor-pointer accent-neutral-200 disabled:cursor-not-allowed disabled:opacity-40"
+            />
+          </div>
+        ) : null}
         <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 px-4 py-2 text-neutral-300">
           <div className="flex min-w-0 items-center gap-3">
             <TimelineIconButton
