@@ -1197,7 +1197,7 @@ export function TimelinePanel({
     const playIcon =
       playing ? '⏸' : time >= total && total > 0 ? '↻' : '▶'
     const toolbarIconClass =
-      'grid h-8 w-10 shrink-0 place-items-center rounded-md border border-neutral-700 bg-neutral-900 text-[14px] leading-none text-neutral-200 transition-colors hover:border-neutral-500 hover:text-white'
+      'grid h-8 w-10 shrink-0 place-items-center rounded-md border border-neutral-700 bg-neutral-900 text-[13px] leading-none text-neutral-200 transition-colors hover:border-neutral-500 hover:text-white'
     // Master-build status overlay. Only meaningful in reel
     // mode — single-clip preview never waits on a master.
     const overlays = (
@@ -1298,7 +1298,7 @@ export function TimelinePanel({
               <span aria-hidden>↺</span>
             </TimelineIconButton>
           </div>
-          <div className="font-mono text-[12px] text-neutral-400 tabular-nums">
+          <div className="font-mono text-[11px] text-neutral-400 tabular-nums">
             {formatTime(time)}
             <span className="px-1.5 text-neutral-700">/</span>
             {formatTime(total)}
@@ -1316,7 +1316,7 @@ export function TimelinePanel({
               disabled={downloading || reel.length === 0}
               onClick={() => void downloadReel()}
               className={
-                'grid h-8 w-10 shrink-0 place-items-center rounded-md border text-[14px] leading-none transition-colors ' +
+                'grid h-8 w-10 shrink-0 place-items-center rounded-md border text-[13px] leading-none transition-colors ' +
                 (downloading
                   ? 'cursor-wait border-neutral-700 bg-neutral-900 text-neutral-400'
                   : reel.length === 0
