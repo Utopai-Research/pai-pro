@@ -388,7 +388,6 @@ export default function CanvasView(): JSX.Element {
                 >
                   <TimelinePanel
                     projectId={projectId}
-                    projectTitle={title}
                     workflow={workflow}
                     pendingGenerations={pendingGenerations}
                     onArchiveNodes={archiveNodes}
