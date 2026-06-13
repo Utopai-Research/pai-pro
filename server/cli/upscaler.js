@@ -335,7 +335,15 @@ if (args.stage && !routeOwnedPending) {
       fail("infra", "failed to write draft sidecar");
       process.exit(1);
     }
-    emitSuccess({ stage: "draft", job_id: jobId, model: UPSCALE_COMPLETE_MODEL, cost_usd: costUsd });
+    emitSuccess({
+      stage: "draft",
+      job_id: jobId,
+      model: UPSCALE_COMPLETE_MODEL,
+      cost_usd: costUsd,
+      source_resolution: resolutionString(resolved.sourceSpec),
+      target_resolution: resolutionString(resolved.outputResolution),
+      duration: resolved.durationInt,
+    });
     if (args["stage-only"]) process.exit(0);
     const bypassEnabled = await isBypassEnabled();
     if (args["draft-only"] && !bypassEnabled) process.exit(0);

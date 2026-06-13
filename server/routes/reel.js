@@ -22,7 +22,6 @@ import {
   reelCachePath,
 } from "../lib/reel_cache.js";
 import { PAI_REPO_ROOT, projectDir } from "../lib/paths.js";
-import { readPendingEntry } from "../lib/readers.js";
 
 const UPSCALE_STAGE_TIMEOUT_MS = 4 * 60 * 1000;
 
@@ -168,60 +167,81 @@ export function registerReelRoutes({ app, projects, mutatorHooks }) {
     let cleanup = null;
     let tmpPath = null;
     try {
-      const stitched = await stitchReel(state, projectDir(id), id);
-      cleanup = stitched.cleanup;
-      const tmpDir = path.join(projectDir(id), "assets", ".tmp");
-      await fsp.mkdir(tmpDir, { recursive: true });
-      tmpPath = path.join(tmpDir, `timeline-reel-${crypto.randomUUID()}.mp4`);
-      await fsp.copyFile(stitched.path, tmpPath);
       const manifest = computeReelManifest(state);
-      const shotIds = reel.map((n) => n.id);
-      const generatedAt = new Date().toISOString();
-      const duration = Math.max(1, Math.round(Number(manifest.total_duration) || 0));
-      const aspect = typeof reel[0]?.data?.aspect === "string" ? reel[0].data.aspect : "16:9";
       const label = `Timeline reel (${reel.length} clip${reel.length === 1 ? "" : "s"})`;
-      const reply = await mutate(
-        p,
-        {
-          request_id: `viewer-reel-upscale-source-${id}-${crypto.randomUUID()}`,
-          op: "addBatch",
-          payload: {
-            nodes: [{
-              type: "video_result",
-              tmp_path: tmpPath,
-              data: {
-                label,
-                prompt: `Stitched timeline reel from ${reel.length} clip${reel.length === 1 ? "" : "s"}`,
-                duration,
-                aspect,
-                shot_id: null,
-                metadata: {
-                  source: "viewer",
-                  task_type: "reel_stitch",
-                  mode: "timeline_reel",
-                  model: "ffmpeg",
-                  shot_count: reel.length,
-                  source_node_ids: shotIds,
-                  reel_build_id: manifest.build_id,
-                  generated_at: generatedAt,
-                },
-              },
-            }],
-            edges: [],
-          },
-          actor: "viewer:reel-upscale",
-        },
-        mutatorHooks,
-      );
-      if (!reply.ok) {
-        await fsp.unlink(tmpPath).catch(() => {});
-        tmpPath = null;
-        return res.status(statusForKlass(reply.klass)).json({ ok: false, error: reply.message });
+      let reelNodeId = null;
+      for (const node of state.nodes || []) {
+        if (
+          node.type !== "video_result" ||
+          node.data?.archived === true ||
+          typeof node.data?.local_path !== "string" ||
+          node.data.metadata?.task_type !== "reel_stitch" ||
+          node.data.metadata?.mode !== "timeline_reel" ||
+          node.data.metadata?.reel_build_id !== manifest.build_id
+        ) continue;
+        try {
+          await fsp.access(path.resolve(projectDir(id), node.data.local_path));
+          reelNodeId = node.id;
+          break;
+        } catch {
+          /* stale stitched node; rebuild below */
+        }
       }
-      tmpPath = null;
-      const reelNodeId = reply.assigned?.node_ids?.[0] ?? null;
-      if (!reelNodeId) {
-        return res.status(500).json({ ok: false, error: "stitched reel node was not assigned" });
+
+      if (reelNodeId === null) {
+        const shotIds = reel.map((n) => n.id);
+        const generatedAt = new Date().toISOString();
+        const duration = Math.max(1, Math.round(Number(manifest.total_duration) || 0));
+        const aspect = typeof reel[0]?.data?.aspect === "string" ? reel[0].data.aspect : "16:9";
+        const stitched = await stitchReel(state, projectDir(id), id);
+        cleanup = stitched.cleanup;
+        const tmpDir = path.join(projectDir(id), "assets", ".tmp");
+        await fsp.mkdir(tmpDir, { recursive: true });
+        tmpPath = path.join(tmpDir, `timeline-reel-${crypto.randomUUID()}.mp4`);
+        await fsp.copyFile(stitched.path, tmpPath);
+        const reply = await mutate(
+          p,
+          {
+            request_id: `viewer-reel-upscale-source-${id}-${crypto.randomUUID()}`,
+            op: "addBatch",
+            payload: {
+              nodes: [{
+                type: "video_result",
+                tmp_path: tmpPath,
+                data: {
+                  label,
+                  prompt: `Stitched timeline reel from ${reel.length} clip${reel.length === 1 ? "" : "s"}`,
+                  duration,
+                  aspect,
+                  shot_id: null,
+                  metadata: {
+                    source: "viewer",
+                    task_type: "reel_stitch",
+                    mode: "timeline_reel",
+                    model: "ffmpeg",
+                    shot_count: reel.length,
+                    source_node_ids: shotIds,
+                    reel_build_id: manifest.build_id,
+                    generated_at: generatedAt,
+                  },
+                },
+              }],
+              edges: [],
+            },
+            actor: "viewer:reel-upscale",
+          },
+          mutatorHooks,
+        );
+        if (!reply.ok) {
+          await fsp.unlink(tmpPath).catch(() => {});
+          tmpPath = null;
+          return res.status(statusForKlass(reply.klass)).json({ ok: false, error: reply.message });
+        }
+        tmpPath = null;
+        reelNodeId = reply.assigned?.node_ids?.[0] ?? null;
+        if (!reelNodeId) {
+          return res.status(500).json({ ok: false, error: "stitched reel node was not assigned" });
+        }
       }
 
       const stage = await runUpscalerStage({
@@ -240,17 +260,14 @@ export function registerReelRoutes({ app, projects, mutatorHooks }) {
       if (typeof stage.job_id !== "string" || stage.job_id === "") {
         return res.status(500).json({ ok: false, error: "upscaler stage did not return a job id" });
       }
-      const pending = await readPendingEntry(id, stage.job_id);
       res.status(201).json({
         ok: true,
         job_id: stage.job_id,
         cost_usd: stage.cost_usd,
         shot_count: reel.length,
-        ...(pending ? {
-          source_resolution: pending.source_resolution,
-          target_resolution: pending.target_resolution,
-          duration: pending.duration,
-        } : {}),
+        source_resolution: stage.source_resolution,
+        target_resolution: stage.target_resolution,
+        duration: stage.duration,
       });
     } catch (e) {
       if (tmpPath) await fsp.unlink(tmpPath).catch(() => {});

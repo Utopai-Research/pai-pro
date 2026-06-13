@@ -130,14 +130,6 @@ function clampTimelinePxPerSecond(pxPerSecond: number): number {
   )
 }
 
-function safeDownloadName(label: string | undefined, fallback: string): string {
-  const base = String(label || fallback)
-    .replace(/[^a-zA-Z0-9._-]+/g, '_')
-    .replace(/^_+|_+$/g, '')
-    .slice(0, 80) || fallback
-  return base.toLowerCase().endsWith('.mp4') ? base : `${base}.mp4`
-}
-
 type ReelUpscaleStatus =
   | 'idle'
   | 'quoting'
@@ -146,41 +138,6 @@ type ReelUpscaleStatus =
   | 'downloading'
   | 'ready'
   | 'error'
-
-function generatedAtMs(node: VideoResultNode): number {
-  const ms = Date.parse(node.data.metadata.generated_at ?? '')
-  return Number.isFinite(ms) ? ms : 0
-}
-
-function pendingCreatedAtMs(entry: PendingGeneration): number {
-  const ms = Date.parse(entry.created_at ?? entry.completed_at ?? '')
-  return Number.isFinite(ms) ? ms : 0
-}
-
-function pendingToUpscaleDraft(entry: PendingGeneration, shotCount: number): ReelUpscaleDraft {
-  return {
-    job_id: entry.id,
-    cost_usd: entry.cost_usd,
-    shot_count: shotCount,
-    source_resolution: entry.source_resolution,
-    target_resolution: entry.target_resolution,
-    duration: entry.duration,
-  }
-}
-
-function resultNodeToUpscaleDraft(node: VideoResultNode, shotCount: number): ReelUpscaleDraft | null {
-  const jobId = node.data.metadata.pending_job_id
-  if (typeof jobId !== 'string' || jobId === '') return null
-  return {
-    job_id: jobId,
-    cost_usd: node.data.metadata.estimated_cost_usd,
-    shot_count: shotCount,
-    source_resolution: node.data.metadata.source_resolution,
-    target_resolution:
-      node.data.metadata.requested_output_resolution ?? node.data.metadata.output_resolution,
-    duration: node.data.duration,
-  }
-}
 
 function timelineClipWidth(node: VideoResultNode, pxPerSecond: number): number {
   return timelineDurationSeconds(node) * pxPerSecond
@@ -1209,7 +1166,11 @@ export function TimelinePanel({
   const [upscaleError, setUpscaleError] = useState<string | null>(null)
   const autoDownloadedUpscaleJobRef = useRef<string | null>(null)
 
-  const currentReelBuildId = manifest?.build_id ?? null
+  const manifestMatchesReel =
+    manifest !== null &&
+    manifest.clips.length === reel.length &&
+    manifest.clips.every((clip, i) => clip.node_id === reel[i]?.id)
+  const currentReelBuildId = manifestMatchesReel ? manifest.build_id : null
 
   const reelUpscaleSourceIds = useMemo(() => {
     const sourceIds = new Set<string>()
@@ -1238,7 +1199,15 @@ export function TimelinePanel({
         typeof entry.source_node_id !== 'string' ||
         !reelUpscaleSourceIds.has(entry.source_node_id)
       ) continue
-      if (latest === null || pendingCreatedAtMs(entry) > pendingCreatedAtMs(latest)) {
+      const entryAt = Date.parse(entry.created_at ?? entry.completed_at ?? '')
+      const latestAt = latest === null
+        ? -Infinity
+        : Date.parse(latest.created_at ?? latest.completed_at ?? '')
+      if (
+        latest === null ||
+        (Number.isFinite(entryAt) ? entryAt : 0) >
+          (Number.isFinite(latestAt) ? latestAt : 0)
+      ) {
         latest = entry
       }
     }
@@ -1260,7 +1229,15 @@ export function TimelinePanel({
         typeof metadata.source_node_id !== 'string' ||
         !reelUpscaleSourceIds.has(metadata.source_node_id)
       ) continue
-      if (latest === null || generatedAtMs(node) > generatedAtMs(latest)) {
+      const nodeAt = Date.parse(metadata.generated_at ?? '')
+      const latestAt = latest === null
+        ? -Infinity
+        : Date.parse(latest.data.metadata.generated_at ?? '')
+      if (
+        latest === null ||
+        (Number.isFinite(nodeAt) ? nodeAt : 0) >
+          (Number.isFinite(latestAt) ? latestAt : 0)
+      ) {
         latest = node
       }
     }
@@ -1290,7 +1267,11 @@ export function TimelinePanel({
     const objectUrl = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = objectUrl
-    a.download = safeDownloadName(node.data.label, fallbackName)
+    const name = String(node.data.label || fallbackName)
+      .replace(/[^a-zA-Z0-9._-]+/g, '_')
+      .replace(/^_+|_+$/g, '')
+      .slice(0, 80) || fallbackName
+    a.download = name.toLowerCase().endsWith('.mp4') ? name : `${name}.mp4`
     document.body.appendChild(a)
     a.click()
     a.remove()
@@ -1339,7 +1320,14 @@ export function TimelinePanel({
   useEffect(() => {
     if (upscaleStatus !== 'idle') return
     if (restoredPendingUpscale !== null) {
-      setUpscaleDraft(pendingToUpscaleDraft(restoredPendingUpscale, reel.length))
+      setUpscaleDraft({
+        job_id: restoredPendingUpscale.id,
+        cost_usd: restoredPendingUpscale.cost_usd,
+        shot_count: reel.length,
+        source_resolution: restoredPendingUpscale.source_resolution,
+        target_resolution: restoredPendingUpscale.target_resolution,
+        duration: restoredPendingUpscale.duration,
+      })
       if (restoredPendingUpscale.stage === 'draft') {
         setUpscaleError(null)
         setUpscaleStatus('confirm')
@@ -1352,11 +1340,19 @@ export function TimelinePanel({
       }
       return
     }
-    const draft = restoredReadyUpscaleNode
-      ? resultNodeToUpscaleDraft(restoredReadyUpscaleNode, reel.length)
-      : null
-    if (draft === null) return
-    setUpscaleDraft(draft)
+    if (restoredReadyUpscaleNode === null) return
+    const jobId = restoredReadyUpscaleNode.data.metadata.pending_job_id
+    if (typeof jobId !== 'string' || jobId === '') return
+    setUpscaleDraft({
+      job_id: jobId,
+      cost_usd: restoredReadyUpscaleNode.data.metadata.estimated_cost_usd,
+      shot_count: reel.length,
+      source_resolution: restoredReadyUpscaleNode.data.metadata.source_resolution,
+      target_resolution:
+        restoredReadyUpscaleNode.data.metadata.requested_output_resolution ??
+        restoredReadyUpscaleNode.data.metadata.output_resolution,
+      duration: restoredReadyUpscaleNode.data.duration,
+    })
     setUpscaleError(null)
     setUpscaleStatus('ready')
   }, [reel.length, restoredPendingUpscale, restoredReadyUpscaleNode, upscaleStatus])
