@@ -1378,7 +1378,7 @@ export function TimelinePanel({
           ? 'Download the latest 4K upscale'
           : upscaleBusy
             ? '4K upscale is in progress'
-            : 'Stitch the current reel and prepare a 4K upscale quote'
+            : 'Upscale the entire reel to 4K'
     const upscaleCost =
       typeof upscaleDraft?.cost_usd === 'number' && Number.isFinite(upscaleDraft.cost_usd)
         ? `$${upscaleDraft.cost_usd.toFixed(2)}`
@@ -1495,22 +1495,6 @@ export function TimelinePanel({
                 onChange={applyTimelineZoom}
               />
             ) : null}
-            <TimelineIconButton
-              label="Download"
-              ariaLabel="Download"
-              disabled={downloading || reel.length === 0}
-              onClick={() => void downloadReel()}
-              className={
-                'grid h-8 w-10 shrink-0 place-items-center rounded-md border text-[13px] leading-none transition-colors ' +
-                (downloading
-                  ? 'cursor-wait border-neutral-700 bg-neutral-900 text-neutral-400'
-                  : reel.length === 0
-                    ? 'cursor-not-allowed border-neutral-800 bg-neutral-950 text-neutral-600'
-                    : 'border-neutral-700 bg-neutral-900 text-neutral-200 hover:border-neutral-500 hover:text-white')
-              }
-            >
-              <span aria-hidden className={downloading ? 'animate-pulse' : ''}>↓</span>
-            </TimelineIconButton>
             <div className="relative">
               {upscaleError !== null && upscaleStatus !== 'confirm' ? (
                 <div
@@ -1585,7 +1569,7 @@ export function TimelinePanel({
                 onClick={() => void beginReelUpscale()}
                 disabled={reel.length === 0 || upscaleBusy}
                 className={
-                  'grid h-8 w-10 shrink-0 place-items-center rounded-md border text-[11px] font-semibold leading-none transition-colors ' +
+                  'flex h-8 w-12 shrink-0 items-center justify-center rounded-md border text-[11px] font-semibold leading-none transition-colors ' +
                   (upscaleBusy
                     ? 'cursor-wait border-neutral-700 bg-neutral-900 text-neutral-400'
                     : reel.length === 0
@@ -1595,9 +1579,34 @@ export function TimelinePanel({
                         : 'border-neutral-700 bg-neutral-900 text-neutral-200 hover:border-neutral-500 hover:text-white')
                 }
               >
-                <span aria-hidden className={upscaleBusy ? 'animate-pulse' : ''}>4K</span>
+                <span
+                  aria-hidden
+                  className={
+                    'inline-flex items-center justify-center gap-0.5 ' +
+                    (upscaleBusy ? 'animate-pulse' : '')
+                  }
+                >
+                  <span className="text-[13px] leading-none">↑</span>
+                  <span className="leading-none">4K</span>
+                </span>
               </TimelineIconButton>
             </div>
+            <TimelineIconButton
+              label="Download"
+              ariaLabel="Download"
+              disabled={downloading || reel.length === 0}
+              onClick={() => void downloadReel()}
+              className={
+                'grid h-8 w-10 shrink-0 place-items-center rounded-md border text-[13px] leading-none transition-colors ' +
+                (downloading
+                  ? 'cursor-wait border-neutral-700 bg-neutral-900 text-neutral-400'
+                  : reel.length === 0
+                    ? 'cursor-not-allowed border-neutral-800 bg-neutral-950 text-neutral-600'
+                    : 'border-neutral-700 bg-neutral-900 text-neutral-200 hover:border-neutral-500 hover:text-white')
+              }
+            >
+              <span aria-hidden className={downloading ? 'animate-pulse' : ''}>↓</span>
+            </TimelineIconButton>
             <TimelineIconButton
               label={expandTooltip}
               ariaLabel={variant === 'modal' ? 'Close fullscreen preview' : 'Expand'}
