@@ -29,7 +29,7 @@ PAI-Pro is a local-first AI filmmaking workspace built around four things:
 - **Your own [Claude Code][claude-code-url] or [Codex][codex-url]**, capable agents connected to local project files, persistent context, and customized filmmaking skills. ([Setup and agents](docs/setup.md))
 - **End-to-end filmmaking skills** for scripts, images, videos, and voice. ([More skill details](docs/skills.md))
 - **A visual canvas and timeline** for designing scenes, managing assets, arranging shots, and keeping larger productions organized.
-- **One API service for story media** across image, video, and voice, so productions do not need separate providers for each step. ([API service details](docs/api_service.md))
+- **One API service for story media** across image, video, voice, and 4K upscaling, so productions do not need separate providers for each step. ([API service details](docs/api_service.md))
 
 ## Quick start
 
@@ -46,13 +46,14 @@ Open Docker at <http://localhost:7588> or local at <http://localhost:7443>.
 
 ## API Service
 
-`PAI_KEY` gives each production one service for image, image pro, video, and voice, without separate provider keys for each step. Use the <a href="https://pai-pro.utopaistudios.com/keys" target="_blank" rel="noopener noreferrer">PAI Pro Developer Platform</a> to manage keys, tasks, balance, and credits. It also supports less restrictive video moderation via asset preupload and helps support this project. Paid generations are staged first; for BYOK and exact payloads, see [API Service](docs/api_service.md).
+`PAI_KEY` gives each production one service for image, image pro, video, voice, and 4K upscaling, without separate provider keys for each step. Use the <a href="https://pai-pro.utopaistudios.com/keys" target="_blank" rel="noopener noreferrer">PAI Pro Developer Platform</a> to manage keys, tasks, balance, and credits. It also supports less restrictive video moderation via asset preupload and helps support this project. Paid generations are staged first; for BYOK and exact payloads, see [API Service](docs/api_service.md).
 
 | Capability | Quality | Time | # of references | Estimated price |
 |---|---|---|---|---|
 | [`generate_image`](server/cli/generate_image.js) | Great | ~10-30s | 16 imgs | $0.07 / $0.10 / $0.15 for 1K / 2K / 4K |
 | [`generate_image_pro`](server/cli/generate_image_pro.js) | Best | ~3-6 min | 32 imgs | $0.26 / $0.45 / $0.77 for 1K / 2K / 4K |
 | [`generate_video`](server/cli/generate_video.js) | Best | ~3-6 min | 9 imgs / 3 vids / 3 auds | $0.08/s / $0.20/s / $0.44/s for 480p / 720p / 1080p |
+| [`upscaler`](server/cli/upscaler.js) | Best | 1-min example: ~4-8 min landed | 1 video | 1-min example: $1.35 for 1080p->4K, $2.35 for 720p->4K |
 | [`generate_voice`](server/cli/generate_voice.js) | Good | ~5-15s | N/A | $0.01 per 500 input characters, rounded up |
 
 ## Resources
