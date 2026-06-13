@@ -147,6 +147,41 @@ type ReelUpscaleStatus =
   | 'ready'
   | 'error'
 
+function generatedAtMs(node: VideoResultNode): number {
+  const ms = Date.parse(node.data.metadata.generated_at ?? '')
+  return Number.isFinite(ms) ? ms : 0
+}
+
+function pendingCreatedAtMs(entry: PendingGeneration): number {
+  const ms = Date.parse(entry.created_at ?? entry.completed_at ?? '')
+  return Number.isFinite(ms) ? ms : 0
+}
+
+function pendingToUpscaleDraft(entry: PendingGeneration, shotCount: number): ReelUpscaleDraft {
+  return {
+    job_id: entry.id,
+    cost_usd: entry.cost_usd,
+    shot_count: shotCount,
+    source_resolution: entry.source_resolution,
+    target_resolution: entry.target_resolution,
+    duration: entry.duration,
+  }
+}
+
+function resultNodeToUpscaleDraft(node: VideoResultNode, shotCount: number): ReelUpscaleDraft | null {
+  const jobId = node.data.metadata.pending_job_id
+  if (typeof jobId !== 'string' || jobId === '') return null
+  return {
+    job_id: jobId,
+    cost_usd: node.data.metadata.estimated_cost_usd,
+    shot_count: shotCount,
+    source_resolution: node.data.metadata.source_resolution,
+    target_resolution:
+      node.data.metadata.requested_output_resolution ?? node.data.metadata.output_resolution,
+    duration: node.data.duration,
+  }
+}
+
 function timelineClipWidth(node: VideoResultNode, pxPerSecond: number): number {
   return timelineDurationSeconds(node) * pxPerSecond
 }
@@ -1174,13 +1209,72 @@ export function TimelinePanel({
   const [upscaleError, setUpscaleError] = useState<string | null>(null)
   const autoDownloadedUpscaleJobRef = useRef<string | null>(null)
 
+  const currentReelBuildId = manifest?.build_id ?? null
+
+  const reelUpscaleSourceIds = useMemo(() => {
+    const sourceIds = new Set<string>()
+    if (workflow === null || currentReelBuildId === null) return sourceIds
+    for (const node of workflow.nodes) {
+      if (!isVideoNode(node)) continue
+      const metadata = node.data.metadata
+      if (
+        metadata.task_type === 'reel_stitch' &&
+        metadata.mode === 'timeline_reel' &&
+        metadata.reel_build_id === currentReelBuildId
+      ) {
+        sourceIds.add(node.id)
+      }
+    }
+    return sourceIds
+  }, [currentReelBuildId, workflow])
+
+  const restoredPendingUpscale = useMemo<PendingGeneration | null>(() => {
+    if (reelUpscaleSourceIds.size === 0) return null
+    let latest: PendingGeneration | null = null
+    for (const entry of pendingGenerations) {
+      if (entry.kind !== 'video') continue
+      if (entry.mode !== '4K upscale' && entry.model !== 'upscale-complete') continue
+      if (
+        typeof entry.source_node_id !== 'string' ||
+        !reelUpscaleSourceIds.has(entry.source_node_id)
+      ) continue
+      if (latest === null || pendingCreatedAtMs(entry) > pendingCreatedAtMs(latest)) {
+        latest = entry
+      }
+    }
+    return latest
+  }, [pendingGenerations, reelUpscaleSourceIds])
+
+  const restoredReadyUpscaleNode = useMemo<VideoResultNode | null>(() => {
+    if (workflow === null || reelUpscaleSourceIds.size === 0) return null
+    let latest: VideoResultNode | null = null
+    for (const node of workflow.nodes) {
+      if (!isVideoNode(node)) continue
+      const metadata = node.data.metadata
+      if (
+        node.data.archived === true ||
+        typeof node.data.video_url !== 'string' ||
+        node.data.video_url === '' ||
+        metadata.task_type !== 'video_upscale' ||
+        metadata.mode !== '4K upscale' ||
+        typeof metadata.source_node_id !== 'string' ||
+        !reelUpscaleSourceIds.has(metadata.source_node_id)
+      ) continue
+      if (latest === null || generatedAtMs(node) > generatedAtMs(latest)) {
+        latest = node
+      }
+    }
+    return latest
+  }, [reelUpscaleSourceIds, workflow])
+
   const upscaleResultNode = useMemo<VideoResultNode | null>(() => {
-    if (upscaleDraft === null || workflow === null) return null
+    if (workflow === null) return restoredReadyUpscaleNode
+    if (upscaleDraft === null) return restoredReadyUpscaleNode
     return workflow.nodes.find(
       (n): n is VideoResultNode =>
         isVideoNode(n) && n.data.metadata?.pending_job_id === upscaleDraft.job_id,
     ) ?? null
-  }, [upscaleDraft, workflow])
+  }, [restoredReadyUpscaleNode, upscaleDraft, workflow])
 
   const downloadVideoNode = useCallback(async (
     node: VideoResultNode,
@@ -1240,7 +1334,32 @@ export function TimelinePanel({
     setUpscaleDraft(null)
     setUpscaleError(null)
     autoDownloadedUpscaleJobRef.current = null
-  }, [projectId])
+  }, [projectId, reelSignature])
+
+  useEffect(() => {
+    if (upscaleStatus !== 'idle') return
+    if (restoredPendingUpscale !== null) {
+      setUpscaleDraft(pendingToUpscaleDraft(restoredPendingUpscale, reel.length))
+      if (restoredPendingUpscale.stage === 'draft') {
+        setUpscaleError(null)
+        setUpscaleStatus('confirm')
+      } else if (restoredPendingUpscale.stage === 'failed') {
+        setUpscaleError(restoredPendingUpscale.message || '4K upscale failed')
+        setUpscaleStatus('error')
+      } else {
+        setUpscaleError(null)
+        setUpscaleStatus('running')
+      }
+      return
+    }
+    const draft = restoredReadyUpscaleNode
+      ? resultNodeToUpscaleDraft(restoredReadyUpscaleNode, reel.length)
+      : null
+    if (draft === null) return
+    setUpscaleDraft(draft)
+    setUpscaleError(null)
+    setUpscaleStatus('ready')
+  }, [reel.length, restoredPendingUpscale, restoredReadyUpscaleNode, upscaleStatus])
 
   const beginReelUpscale = async (): Promise<void> => {
     if (projectId === null || reel.length === 0) return
