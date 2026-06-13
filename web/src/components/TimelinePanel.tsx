@@ -1371,7 +1371,7 @@ export function TimelinePanel({
           : upscaleStatus === 'running'
             ? 'Upscaling...'
             : upscaleStatus === 'downloading'
-              ? 'Downloading...'
+              ? 'Fetching...'
               : upscaleStatus === 'error'
                 ? 'Retry 4K'
                 : 'Upscale to 4K'
