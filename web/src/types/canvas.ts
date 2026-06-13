@@ -126,8 +126,9 @@ export interface VideoResultMetadata extends NodeMetadataBase {
    * re-download paths; never used as the canvas URL (which always
    * resolves via local_path). */
   provider_output_url?: string
-  /** Video upscaler provenance. */
+  /** Timeline/upscaler provenance. */
   source_node_id?: string
+  reel_build_id?: string
   source_resolution?: string
   requested_output_resolution?: string
   output_resolution?: string

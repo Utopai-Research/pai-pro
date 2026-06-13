@@ -59,11 +59,15 @@ import {
 } from '@dnd-kit/sortable'
 import { useChatComposer } from '@/contexts/ChatComposerContext'
 import {
+  discardPendingDraft,
+  firePendingDraft,
   patchCanvasNodeDataBatch,
+  stageReelUpscaleDraft,
   type CanvasNodeDataUpdate,
+  type ReelUpscaleDraft,
 } from '@/lib/canvas-stub'
 import { VIEWER_URL } from '@/lib/socket'
-import type { Workflow, VideoResultNode } from '@/types/canvas'
+import type { PendingGeneration, Workflow, VideoResultNode } from '@/types/canvas'
 import SortableClip from './timeline/SortableClip'
 import ClipGhostBody from './timeline/ClipGhostBody'
 import DraggableCompactCard from './timeline/DraggableCompactCard'
@@ -83,6 +87,7 @@ function arraysEqual(a: string[] | null, b: string[] | null): boolean {
 interface TimelinePanelProps {
   projectId: string | null
   workflow: Workflow | null
+  pendingGenerations: PendingGeneration[]
   onArchiveNodes: (ids: string[]) => void
   isVisible: boolean
 }
@@ -124,6 +129,15 @@ function clampTimelinePxPerSecond(pxPerSecond: number): number {
     Math.max(TIMELINE_MIN_PX_PER_SECOND, pxPerSecond),
   )
 }
+
+type ReelUpscaleStatus =
+  | 'idle'
+  | 'quoting'
+  | 'confirm'
+  | 'running'
+  | 'downloading'
+  | 'ready'
+  | 'error'
 
 function timelineClipWidth(node: VideoResultNode, pxPerSecond: number): number {
   return timelineDurationSeconds(node) * pxPerSecond
@@ -254,6 +268,7 @@ function TimelineZoomControl({
 export function TimelinePanel({
   projectId,
   workflow,
+  pendingGenerations,
   onArchiveNodes,
   isVisible,
 }: TimelinePanelProps): JSX.Element {
@@ -1146,6 +1161,123 @@ export function TimelinePanel({
 
   // ---- Stitch + download the reel via the viewer's ffmpeg endpoint ----
   const [downloading, setDownloading] = useState(false)
+  const [upscaleStatus, setUpscaleStatus] = useState<ReelUpscaleStatus>('idle')
+  const [upscaleDraft, setUpscaleDraft] = useState<ReelUpscaleDraft | null>(null)
+  const [upscaleError, setUpscaleError] = useState<string | null>(null)
+  const autoDownloadedUpscaleJobRef = useRef<string | null>(null)
+
+  const manifestMatchesReel =
+    manifest !== null &&
+    manifest.clips.length === reel.length &&
+    manifest.clips.every((clip, i) => clip.node_id === reel[i]?.id)
+  const currentReelBuildId = manifestMatchesReel ? manifest.build_id : null
+
+  const reelUpscaleSourceIds = useMemo(() => {
+    const sourceIds = new Set<string>()
+    if (workflow === null || currentReelBuildId === null) return sourceIds
+    for (const node of workflow.nodes) {
+      if (!isVideoNode(node)) continue
+      const metadata = node.data.metadata
+      if (
+        metadata.task_type === 'reel_stitch' &&
+        metadata.mode === 'timeline_reel' &&
+        metadata.reel_build_id === currentReelBuildId
+      ) {
+        sourceIds.add(node.id)
+      }
+    }
+    return sourceIds
+  }, [currentReelBuildId, workflow])
+
+  const restoredPendingUpscale = useMemo<PendingGeneration | null>(() => {
+    if (reelUpscaleSourceIds.size === 0) return null
+    let latest: PendingGeneration | null = null
+    for (const entry of pendingGenerations) {
+      if (entry.kind !== 'video') continue
+      if (entry.mode !== '4K upscale' && entry.model !== 'upscale-complete') continue
+      if (
+        typeof entry.source_node_id !== 'string' ||
+        !reelUpscaleSourceIds.has(entry.source_node_id)
+      ) continue
+      const entryAt = Date.parse(entry.created_at ?? entry.completed_at ?? '')
+      const latestAt = latest === null
+        ? -Infinity
+        : Date.parse(latest.created_at ?? latest.completed_at ?? '')
+      if (
+        latest === null ||
+        (Number.isFinite(entryAt) ? entryAt : 0) >
+          (Number.isFinite(latestAt) ? latestAt : 0)
+      ) {
+        latest = entry
+      }
+    }
+    return latest
+  }, [pendingGenerations, reelUpscaleSourceIds])
+
+  const restoredReadyUpscaleNode = useMemo<VideoResultNode | null>(() => {
+    if (workflow === null || reelUpscaleSourceIds.size === 0) return null
+    let latest: VideoResultNode | null = null
+    for (const node of workflow.nodes) {
+      if (!isVideoNode(node)) continue
+      const metadata = node.data.metadata
+      if (
+        node.data.archived === true ||
+        typeof node.data.video_url !== 'string' ||
+        node.data.video_url === '' ||
+        metadata.task_type !== 'video_upscale' ||
+        metadata.mode !== '4K upscale' ||
+        typeof metadata.source_node_id !== 'string' ||
+        !reelUpscaleSourceIds.has(metadata.source_node_id)
+      ) continue
+      const nodeAt = Date.parse(metadata.generated_at ?? '')
+      const latestAt = latest === null
+        ? -Infinity
+        : Date.parse(latest.data.metadata.generated_at ?? '')
+      if (
+        latest === null ||
+        (Number.isFinite(nodeAt) ? nodeAt : 0) >
+          (Number.isFinite(latestAt) ? latestAt : 0)
+      ) {
+        latest = node
+      }
+    }
+    return latest
+  }, [reelUpscaleSourceIds, workflow])
+
+  const upscaleResultNode = useMemo<VideoResultNode | null>(() => {
+    if (workflow === null) return restoredReadyUpscaleNode
+    if (upscaleDraft === null) return restoredReadyUpscaleNode
+    return workflow.nodes.find(
+      (n): n is VideoResultNode =>
+        isVideoNode(n) && n.data.metadata?.pending_job_id === upscaleDraft.job_id,
+    ) ?? null
+  }, [restoredReadyUpscaleNode, upscaleDraft, workflow])
+
+  const downloadVideoNode = useCallback(async (
+    node: VideoResultNode,
+    fallbackName: string,
+  ): Promise<void> => {
+    const src = node.data.video_url
+    if (typeof src !== 'string' || src === '') {
+      throw new Error('video URL is not ready yet')
+    }
+    const res = await fetch(src)
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    const blob = await res.blob()
+    const objectUrl = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = objectUrl
+    const name = String(node.data.label || fallbackName)
+      .replace(/[^a-zA-Z0-9._-]+/g, '_')
+      .replace(/^_+|_+$/g, '')
+      .slice(0, 80) || fallbackName
+    a.download = name.toLowerCase().endsWith('.mp4') ? name : `${name}.mp4`
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(objectUrl)
+  }, [])
+
   const downloadReel = async () => {
     if (projectId === null || downloading || reel.length === 0) return
     setDownloading(true)
@@ -1178,6 +1310,150 @@ export function TimelinePanel({
     }
   }
 
+  useEffect(() => {
+    setUpscaleStatus('idle')
+    setUpscaleDraft(null)
+    setUpscaleError(null)
+    autoDownloadedUpscaleJobRef.current = null
+  }, [projectId, reelSignature])
+
+  useEffect(() => {
+    if (upscaleStatus !== 'idle') return
+    if (restoredPendingUpscale !== null) {
+      setUpscaleDraft({
+        job_id: restoredPendingUpscale.id,
+        cost_usd: restoredPendingUpscale.cost_usd,
+        shot_count: reel.length,
+        source_resolution: restoredPendingUpscale.source_resolution,
+        target_resolution: restoredPendingUpscale.target_resolution,
+        duration: restoredPendingUpscale.duration,
+      })
+      if (restoredPendingUpscale.stage === 'draft') {
+        setUpscaleError(null)
+        setUpscaleStatus('confirm')
+      } else if (restoredPendingUpscale.stage === 'failed') {
+        setUpscaleError(restoredPendingUpscale.message || '4K upscale failed')
+        setUpscaleStatus('error')
+      } else {
+        setUpscaleError(null)
+        setUpscaleStatus('running')
+      }
+      return
+    }
+    if (restoredReadyUpscaleNode === null) return
+    const jobId = restoredReadyUpscaleNode.data.metadata.pending_job_id
+    if (typeof jobId !== 'string' || jobId === '') return
+    setUpscaleDraft({
+      job_id: jobId,
+      cost_usd: restoredReadyUpscaleNode.data.metadata.estimated_cost_usd,
+      shot_count: reel.length,
+      source_resolution: restoredReadyUpscaleNode.data.metadata.source_resolution,
+      target_resolution:
+        restoredReadyUpscaleNode.data.metadata.requested_output_resolution ??
+        restoredReadyUpscaleNode.data.metadata.output_resolution,
+      duration: restoredReadyUpscaleNode.data.duration,
+    })
+    setUpscaleError(null)
+    setUpscaleStatus('ready')
+  }, [reel.length, restoredPendingUpscale, restoredReadyUpscaleNode, upscaleStatus])
+
+  const beginReelUpscale = async (): Promise<void> => {
+    if (projectId === null || reel.length === 0) return
+    if (upscaleStatus === 'ready' && upscaleResultNode !== null) {
+      try {
+        setUpscaleStatus('downloading')
+        await downloadVideoNode(upscaleResultNode, 'upscaled-reel-4k.mp4')
+        setUpscaleStatus('ready')
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e)
+        setUpscaleError(`4K result is ready, but download failed: ${msg}`)
+        setUpscaleStatus('ready')
+      }
+      return
+    }
+    if (
+      upscaleStatus === 'quoting' ||
+      upscaleStatus === 'running' ||
+      upscaleStatus === 'downloading'
+    ) return
+    setUpscaleStatus('quoting')
+    setUpscaleError(null)
+    setUpscaleDraft(null)
+    autoDownloadedUpscaleJobRef.current = null
+    try {
+      const draft = await stageReelUpscaleDraft(projectId)
+      setUpscaleDraft(draft)
+      setUpscaleStatus('confirm')
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      setUpscaleError(msg)
+      setUpscaleStatus('error')
+    }
+  }
+
+  const confirmReelUpscale = async (): Promise<void> => {
+    if (projectId === null || upscaleDraft === null) return
+    setUpscaleStatus('running')
+    setUpscaleError(null)
+    try {
+      await firePendingDraft(projectId, upscaleDraft.job_id)
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      setUpscaleError(msg)
+      setUpscaleStatus('error')
+    }
+  }
+
+  const cancelReelUpscale = async (): Promise<void> => {
+    const jobId = upscaleDraft?.job_id ?? null
+    setUpscaleDraft(null)
+    setUpscaleError(null)
+    setUpscaleStatus('idle')
+    if (projectId !== null && jobId !== null) {
+      await discardPendingDraft(projectId, jobId).catch((err) => {
+        console.warn(
+          `[timeline:${projectId}] discard upscale draft failed: ${
+            err instanceof Error ? err.message : String(err)
+          }`,
+        )
+      })
+    }
+  }
+
+  useEffect(() => {
+    if (upscaleDraft === null) return
+    if (upscaleStatus !== 'running') return
+    const failed = pendingGenerations.find(
+      (entry) => entry.id === upscaleDraft.job_id && entry.stage === 'failed',
+    )
+    if (!failed) return
+    setUpscaleError(failed.message || '4K upscale failed')
+    setUpscaleStatus('error')
+  }, [pendingGenerations, upscaleDraft, upscaleStatus])
+
+  useEffect(() => {
+    if (upscaleDraft === null || upscaleResultNode === null) return
+    if (
+      upscaleStatus !== 'running' &&
+      upscaleStatus !== 'downloading'
+    ) return
+    if (autoDownloadedUpscaleJobRef.current === upscaleDraft.job_id) {
+      setUpscaleStatus('ready')
+      return
+    }
+    autoDownloadedUpscaleJobRef.current = upscaleDraft.job_id
+    setUpscaleStatus('downloading')
+    downloadVideoNode(upscaleResultNode, 'upscaled-reel-4k.mp4')
+      .then(() => {
+        setUpscaleStatus('ready')
+      })
+      .catch((e) => {
+        const msg = e instanceof Error ? e.message : String(e)
+        setUpscaleError(`4K result is ready, but download failed: ${msg}`)
+        setUpscaleStatus('ready')
+      })
+  }, [downloadVideoNode, upscaleDraft, upscaleResultNode, upscaleStatus])
+
   const reelPlayheadPx =
     playlistMode === 'reel' && total > 0
       ? Math.max(0, Math.min(reelTrack.widthPx, time * timelinePxPerSecond))
@@ -1198,6 +1474,34 @@ export function TimelinePanel({
       playing ? '⏸' : time >= total && total > 0 ? '↻' : '▶'
     const toolbarIconClass =
       'grid h-8 w-10 shrink-0 place-items-center rounded-md border border-neutral-700 bg-neutral-900 text-[13px] leading-none text-neutral-200 transition-colors hover:border-neutral-500 hover:text-white'
+    const upscaleBusy =
+      upscaleStatus === 'quoting' ||
+      upscaleStatus === 'running' ||
+      upscaleStatus === 'downloading'
+    const upscaleButtonLabel =
+      upscaleStatus === 'ready'
+        ? 'Download 4K'
+        : upscaleStatus === 'quoting'
+          ? 'Preparing quote...'
+          : upscaleStatus === 'running'
+            ? 'Upscaling...'
+            : upscaleStatus === 'downloading'
+              ? 'Fetching...'
+              : upscaleStatus === 'error'
+                ? 'Retry 4K'
+                : 'Upscale to 4K'
+    const upscaleTitle =
+      reel.length === 0
+        ? 'Add at least one shot to the reel first'
+        : upscaleStatus === 'ready'
+          ? 'Download the latest 4K upscale'
+          : upscaleBusy
+            ? '4K upscale is in progress'
+            : 'Upscale the entire reel to 4K'
+    const upscaleCost =
+      typeof upscaleDraft?.cost_usd === 'number' && Number.isFinite(upscaleDraft.cost_usd)
+        ? `$${upscaleDraft.cost_usd.toFixed(2)}`
+        : null
     // Master-build status overlay. Only meaningful in reel
     // mode — single-clip preview never waits on a master.
     const overlays = (
@@ -1310,6 +1614,95 @@ export function TimelinePanel({
                 onChange={applyTimelineZoom}
               />
             ) : null}
+            <div className="relative">
+              {upscaleError !== null && upscaleStatus !== 'confirm' ? (
+                <div
+                  className="absolute bottom-[calc(100%+10px)] right-0 z-40 w-72 rounded-md border border-red-400/60 bg-[#130404] px-3 py-2 text-[11px] leading-snug text-red-100 shadow-[0_18px_60px_rgba(0,0,0,0.9)]"
+                  title={upscaleError}
+                >
+                  {upscaleError}
+                </div>
+              ) : null}
+              {upscaleStatus === 'confirm' && upscaleDraft !== null ? (
+                <div className="absolute bottom-[calc(100%+10px)] right-0 z-50 w-[22rem] max-w-[calc(100vw-2rem)] overflow-hidden rounded-md border border-neutral-500 bg-[#050505] text-left shadow-[0_24px_90px_rgba(0,0,0,0.95)] ring-1 ring-white/10">
+                  <div className="flex items-center justify-between border-b border-neutral-800 px-4 py-3">
+                    <div className="text-[11px] font-semibold uppercase tracking-wide text-neutral-50">
+                      Upscale current reel
+                    </div>
+                    <div className="rounded border border-neutral-700 bg-neutral-900 px-1.5 py-0.5 font-mono text-[10px] text-neutral-200">
+                      4K
+                    </div>
+                  </div>
+                  <div className="px-4 py-3">
+                    <div className="space-y-1.5 text-[11px] leading-snug text-neutral-300">
+                      <div className="flex items-center justify-between gap-4">
+                        <span className="text-neutral-500">Source</span>
+                        <span className="text-right text-neutral-200">
+                          {upscaleDraft.shot_count ?? reel.length} clip{(upscaleDraft.shot_count ?? reel.length) === 1 ? '' : 's'}
+                          {typeof upscaleDraft.duration === 'number' ? ` · ${formatTime(upscaleDraft.duration)}` : ''}
+                        </span>
+                      </div>
+                      {upscaleDraft.source_resolution || upscaleDraft.target_resolution ? (
+                        <div className="flex items-center justify-between gap-4">
+                          <span className="text-neutral-500">Resolution</span>
+                          <span className="font-mono text-[11px] text-neutral-200">
+                            {[upscaleDraft.source_resolution, upscaleDraft.target_resolution]
+                              .filter((v): v is string => typeof v === 'string' && v !== '')
+                              .join(' -> ')}
+                          </span>
+                        </div>
+                      ) : null}
+                    </div>
+                    <div className="mt-3 rounded-md border border-neutral-800 bg-neutral-950 px-3 py-2">
+                      <div className="flex items-baseline justify-between gap-4">
+                        <span className="text-[11px] uppercase tracking-wide text-neutral-500">
+                          Estimated cost
+                        </span>
+                        <span className="font-mono text-lg text-neutral-50">
+                          {upscaleCost ?? 'Unknown'}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="mt-3 flex items-center justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => void cancelReelUpscale()}
+                        className="rounded-md border border-neutral-800 bg-[#080808] px-3 py-1.5 text-[11px] uppercase tracking-wide text-neutral-400 transition-colors hover:border-neutral-600 hover:text-neutral-100"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void confirmReelUpscale()}
+                        className="rounded-md border border-neutral-300 bg-neutral-100 px-3 py-1.5 text-[11px] uppercase tracking-wide text-neutral-950 shadow-[0_0_0_1px_rgba(255,255,255,0.25)] transition-colors hover:bg-white"
+                      >
+                        {`Upscale${upscaleCost !== null ? ` · ${upscaleCost}` : ''}`}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+              <TimelineIconButton
+                label={upscaleTitle}
+                ariaLabel={upscaleButtonLabel}
+                onClick={() => void beginReelUpscale()}
+                disabled={reel.length === 0 || upscaleBusy}
+                className={
+                  'flex h-8 shrink-0 items-center justify-center whitespace-nowrap rounded-md border px-3 text-[11px] font-semibold leading-none transition-colors ' +
+                  (upscaleBusy
+                    ? 'cursor-wait border-neutral-700 bg-neutral-900 text-neutral-400'
+                    : reel.length === 0
+                      ? 'cursor-not-allowed border-neutral-800 bg-neutral-950 text-neutral-600'
+                      : upscaleStatus === 'ready'
+                        ? 'border-neutral-500 bg-neutral-100 text-neutral-950 hover:bg-white'
+                        : 'border-neutral-700 bg-neutral-900 text-neutral-200 hover:border-neutral-500 hover:text-white')
+                }
+              >
+                <span aria-hidden className={upscaleBusy ? 'animate-pulse' : ''}>
+                  {upscaleButtonLabel}
+                </span>
+              </TimelineIconButton>
+            </div>
             <TimelineIconButton
               label="Download"
               ariaLabel="Download"

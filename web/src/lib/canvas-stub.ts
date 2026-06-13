@@ -230,6 +230,32 @@ export async function discardPendingDraft(
   )
 }
 
+export interface ReelUpscaleDraft {
+  job_id: string
+  cost_usd?: number
+  shot_count?: number
+  source_resolution?: string
+  target_resolution?: string
+  duration?: number
+}
+
+export async function stageReelUpscaleDraft(
+  projectId: string | null,
+): Promise<ReelUpscaleDraft> {
+  if (!projectId) throw new Error('stageReelUpscaleDraft: no projectId')
+  const url = `${VIEWER_URL}/projects/${encodeURIComponent(projectId)}/reel/upscale-4k/draft`
+  const res = await fetch(url, { method: 'POST' })
+  const body = await res.json().catch(() => ({}))
+  if (!res.ok || body?.ok !== true) {
+    throw new Error(
+      typeof body?.error === 'string'
+        ? body.error
+        : `POST ${url} -> ${res.status} ${res.statusText}`,
+    )
+  }
+  return body as ReelUpscaleDraft
+}
+
 // ────────────────────────────────────────────────────────────────────
 // User-dropped / pasted file upload. POSTs multipart/form-data to
 // /projects/:id/upload. Server builds the canvas node + appends it

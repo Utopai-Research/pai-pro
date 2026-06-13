@@ -45,6 +45,7 @@ const args = parseArgs({
   "request-id":           { type: "string" },
   "no-canvas-write":      { type: "boolean" },
   stage:                  { type: "boolean" },
+  "stage-only":           { type: "boolean" },
   "draft-only":           { type: "boolean" },
   "existing-job-id":      { type: "string" },
   "upscale-request-id":   { type: "string" },
@@ -251,7 +252,7 @@ function buildCreatePayload(sourceSpec, outputResolution) {
 }
 
 function replayArgvWithEstimate(requestId, costUsd) {
-  const out = rawArgv.filter((a) => a !== "--stage" && a !== "--draft-only");
+  const out = rawArgv.filter((a) => a !== "--stage" && a !== "--draft-only" && a !== "--stage-only");
   if (!out.includes("--upscale-request-id")) out.push("--upscale-request-id", requestId);
   if (!out.includes("--estimated-cost-usd") && typeof costUsd === "number") {
     out.push("--estimated-cost-usd", String(costUsd));
@@ -334,7 +335,16 @@ if (args.stage && !routeOwnedPending) {
       fail("infra", "failed to write draft sidecar");
       process.exit(1);
     }
-    emitSuccess({ stage: "draft", job_id: jobId, model: UPSCALE_COMPLETE_MODEL, cost_usd: costUsd });
+    emitSuccess({
+      stage: "draft",
+      job_id: jobId,
+      model: UPSCALE_COMPLETE_MODEL,
+      cost_usd: costUsd,
+      source_resolution: resolutionString(resolved.sourceSpec),
+      target_resolution: resolutionString(resolved.outputResolution),
+      duration: resolved.durationInt,
+    });
+    if (args["stage-only"]) process.exit(0);
     const bypassEnabled = await isBypassEnabled();
     if (args["draft-only"] && !bypassEnabled) process.exit(0);
     const projectId = bypassEnabled
