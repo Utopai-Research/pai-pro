@@ -86,6 +86,7 @@ function arraysEqual(a: string[] | null, b: string[] | null): boolean {
 
 interface TimelinePanelProps {
   projectId: string | null
+  projectTitle: string
   workflow: Workflow | null
   pendingGenerations: PendingGeneration[]
   onArchiveNodes: (ids: string[]) => void
@@ -267,6 +268,7 @@ function TimelineZoomControl({
 
 export function TimelinePanel({
   projectId,
+  projectTitle,
   workflow,
   pendingGenerations,
   onArchiveNodes,
@@ -1165,6 +1167,13 @@ export function TimelinePanel({
   const [upscaleDraft, setUpscaleDraft] = useState<ReelUpscaleDraft | null>(null)
   const [upscaleError, setUpscaleError] = useState<string | null>(null)
   const autoDownloadedUpscaleJobRef = useRef<string | null>(null)
+  const upscaleDownloadName = useMemo(() => {
+    const base = String(projectTitle || 'reel')
+      .replace(/[^a-zA-Z0-9._-]+/g, '_')
+      .replace(/^_+|_+$/g, '')
+      .slice(0, 80) || 'reel'
+    return `4K_${base}.mp4`
+  }, [projectTitle])
 
   const manifestMatchesReel =
     manifest !== null &&
@@ -1255,7 +1264,6 @@ export function TimelinePanel({
 
   const downloadVideoNode = useCallback(async (
     node: VideoResultNode,
-    fallbackName: string,
   ): Promise<void> => {
     const src = node.data.video_url
     if (typeof src !== 'string' || src === '') {
@@ -1267,16 +1275,12 @@ export function TimelinePanel({
     const objectUrl = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = objectUrl
-    const name = String(node.data.label || fallbackName)
-      .replace(/[^a-zA-Z0-9._-]+/g, '_')
-      .replace(/^_+|_+$/g, '')
-      .slice(0, 80) || fallbackName
-    a.download = name.toLowerCase().endsWith('.mp4') ? name : `${name}.mp4`
+    a.download = upscaleDownloadName
     document.body.appendChild(a)
     a.click()
     a.remove()
     URL.revokeObjectURL(objectUrl)
-  }, [])
+  }, [upscaleDownloadName])
 
   const downloadReel = async () => {
     if (projectId === null || downloading || reel.length === 0) return
@@ -1362,7 +1366,7 @@ export function TimelinePanel({
     if (upscaleStatus === 'ready' && upscaleResultNode !== null) {
       try {
         setUpscaleStatus('downloading')
-        await downloadVideoNode(upscaleResultNode, 'upscaled-reel-4k.mp4')
+        await downloadVideoNode(upscaleResultNode)
         setUpscaleStatus('ready')
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e)
@@ -1443,7 +1447,7 @@ export function TimelinePanel({
     }
     autoDownloadedUpscaleJobRef.current = upscaleDraft.job_id
     setUpscaleStatus('downloading')
-    downloadVideoNode(upscaleResultNode, 'upscaled-reel-4k.mp4')
+    downloadVideoNode(upscaleResultNode)
       .then(() => {
         setUpscaleStatus('ready')
       })
