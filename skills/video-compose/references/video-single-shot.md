@@ -27,6 +27,7 @@ For ordinary single-shot polish (non-storyboard), choose emotion, power holder, 
 - **Scene** — one paragraph; weather and time matter (fog, golden hour, dusk).
 - **Character** — name each character's face / build / wardrobe; if there's a canvas character, reference it as `@Image1` and bind by role.
 - **Shot.Action** — one motion beat, one sentence.
+- **Spoken lines** — copy script/shot/user dialogue and VO verbatim. Bind each quoted line to the intended character and, when available, the matching `@AudioN` timbre or final-read ref.
 - **Sound / Atmosphere** — ambient + action SFX + music, or `No Music`.
 - **Negative** — closing line every time for brand / portrait work.
 
@@ -34,7 +35,7 @@ For ordinary single-shot polish (non-storyboard), choose emotion, power holder, 
 
 Pattern-specific notes (the role vocabulary itself is in SKILL.md):
 
-- **Lip-sync:** character voice sample uses *`Use @Audio1 as the voice/timbre reference only. Speak the quoted line exactly once, no echo.`* Final line audio uses *`Use @Audio1 for timing, cadence, and voice. Keep the words unchanged.`* Never `@Image1 says`.
+- **Lip-sync:** character voice sample uses *`Use @Audio1 as the voice/timbre reference only. Speak the quoted line exactly once, no echo, no repeated reads.`* Final line audio uses *`Use @Audio1 for timing, cadence, and voice. Keep the words unchanged.`* Never `@Image1 says`; write `the character in @Image1 says`.
 - **Camera-move source:** borrow camera grammar from `@Video1` without re-rendering the source.
 
 ## Example
@@ -46,14 +47,14 @@ Pattern-specific notes (the role vocabulary itself is in SKILL.md):
 [Character] The character in @Image1, same face and wardrobe.
 [Shot]
   Visuals: Medium close-up; her eyes lock on someone off-camera.
-  Action: She says exactly: "Stay with me." Use @Audio1 as the voice/timbre reference only. Speak the quoted line exactly once, no echo.
+  Action: She says exactly: "Stay with me." Use @Audio1 as the voice/timbre reference only. Speak the quoted line exactly once, no echo, no repeated reads.
   Sound / Atmosphere: rain on glass, elevator hum. No Music.
 [Negative] no captions, watermarks, distortion, stretching.
 ```
 
 ## What to lock vs. what to change
 
-- **Lock from refs:** identity, wardrobe, location continuity, lighting state.
+- **Lock from refs:** identity, wardrobe/state variant, location/detail variant, lighting state.
 - **The prompt carries:** the action, the camera beat, the atmosphere, the sound design.
 - Don't re-describe what's already in `@Image1` — name the role and let the ref bind it.
 

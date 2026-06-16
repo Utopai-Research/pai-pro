@@ -15,7 +15,7 @@ When script shot notes exist on canvas, populate the timeline from their verbati
 - Translate the action lines into Visuals + Action wording in the timeline.
 - Every dialogue/VO line from the shot note must appear in the video prompt verbatim.
 - Preserve dialogue verbatim — write as `[Character] says exactly: "…"`. If a character image ref is also attached, use *"the character in @Image1 says exactly: …"*.
-- If an audio ref is a final read, include the text and add: *"Use @Audio1 for timing, cadence, and voice. Keep the words unchanged."* If it is a voice sample, use it only as a timbre anchor.
+- If an audio ref is a final read, include the text and add: *"Use @Audio1 for timing, cadence, and voice. Keep the words unchanged."* If it is a voice sample, bind it to the matching speaker as a timbre anchor: *"Use @Audio1 as the voice/timbre reference only. Speak the quoted line exactly once, no echo, no repeated reads."*
 - Preserve shot ordering — Shot 1 → SHOT 1 in the timeline, etc. Use the incoming `kind: "derived"` edge from the script note (`subtype === "script"`) to group shots that share a parent.
 
 ## Cross-skill source — storyboard mosaic
@@ -63,7 +63,7 @@ speed ramp ×2 (shots 1, 4) — energy punch-ins; whip pan ×1 (shot 3) — venu
 Pattern-specific notes (the role vocabulary itself is in SKILL.md):
 
 - **Character image refs:** identity locks across all shots in the timeline.
-- **Spoken audio:** assign to shots. Voice sample: *`Use @Audio1 as the voice/timbre reference only; speak the quoted line once, no echo.`* Final read: *`Use @Audio1 for timing, cadence, and voice. Keep the words unchanged.`*
+- **Spoken audio:** assign to shots and speakers. Voice sample: *`Use @Audio1 as the voice/timbre reference only; speak the quoted line exactly once, no echo, no repeated reads.`* Final read: *`Use @Audio1 for timing, cadence, and voice. Keep the words unchanged.`*
 - **Camera-move source:** rare — borrow camera grammar into one specific shot.
 
 ## Examples
@@ -85,7 +85,7 @@ No captions, subtitles, storyboard grid, panel numbers, or guide marks.
 
 ## What to lock vs. what to change
 
-- **Lock across shots:** wardrobe, props, locations, lighting state, color palette, character identity (via `@ImageN` refs).
+- **Lock across shots:** wardrobe/state variant, props, detailed location/location variant, lighting state, color palette, character identity (via `@ImageN` refs).
 - **Vary across shots:** framing, camera move, density, momentary atmosphere.
 - The continuity guarantee is in the timeline's wording — any time wardrobe / palette / time-of-day differs between shots, name it explicitly.
 

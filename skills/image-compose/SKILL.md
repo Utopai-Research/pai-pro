@@ -11,6 +11,8 @@ description: >-
   appear in downstream video, clip, promo, film, scene, or shot, default to
   Pattern 7, a 4-panel front/profile/back/closeup reference sheet. Use Pattern
   1 only for one-off static portraits, posters, print art, or illustrations.
+  For story/script breakdowns, generate detailed location anchors and material
+  character/location variants when continuity requires them.
   Storyboard routing: use Pattern 6 with generate_image_pro.js, one composite
   mosaic per clip or <=15s shot note, not one CLI call per panel.
 ---
@@ -64,6 +66,16 @@ Pick the one that fits. For source lookup, follow the project `PROJECT_AGENT.md`
 
 This pre-flight is non-negotiable. Pattern 1's single front portrait gives the video model an anchor that's too narrow; identity drifts shot-to-shot. Skipping straight to Pattern 1 for video work is the single most-common mistake.
 
+**Story/script anchor defaults.** When `script-compose` or `story-to-video-workflow` routes a breakdown here:
+
+- Generate one base 4-panel sheet per material character.
+- Generate additional sheets for material character variants: age jump, wardrobe/uniform/disguise, injury or persistent dirty/wet/bloodied state, transformation, or any continuity-significant on-screen look.
+- Generate detailed location anchors for every setting that materially affects a shot.
+- Generate same-location variants when framing/scale, time of day, weather, lighting, dressing, story state, or close/detail coverage changes what the video model must preserve.
+- Treat close looks, inserts, prop detail frames, and "same room but close on X" needs as location/detail variants when they are important to clip generation.
+- Prefer reference-to-clip after anchors land. Use storyboard only when the user asks for it, a shot is hard to control without storyboard frames, or the agent needs storyboard frames to diagnose composition.
+- Do not drop material character or location variants as a shortcut. Budget or speed savings should come from the caller's video resolution/runtime choices, not from removing anchors that protect continuity.
+
 ### 1. Character portrait (one-off static stills only)
 
 Triggers: "design / create / introduce / cast a character / protagonist / antagonist / hero / villain / lead / portrait / headshot" **AND** the output is a one-off static still (poster, print art, single illustration) — NOT character work that will feed video gen. (Video-bound character work → Pattern 7; see the pre-flight above.)
@@ -82,8 +94,10 @@ Triggers: "establish / design / picture [LOCATION]", or "yes" to a `script-compo
 - Prompt template:
   > `[style] establishing still of [LOCATION NAME]. [visual brief — architecture, lighting, atmosphere]. Wide shot, eye-level, no characters present.`
 - Keep the frame empty of characters — locations are reusable references for later scenes. Inherit project style if one exists.
+- Make the location concrete enough for continuity: architecture/layout, surfaces, dressing, era, weather, time of day, light direction/quality, and story state when relevant.
+- For same-location variants, keep the stable identity of the place while changing only the material variant: wide/close scale, day/night, storm/clear, dressed/trashed, intact/damaged, or detail/inset coverage.
 - No ref edges by default. If the location was derived from a script or shot note, use `--source-node-id` so the authorship edge lands.
-- *Follow-on:* once you've designed **every** location identified by a `script-compose` parse offer (i.e. the last location in the run), offer the user one short line: "Locations are up — want me to storyboard the next shot?" Bridges into Pattern 6. Skip if locations were designed ad-hoc, not from a script offer.
+- *Follow-on:* once you've designed **every** location identified by a `script-compose` parse offer (i.e. the last location in the run), offer the user one short line recommending the next reference-to-clip render. Mention storyboard only if the user requested it or the shot needs extra composition control. Skip if locations were designed ad-hoc, not from a script offer.
 
 ### 3. Edit / variation / turnaround of an existing image
 
@@ -155,7 +169,7 @@ Distinct from Pattern 1: Pattern 1 is a single static portrait that will NOT fee
 - Pre-flight: for current uploaded refs, follow the project `PROJECT_AGENT.md` § "Choosing context" and identify reference image nodes (`subtype: "reference"`, ideally ≥3 photos of the same actor from different angles or lighting). Confirm the ref count to the user in one short line before firing.
 - `node "$PAI_REPO_ROOT/server/cli/generate_image_pro.js" --prompt "..." --size 2560x1440 --subtype character --name "<character_name>" --role "..." --ref-source-id <ref1> --ref-source-id <ref2> --ref-source-id <ref3> [--source-node-id <script_or_shot_note_id>]` — pro tier is the default for character sheets because panel layout, text suppression, and identity consistency are load-bearing. Do not pass `--aspect-ratio` or `--image-size`. Never fire Mode A with fewer than 3 refs (model overfits to the one angle it has).
 - With 0-2 actor refs, use the Mode B text-only command from `references/character-sheet.md`: same pro command, but omit every actor-photo `--ref-source-id`; include `--source-node-id` only when a script or shot note authored the design.
-- ONE call. ONE sheet per base character or material variant. For a variant that must preserve the same identity, pass the base character sheet as a `--ref-source-id` and describe only the persistent wardrobe/state change.
+- ONE call. ONE sheet per base character or material variant. Generate the base sheet before variant sheets. For a variant that must preserve the same identity, pass the base character sheet as a `--ref-source-id` and describe only the persistent wardrobe/state change.
 - The sheet plugs into `generate_video.js` as `--ref-source-id <sheet_id>` for any downstream shot (front / back / profile) — no cropping needed for typical use.
 
 **For the verbatim 4-panel prompt template, the optional per-angle anchor crop sub-flow, cross-character validation evidence, and the gotchas (no-text rule, photo-priority, exact panel counts)**: see [references/character-sheet.md](references/character-sheet.md).

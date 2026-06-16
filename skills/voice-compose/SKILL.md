@@ -1,11 +1,11 @@
 ---
 name: voice-compose
-description: Designs and attaches voice samples or final narration/line audio on the filmmaking canvas via the local generate_voice.js CLI. Use before calling generate_voice.js; when the user asks to give a character a voice, preview how a character sounds, create a reusable timbre anchor for video dialogue, or create exact narration/VO/final line audio.
+description: Designs and attaches voice samples or final narration/line audio on the filmmaking canvas via the local generate_voice.js CLI. Use before calling generate_voice.js; when the user asks to give a character a voice, preview how a character sounds, create reusable timbre anchors for every speaking character or VO/narration, or create exact narration/VO/final line audio.
 ---
 
 **Stage by default.** Every `generate_voice.js` call goes through `--stage`; see the project `PROJECT_AGENT.md` § "Draft gate" for draft and result handling.
 
-`--text` is the exact spoken text for this audio node. For video dialogue, default to one short reusable voice sample per speaking character; downstream `video-compose` keeps the actual shot dialogue in the video prompt and uses the sample as a timbre anchor. Only treat `audio_result.data.text` as the downstream speech source when the node is an approved final narration or line read.
+`--text` is the exact spoken text for this audio node. For video dialogue or narrated story workflows, default to one short reusable voice sample per speaking character and one reusable VO/narrator sample when narration is present; downstream `video-compose` keeps the actual shot dialogue/VO in the video prompt and uses the sample as a timbre anchor. Only treat `audio_result.data.text` as the downstream speech source when the node is an approved final narration or line read.
 
 ## Patterns
 
@@ -35,10 +35,11 @@ Triggers: "give / design a voice for [character]", "what does [character] sound 
   - a brief self-introduction in their voice ("I've been working this beat for twenty years…"),
   - or a catchphrase.
 - For scripted video dialogue, generate one sample per speaker unless the user explicitly asks for separate final line reads. The video prompt still carries each shot's dialogue verbatim.
+- For a script breakdown with several speakers, preserve speaker identity labels and create one staged call per speaking character. Add a separate VO/narrator sample via Pattern 2 when narration is present.
 - Calls go via `--stage` — see the project `PROJECT_AGENT.md` § "Draft gate". Bulk asks: one call per target in a single turn, each becoming its own draft card.
 - The real `audio_result` (subtype `voice`, with `source_id` + derived edge to the source image) is minted only after the user fires the draft.
 
-### 2. Final narration / line audio
+### 2. Narrator / VO voice sample or final line audio
 
 Triggers: "a narrator voice", "voice-over for the opener", "a voice that says X" (no specific character named), "drop a narration track on the canvas", or an explicit request for final line-read audio.
 
@@ -48,5 +49,7 @@ Triggers: "a narrator voice", "voice-over for the opener", "a voice that says X"
     --text "<the narration line>" \
     --prompt "<voice design brief>"
   ```
-- Same `prompt` convention as Pattern 1. Copy the approved narration/dialogue exactly into `--text`; this node's `data.text` is then the source of truth for that final audio.
-- After the user fires, the audio lands as a standalone `audio_result` on the canvas — usable as final audio or as a `--ref-audio-source-id` when the video must follow that exact read.
+- Same `prompt` convention as Pattern 1.
+- For a reusable VO/narrator timbre anchor, use a short sample line in the narrator's style, not the full script narration. Downstream `video-compose` still carries the shot's narration text verbatim and uses this audio only as the voice/timbre reference.
+- For an explicit final narration or final line-read request, copy the approved narration/dialogue exactly into `--text`; this node's `data.text` is then the source of truth for that final audio.
+- After the user fires, the audio lands as a standalone `audio_result` on the canvas — usable as a timbre anchor or, for approved final reads, as final audio / a timing-cadence ref.

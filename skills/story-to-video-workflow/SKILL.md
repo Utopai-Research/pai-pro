@@ -23,15 +23,17 @@ description: >-
 
 Use this as the normal story-to-video ladder. It is a guide, not a lock; the user can skip, reorder, supply refs, or ask for a rough direct render.
 
-1. Capture or adapt the story/script.
-2. Split into <=15s shot notes and identify production anchors.
-3. Create character and location anchors for video-bound shots, unless the user supplied refs or explicitly chose rough direct render.
-4. Create voices for speaking characters or narration when voice matters.
-5. Confirm the working clip plan: shot count, durations, continuity needs, and first missing dependency.
-6. Ask render path: straight to video vs storyboard first.
-7. Ask dispatch for multi-clip plans: hybrid, parallel, or sequential.
-8. Render video clips.
-9. Hand off clip order and preview to the Timeline flow.
+1. Clarify intent only when it blocks execution.
+2. Capture or adapt the story/script. If the user supplied only a raw idea, route to `script-compose` to create a production-ready script before planning shots.
+3. Split into <=15s shot notes with dialogue-aware timing and identify production anchors.
+4. Extract characters, material character variants, detailed locations, same-location variants, and speaking/narration needs.
+5. Create visual anchors for video-bound shots when they improve continuity, unless the user supplied refs or explicitly chose rough direct render.
+6. Create reusable voice anchors for every speaking character and for VO/narration when present.
+7. Confirm the working clip plan: shot count, durations, continuity needs, and first missing dependency.
+8. Prefer straight-to-video from references. Use storyboard only when the user asks for it, the shot is hard to control without it, or storyboard frames are needed to diagnose composition.
+9. For multi-clip plans, prefer hybrid dispatch: sequence dependent shots within a continuous scene, and render independent shots/scenes in parallel.
+10. Render video clips.
+11. Assign Timeline `shot_id` order when producing a sequence, then hand off clip order and preview to the Timeline flow.
 
 Plan ahead internally, but only ask the next meaningful user-facing choice; the Consent and gates ladder fixes when render path and dispatch become askable.
 
@@ -55,6 +57,7 @@ Capability skills own CLI flags, node grammar, reference flags, and domain-speci
 - Render path and multi-clip dispatch are later choices when the story shape is meaningful enough to decide them.
 - If the user asks for a one-off generation outside the story pipeline, route directly to the matching capability skill.
 - These are soft gates, not bureaucracy. If the user explicitly asks to skip anchors, storyboards, or planning and make a rough direct render, honor that choice and carry it forward.
+- Keep normal collaborative checkpoints unless another explicit feature or approved workflow takes over orchestration.
 - Gating ladder. Ask each rung only once the prior one is real, never off a rough beat plan: script captured, then <=15s shot notes -> anchors, user refs, or an explicit rough-direct skip -> a clip plan real enough to discuss (shot count, durations, continuity) -> render path (full askability in the Render path section) -> dispatch (multi-clip plan only). Stop after the render-path question; surface dispatch only in a later turn unless the user's reply already names a combined choice such as "straight to video + parallel".
 
 ## VO and dialogue invariants
@@ -74,12 +77,12 @@ Before recommending refs or video from a story, inspect `workflow.json` when nee
 
 - Target duration from user duration, timestamps, or a rough estimate.
 - Planned shot count, with each shot intended as <=15s.
-- Characters, material variants, locations, and speaking/narration needs.
+- Characters, material character variants, detailed locations, same-location variants, close/detail framing needs, and speaking/narration needs.
 - First missing anchor blocking the next clip.
 
 If the story implies more than roughly 3 minutes, recommend narrowing scope before clip planning.
 
-After shot notes exist, if video-bound character/location anchors are missing, recommend anchors as the default next step. Include a rough-direct skip option when speed matters.
+After shot notes exist, if video-bound character/location/voice anchors are missing, recommend anchors as the default next step. Include base character sheets, material character variants, detailed location anchors, same-location variants, and reusable voice anchors for speakers/VO when relevant. Include a rough-direct skip option when speed matters.
 
 After anchors are present, offer a lightweight reference review or clip-plan confirmation before render choices when the next step is still ambiguous. Keep it short. For simple single-clip projects, user-supplied refs, or an explicit rough-direct choice, keep the checkpoint small and move on.
 
@@ -94,7 +97,7 @@ Ask this only after the script/shot plan is settled and either:
 
 If shot notes exist but anchors are still missing and the user has not chosen rough direct render, return to the Planning checkpoint instead.
 
-When ready and the user has not picked a path, ask:
+When ready and the user has not picked a path, recommend straight-to-video from references. Do not insert a storyboard step merely because shot notes exist. Ask:
 
 Use the project manual's choice shape with:
 
@@ -146,11 +149,19 @@ Typical priority:
 
 - Script note landed -> recommend splitting into <=15s shot notes and extracting anchors.
 - Shot notes exist but anchors are missing -> recommend the first missing character/location anchor, with a rough-direct skip option. Do not ask render path or dispatch yet.
-- Character/location ref landed -> recommend remaining anchors first; when anchors are ready, recommend reference review, clip-plan confirmation, storyboard, or render path.
+- Character/location ref landed -> recommend remaining anchors first; when anchors are ready, recommend reference review, clip-plan confirmation, or straight-to-video render path. Mention storyboard only when requested or clearly useful for control/diagnosis.
 - Voice landed -> recommend using it with the matching visual ref in the next dialogue/narration clip.
 - Storyboard landed -> recommend review or animating the matching clip.
 - Video clip landed -> recommend the next clip, or Timeline handoff when all planned clips are ready.
 
 ## Final handoff
 
-Timeline owns reel order. Numeric `video_result.data.shot_id` means a clip is in the reel. Local export uses `reel_stitch.js` after an explicit user request. When all planned clips are ready, hand off in chat: tell the user to open the Timeline tab to inspect and preview them together.
+Timeline owns reel order. Numeric `video_result.data.shot_id` means a clip is in the reel. When all planned story clips are ready and the intended order is unambiguous, assign `shot_id = 1..N` with one `updateBatch` mutator call before handoff:
+
+```
+node "$PAI_REPO_ROOT/server/cli/canvas_mutate.js" \
+  --op updateBatch \
+  --payload-json '{"updates":[{"id":"<video_1>","patch":{"shot_id":1}},{"id":"<video_2>","patch":{"shot_id":2}}]}'
+```
+
+Do not use `generate_video.js --shot-id` for speculative or partial ordering; assign after clips land. Local export uses `reel_stitch.js` only after an explicit user request. After assignment, hand off in chat: tell the user to open the Timeline tab to inspect and preview them together.

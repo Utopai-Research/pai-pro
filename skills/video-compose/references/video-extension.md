@@ -33,7 +33,7 @@ Continue from @Video1 — start AFTER its final frame; do not include any frames
 
 Then write what happens next, in plain language.
 
-For script-driven links, copy dialogue/VO exactly. If an audio ref is a final read, add: *"Use @Audio1 for timing, cadence, and voice. Keep the words unchanged."* If it is a voice sample, use it only as a timbre anchor.
+For script-driven links, copy dialogue/VO exactly. If an audio ref is a final read, add: *"Use @Audio1 for timing, cadence, and voice. Keep the words unchanged."* If it is a voice sample, bind it to the matching speaker as a timbre anchor: *"Use @Audio1 as the voice/timbre reference only. Speak the quoted line exactly once, no echo, no repeated reads."*
 
 **Anti-pattern: re-describing the world.** The reference video provides composition, location, lighting, character pose; the prompt provides the *new action*.
 
@@ -47,7 +47,7 @@ For script-driven links, copy dialogue/VO exactly. If an audio ref is a final re
 Pattern-specific notes (the role vocabulary itself is in SKILL.md):
 
 - **Character image ref:** locks identity across links — the source video may drift, the explicit ref reinforces.
-- **Spoken audio:** include exact dialogue/VO. Use `@Audio1` as final read or timbre anchor per `SKILL.md`.
+- **Spoken audio:** include exact dialogue/VO. Bind each line to the intended character and use `@Audio1` as final read or timbre anchor per `SKILL.md`.
 - **Camera-move source:** rare — switch camera grammar mid-chain.
 
 ## What to lock vs. what to change
