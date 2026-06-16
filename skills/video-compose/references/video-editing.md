@@ -18,17 +18,25 @@ For transforming an existing canvas clip. Source video provides composition/moti
 Re-render @Video1 in [transformation]. Preserve composition, motion, and subject.
 ```
 
+Examples:
+- *"Re-render @Video1 in golden-hour light with warm highlights and long shadows. Preserve composition, motion, and subject."*
+- *"Re-render @Video1 as 2D anime with cel shading and bold outlines. Preserve composition, motion, and subject."*
+
 **Partial edit:**
 
 ```
 Re-render @Video1 with [single change]. Keep [list of preserves] unchanged.
 ```
 
+Example: *"Re-render @Video1 with heavy rain and overcast sky. Keep the character's position, wardrobe, and camera movement unchanged."*
+
 **Replace:**
 
 ```
 Re-render @Video1 with [old subject/product] replaced by [new subject/product]. Preserve scene, lighting, composition.
 ```
+
+Example: *"Re-render @Video1 with the silver perfume bottle replaced by a matte-black ceramic vase. Preserve scene, lighting, composition."*
 
 **Re-plot:**
 
@@ -62,6 +70,16 @@ Example: *"Re-render @Video1 keeping the detective and the diner, but the detect
 - **Output looks too different from source** — over-described; the prompt is doing redescribe instead of transform. Reduce the prompt to the change clause + preserves clause.
 - **Output looks identical to source** — under-described; the change clause is too vague. Be specific about *what* changes.
 - **Identity drift in Restyle / Partial** — attach a character image ref; the source video alone may not be enough to lock identity through a style change.
+
+## Worked example — Restyle
+
+User: *"Re-render the detective interrogation clip in golden-hour light."*
+
+```
+Re-render @Video1 in warm golden-hour light, with low-angle sun streaming through the blinds and long shadows across the desk. Preserve composition, motion, and subject.
+```
+
+Adjacent ref attached: `--ref-source-id <detective.id>` — locks the detective's face through the regrade.
 
 ## Fallback branch
 

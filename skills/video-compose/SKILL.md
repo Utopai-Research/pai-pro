@@ -8,7 +8,7 @@ Intent dispatcher. Patterns name trigger, call, edges, and prompt reference.
 ## Hard defaults
 
 - Stage by default per `PROJECT_AGENT.md`.
-- Audio on by default; pass `--no-audio` only for explicit silent/no-audio requests.
+- Audio on by default; pass `--no-audio` only for explicit silent/no-audio requests. Trailer/portrait/cinematic framing is NOT a trigger; audio is the baseline, not optional polish.
 - Reference-to-clip default: use available character/variant/location/voice refs directly. Storyboard only if requested, hard to control, or needed for diagnosis.
 - Preserve scripted dialogue/VO exactly unless the user asks for rewrite.
 

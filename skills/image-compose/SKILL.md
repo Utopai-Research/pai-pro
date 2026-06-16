@@ -53,6 +53,8 @@ Pick the one that fits. For source lookup, follow the project `PROJECT_AGENT.md`
 3. Announce one line before firing; allow redirect to Pattern 1.
 4. One-off static art/poster/portrait -> Pattern 1.
 
+This pre-flight is non-negotiable. Pattern 1's single front portrait gives the video model an anchor that's too narrow; identity drifts shot-to-shot. Skipping straight to Pattern 1 for video work is the single most-common mistake.
+
 **Story/script anchor defaults.** When `script-compose` or `story-to-video-workflow` routes a breakdown here:
 
 - One base 4-panel sheet per material character.
@@ -93,6 +95,9 @@ Triggers: change/edit/swap/replace/add/remove/tweak/what-if/variation on an exis
 - Prompt as a **transformation**, not a full re-description:
   > `<concrete change>. Preserve everything else.`
 
+  ✅ "Change the rain to falling snow. Keep the detective, wardrobe, and camera framing unchanged."
+  ✅ "Render as a full 3D turnaround sheet of the same character. Preserve face, wardrobe, and proportions."
+  ❌ "A detective in a snowy alley at night wearing a trench coat…" — over-specifies, identity drifts.
 - The CLI emits the derived edge from `<source.id>` based on `--ref-source-id`.
 - Multi-step chains use one edge/call per step; do not flatten A -> C.
 

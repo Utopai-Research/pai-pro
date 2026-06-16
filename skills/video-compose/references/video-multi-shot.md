@@ -30,7 +30,7 @@ When a storyboard mosaic exists (`subtype:"storyboard"` or legacy evidence), ren
 - **Per-panel content:** read `data.prompt` `[PANEL LIST]`; each brief becomes `SHOT ... (panel N)`.
 - **Identity continuity:** re-use character/location refs from mosaic incoming `derived` edges.
 - **Grid ceiling.** 4×4 (16 panels at ~0.94s each) is the practical ceiling — past that, beats are too short to register. Warn the user before rendering a 5×5+ mosaic.
-- **Don't drop panels.** If user wants a subset, suggest `split_image.js --url <mosaic URL> --cols <C> --rows <R> --source-node-id <mosaic.id>` so they can choose tiles.
+- **Don't drop panels.** If user wants a subset, suggest `split_image.js --url <mosaic URL> --cols <C> --rows <R> --source-node-id <mosaic.id>` so they can choose tiles. Splitting is the explicit cherry-pick gesture — never something the agent does unprompted to make the math nicer.
 
 ## The 4-section scaffold
 

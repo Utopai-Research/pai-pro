@@ -24,6 +24,9 @@ Triggers: "give / design a voice for [character]", "what does [character] sound 
 - Prompt describes the **voice**, not the character:
   > `[age bracket] [gender], [timbre], [register], [pace], [accent if relevant]. [optional emotional color].`
 
+  ✅ "Mid-50s man, gravelly baritone, measured pace, slight rasp from decades of smoking, weary but steady."
+  ✅ "Young woman, bright mezzo, warm, quick and percussive. Slight Southern lilt."
+  ❌ "Detective Morris's voice." — names the character, not the voice. The model needs sound qualities.
 - `text`: 1-3 sentence in-character sample (≤200 chars), not every script line.
 - Script breakdowns: one staged call per speaker; preserve labels. Add separate VO/narrator via Pattern 2.
 

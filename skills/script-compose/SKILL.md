@@ -13,7 +13,7 @@ description: >-
 
 Run only on explicit user intent, never on file drop. Dropped text/PDF already exists as a note (`data.body`) and mirror (`./assets/notes/<note_id>.md`).
 
-Defaults: a 30s beat is one moment; match the input language; with characters, prefer meaningful dialogue and let narration support rather than carry the scene.
+Defaults: a 30s beat is one moment; match the input language; with characters, prefer meaningful dialogue and let narration support rather than carry the scene, but let wordless action carry a beat instead of packing every one with dialogue.
 
 Stop at script capture, shot notes, and anchor extraction. Route multi-stage work back to `story-to-video-workflow`.
 
@@ -72,7 +72,7 @@ STOP. Do NOT proceed to §3 without an explicit user command.
 When triggered:
 
 1. **Slug** — kebab-case of the working title. Collision → suffix `-2`, `-3`.
-2. **Shot splits** (≤15s each): use `metadata.target_duration_sec` or estimate. Split on natural beats (slug/dialogue/location/time/appearance changes). For >15s material, keep resulting shots as close to 15s as natural; split shorter only for hard cuts, dialogue turns, continuity shifts, or strong beats. Pace speech at ~2.2-2.5 words/sec plus reaction/action room; silent action ~3–5s. If dialogue cannot fit naturally, split it; reduce only when the user asked for compression. **Never rewrite** — shot bodies are verbatim slices. Each shot note has `subtype: "shot"`. Build one `addBatch` with N shot notes + N derived edges:
+2. **Shot splits** (≤15s each): use `metadata.target_duration_sec` or estimate. Split on natural beats (slug/dialogue/location/time/appearance changes). For >15s material, keep resulting shots as close to 15s as natural (default ≈ `ceil(total_seconds / 15)` shots); split shorter only for hard cuts, dialogue turns, continuity shifts, or strong beats — don't over-fragment just because the script's own time markers say so. Pace speech at ~2.2-2.5 words/sec plus reaction/action room; silent action ~3–5s. If dialogue cannot fit naturally, split it; reduce only when the user asked for compression. **Never rewrite** — shot bodies are verbatim slices. Each shot note has `subtype: "shot"`. Build one `addBatch` with N shot notes + N derived edges:
    ```
    node "$PAI_REPO_ROOT/server/cli/canvas_mutate.js" \
      --op addBatch \

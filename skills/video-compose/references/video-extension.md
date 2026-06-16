@@ -48,9 +48,14 @@ Before firing 2+ `generate_video.js` calls in one turn, run this check on each p
 3. **Same lighting state?** Sunset, lamplight, firelight, sunrise — subtle gradients diverge between two parallel renders even with identical prompts.
 4. **Narrative handoff?** Does the last beat of A literally set up the first beat of B?
 
-If all answers are "no", parallel is fine.
+If all answers are "no" for a given pair (two unrelated scenes), parallel is fine. Most scenes in a story chain — default to serial.
 
-Why: prompt text does not pin geometry/lighting/pose; the source video ref does. Chain immediate predecessor only to stay under video-ref aggregate cap. "Same way" after a chain means repeat chain shape, not parallel calls.
+**Why the check exists:**
+
+- **Prompt-independence ≠ creative independence.** B's prompt may be writable without reading A's output, but B's rendered geometry / lighting / subject pose depends on A's actual final frame. If A doesn't exist yet, you can't pin B to it.
+- **Prompt text alone does not pin the frame.** The continuity prefix shapes description; the frame-level pin comes from the attached `--ref-source-id` to the source video. Without it, the model renders something that *describes* the same room but doesn't *match* it pixel-wise.
+- **15s aggregate video-ref cap.** A clip can't reference two 10s predecessors at once — their combined 20s breaches the cap. Chain instead: each link references only its immediate predecessor (one 10s ref, under the cap).
+- **"Same way" = chain shape.** When the user says "do the next N scenes the same way" after a chain, the structure being repeated is the chain itself, not the per-call shape. Don't collapse "same way" into firing parallel calls.
 
 ## How staged serialization runs
 
@@ -72,7 +77,15 @@ For ≥4 linked clips, serial rendering adds roughly one render wait per clip. S
 
 ## Worked example — two consecutive scenes
 
-If scene B opens on the same platform where scene A ends, stage A first. After A lands, stage B with `--ref-source-id <video_A.id>` plus character refs and continuity prefix.
+Scene A ends with a traveler stepping off a train onto a platform. Scene B opens on the same platform with a station attendant noticing the new arrival.
+
+**Bad (parallel):**
+- Same turn: two `generate_video.js` calls — one for scene A, one for scene B with `--ref-source-id <traveler.id> --ref-source-id <attendant.id>`.
+- Scene B's prompt names the platform but has no frame anchor from scene A. Mismatched cut.
+
+**Good (serial):**
+- Step 1: stage `node "$PAI_REPO_ROOT/server/cli/generate_video.js" --prompt "<scene A prompt>" --ref-source-id <traveler.id>` and wait for the user to fire it.
+- Step 2: after A lands, resolve `video_A.id`, then stage `node "$PAI_REPO_ROOT/server/cli/generate_video.js" --prompt "<scene B prompt>" --ref-source-id <traveler.id> --ref-source-id <attendant.id> --ref-source-id <video_A.id>`. Prefix: *"Continue from @Video1 — maintain visual continuity with the final frame (platform at dusk, traveler mid-stride stepping off the train). The character in @Image1 is the traveler; the character in @Image2 is the attendant watching from the booth. …"*.
 
 ## Troubleshooting
 

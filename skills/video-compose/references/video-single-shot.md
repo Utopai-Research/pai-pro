@@ -23,7 +23,7 @@ For ordinary single-shot polish, fill:
 ```
 
 - **Duration** — also pass `--duration N`; split or chain >15s totals.
-- **Style** — use concrete camera/palette/lens cues, not generic quality adjectives.
+- **Style** — use concrete camera/palette/lens cues, not generic quality adjectives. *"Shot on a full-frame digital cinema camera, fast prime lens, shallow DOF, naturalistic palette, subtle grain"* beats *"cinematic, high-quality"*.
 - **Scene** — location, light, time, weather.
 - **Character** — describe or bind canvas character by role (`the character in @Image1`).
 - **Shot.Action** — one motion beat, one sentence.

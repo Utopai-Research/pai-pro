@@ -102,7 +102,12 @@ No captions, no labels, no English words, no Chinese characters, no numbers, no 
 High-resolution 16:9 production sheet, clean editorial layout, no decorative borders between panels.
 ```
 
-Mode B relies on words, so make `{{STYLE_HINT}}`, `{{CHARACTER_PHYSICAL_DESCRIPTION}}`, and `{{COSTUME_DESCRIPTION}}` concrete. After it lands, mention that uploaded refs would improve future iterations.
+Mode B is less robust than Mode A — identity has to come from words alone, so the model has more freedom to drift between panels. Mitigations:
+- Pick a `{{STYLE_HINT}}` that's specific ("photoreal 35mm cinema, Kodak Portra 400, available light" beats "realistic")
+- Make `{{CHARACTER_PHYSICAL_DESCRIPTION}}` concrete (3-5 distinguishing visual anchors the model can lock onto across panels)
+- Be explicit about `{{COSTUME_DESCRIPTION}}` — fabric, color, period, accessories. Vague costume → wardrobe drift between panels.
+
+After it lands, mention that uploaded refs would improve future iterations.
 
 ## After firing: how the sheet plugs into video gen
 
