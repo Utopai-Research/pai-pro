@@ -6,6 +6,13 @@ import fs from "node:fs";
 import fsp from "node:fs/promises";
 import path from "node:path";
 
+import {
+  AutoRunError,
+  createAutoRun,
+  finishAutoRun,
+  publicAutoRun,
+  reserveAutoRunBudget,
+} from "../lib/auto_runs.js";
 import { resolveAgentIdForNewProject } from "../agents/index.js";
 import { mutate } from "../canvas_mutator.js";
 import {
@@ -31,6 +38,27 @@ import { killPty } from "../services/socket.js";
 import { rowFor } from "./system.js";
 
 const ALLOWED_ASSET_KINDS = new Set(["images", "videos", "audios", "refs", "notes"]);
+
+function emitMetaSlice(io, id, meta) {
+  io.to(id).emit("title", {
+    projectId: id,
+    title: meta.title,
+    dangerously_skip_draft_gate: !!meta.dangerously_skip_draft_gate,
+    auto_run: publicAutoRun(meta.auto_run),
+  });
+}
+
+function autoRunErrorResponse(res, e) {
+  if (e instanceof AutoRunError || e?.http) {
+    return res.status(e.http || 500).json({
+      ok: false,
+      klass: e.klass || "infra",
+      error: e.message,
+      ...(e.extra && typeof e.extra === "object" ? e.extra : {}),
+    });
+  }
+  return null;
+}
 
 export function registerProjectsRoutes({ app, io, projects, mutatorHooks }) {
   app.post("/projects", async (req, res) => {
@@ -147,16 +175,111 @@ export function registerProjectsRoutes({ app, io, projects, mutatorHooks }) {
         });
       }
       if (hasFlag || !p.canvasState || typeof p.canvasState !== "object") {
-        io.to(id).emit("title", {
-          projectId: id,
-          title: p.meta.title,
-          dangerously_skip_draft_gate: !!p.meta.dangerously_skip_draft_gate,
-        });
+        emitMetaSlice(io, id, p.meta);
       }
       res.json({ ok: true, row: rowFor(p.meta, p) });
     } catch (e) {
       console.warn(`[viewer] PATCH /projects/${id} failed:`, e);
       res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.post("/projects/:id/auto-runs", async (req, res) => {
+    const id = req.params.id;
+    const p = projects.get(id);
+    if (!p) return res.status(404).json({ error: "not found" });
+    try {
+      const { result: run, meta } = await updateProjectMeta(id, p, (next) => {
+        const created = createAutoRun({
+          budgetCapUsd: req.body?.budget_cap_usd,
+          estimateUsd: req.body?.estimate_usd,
+          plannedRuntimeSeconds: req.body?.planned_runtime_seconds,
+          brief: req.body?.brief,
+        });
+        next.auto_run = created;
+        return created;
+      });
+      emitMetaSlice(io, id, meta);
+      res.status(201).json({ ok: true, auto_run: publicAutoRun(run) });
+    } catch (e) {
+      if (autoRunErrorResponse(res, e)) return;
+      console.warn(`[viewer] POST /projects/${id}/auto-runs failed:`, e);
+      res.status(500).json({ ok: false, klass: "infra", error: e.message });
+    }
+  });
+
+  app.post("/projects/:id/auto-runs/:runId/reserve", async (req, res) => {
+    const { id, runId } = req.params;
+    const p = projects.get(id);
+    if (!p) return res.status(404).json({ ok: false, klass: "not_found", error: "not found" });
+    try {
+      const { result, meta } = await updateProjectMeta(id, p, (next) => (
+        reserveAutoRunBudget(next, {
+          runId,
+          jobId: req.body?.job_id,
+          costUsd: req.body?.cost_usd,
+          kind: req.body?.kind,
+          model: req.body?.model,
+          prompt: req.body?.prompt,
+        })
+      ));
+      emitMetaSlice(io, id, meta);
+      res.json({
+        ok: true,
+        auto_run: publicAutoRun(result.run),
+        job: result.job,
+        already_reserved: result.already_reserved,
+      });
+    } catch (e) {
+      if (autoRunErrorResponse(res, e)) return;
+      console.warn(`[viewer] POST /projects/${id}/auto-runs/${runId}/reserve failed:`, e);
+      res.status(500).json({ ok: false, klass: "infra", error: e.message });
+    }
+  });
+
+  app.post("/projects/:id/auto-runs/:runId/complete", async (req, res) => {
+    const { id, runId } = req.params;
+    const p = projects.get(id);
+    if (!p) return res.status(404).json({ ok: false, klass: "not_found", error: "not found" });
+    try {
+      const requestedStatus = req.body?.status;
+      if (requestedStatus !== undefined && requestedStatus !== "completed" && requestedStatus !== "blocked") {
+        return res.status(400).json({
+          ok: false,
+          klass: "bad_args",
+          error: "status must be completed or blocked",
+        });
+      }
+      const status = requestedStatus || "completed";
+      const { result: run, meta } = await updateProjectMeta(id, p, (next) => (
+        finishAutoRun(next, {
+          runId,
+          status,
+        })
+      ));
+      emitMetaSlice(io, id, meta);
+      res.json({ ok: true, auto_run: publicAutoRun(run) });
+    } catch (e) {
+      if (autoRunErrorResponse(res, e)) return;
+      console.warn(`[viewer] POST /projects/${id}/auto-runs/${runId}/complete failed:`, e);
+      res.status(500).json({ ok: false, klass: "infra", error: e.message });
+    }
+  });
+
+  app.delete("/projects/:id/auto-runs/:runId", async (req, res) => {
+    const { id, runId } = req.params;
+    const p = projects.get(id);
+    if (!p) return res.status(404).json({ ok: false, klass: "not_found", error: "not found" });
+    try {
+      const { result: run, meta } = await updateProjectMeta(id, p, (next) => (
+        finishAutoRun(next, { runId, status: "cancelled" })
+      ));
+      emitMetaSlice(io, id, meta);
+      res.json({ ok: true, auto_run: publicAutoRun(run) });
+    } catch (e) {
+      if (autoRunErrorResponse(res, e)) return;
+      console.warn(`[viewer] DELETE /projects/${id}/auto-runs/${runId} failed:`, e);
+      res.status(500).json({ ok: false, klass: "infra", error: e.message });
     }
   });
 

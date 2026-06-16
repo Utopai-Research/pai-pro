@@ -8,6 +8,7 @@ import {
   GENERATION_RESULTS_BUNDLE_LIMIT,
 } from "./readers.js";
 import { kickReelPrebuild } from "./reel_cache.js";
+import { publicAutoRun } from "./auto_runs.js";
 import {
   updateProjectMeta,
   withProjectMutationLock,
@@ -118,6 +119,7 @@ export function createBroadcasters({ io, projects }) {
           projectId: proj.id,
           title: meta.title,
           dangerously_skip_draft_gate: !!meta.dangerously_skip_draft_gate,
+          auto_run: publicAutoRun(meta.auto_run),
         });
       }
     } catch (e) {

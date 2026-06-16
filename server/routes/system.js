@@ -13,6 +13,7 @@ import {
   resolveAgentIdForMeta,
   resolveAgentIdForNewProject,
 } from "../agents/index.js";
+import { publicAutoRun } from "../lib/auto_runs.js";
 import { MODELS, getCost } from "../model_registry.js";
 import { PROJECTS_DIR } from "../lib/paths.js";
 import { viewerUrlForLocalPath } from "../local_mirror.js";
@@ -47,6 +48,7 @@ export function rowFor(meta, project) {
     last_active_at: meta.last_active_at,
     cover_url: coverUrl,
     dangerously_skip_draft_gate: !!meta.dangerously_skip_draft_gate,
+    auto_run: publicAutoRun(meta.auto_run),
   };
 }
 

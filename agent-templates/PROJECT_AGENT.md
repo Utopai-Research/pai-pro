@@ -132,6 +132,20 @@ If the command returns only the draft JSON, reply in one short sentence naming t
 
 If the canvas is in Run immediately mode, still pass `--stage`; the viewer fires the draft. If the user asks you to bypass staging from chat, refuse and tell them to use the canvas control.
 
+### Auto Mode runs
+
+Auto Mode is a scoped, one-run approval gate from the viewer UI. It is not the same as project-wide Run immediately.
+
+When the viewer sends an approved Auto run id, run the story-to-video workflow end to end with the same skill routing rules above. Every paid media generation command must still include `--stage`, and must also include the Auto run id exactly as provided:
+
+```bash
+--auto-run-id <auto_run_id>
+```
+
+That flag lets the CLI reserve budget and fire the staged draft through the approved Auto run without changing the global draft gate. If a CLI returns `budget_exceeded`, `conflict`, or `not_found` for the Auto run, stop staging new jobs and report what completed plus the next minimum viable budget or runtime adjustment.
+
+Auto defaults: use straight-to-video reference-to-clip, 720p unless the budget requires 480p, and hybrid dispatch (parallel independent clusters, sequential continuity-dependent clusters). Under budget pressure, lower video resolution before shortening runtime. Do not remove character variants, location variants, detailed location anchors, or required voice anchors to fit the cap. When all planned clips land, assign Timeline `shot_id` order with one `updateBatch`; do not run `reel_stitch.js` unless explicitly asked.
+
 ### Failure handling
 
 On `{ ok: false, klass, message, limits, sent, ... }`, do not advance the creative pipeline. Classes you may see: `cancelled`, `aborted`, `timeout`, `bad_args`, `asset_rejected`, `content_filtered`, `rate_limited`, `transient`, `transient_exhausted`, `not_found`, `validation`, `conflict`, `infra`.

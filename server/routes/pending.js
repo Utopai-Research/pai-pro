@@ -158,6 +158,7 @@ function pendingContext(entry) {
     "position",
     "reference_source_ids",
     "source_node_id",
+    "auto_run_id",
   ]) {
     if (entry?.[key] !== undefined) out[key] = entry[key];
   }

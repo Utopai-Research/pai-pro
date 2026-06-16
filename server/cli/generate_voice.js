@@ -23,6 +23,7 @@ import {
   fireAndWait,
   isBypassEnabled,
   newJobId,
+  reserveAutoBudget,
   waitForReviewResult,
   writePending,
   writeResultSidecar,
@@ -45,6 +46,7 @@ const args = parseArgs({
   stage:               { type: "boolean" },
   "draft-only":        { type: "boolean" },
   "existing-job-id":   { type: "string" },
+  "auto-run-id":       { type: "string" },
 });
 
 function buildSent() {
@@ -69,6 +71,26 @@ const sourceNodeId = args["source-node-id"] || null;
 
 if (args.stage && !routeOwnedPending) {
   const costUsd = getCost(PLANNED_MODEL, { text: args.text });
+  const autoRunId = args["auto-run-id"] || null;
+  const autoProjectId = autoRunId
+    ? args["project-id"] || (await readActiveProject())
+    : null;
+  if (autoRunId) {
+    const reserved = await reserveAutoBudget({
+      projectId: autoProjectId,
+      runId: autoRunId,
+      jobId,
+      kind: "audio",
+      model: PLANNED_MODEL,
+      prompt: args.prompt,
+      costUsd,
+    });
+    if (!reserved.ok) {
+      const { ok, klass, message, error, ...extra } = reserved;
+      fail(klass || "budget_exceeded", message || error || "auto budget reservation failed", extra);
+      process.exit(klass === "bad_args" ? 2 : 1);
+    }
+  }
   const replayArgv = rawArgv.filter((a) => a !== "--stage" && a !== "--draft-only");
   const staged = await writePending({
     jobId,
@@ -82,6 +104,7 @@ if (args.stage && !routeOwnedPending) {
     script: "generate_voice.js",
     argv: replayArgv,
     text: args.text,
+    autoRunId,
   });
   if (!staged) {
     fail("infra", "failed to write draft sidecar");
@@ -90,8 +113,9 @@ if (args.stage && !routeOwnedPending) {
   emitSuccess({ stage: "draft", job_id: jobId, model: PLANNED_MODEL, cost_usd: costUsd });
   try {
     const bypassEnabled = await isBypassEnabled();
-    if (args["draft-only"] && !bypassEnabled) process.exit(0);
-    const projectId = bypassEnabled
+    const shouldFire = bypassEnabled || !!autoRunId;
+    if (args["draft-only"] && !shouldFire) process.exit(0);
+    const projectId = shouldFire
       ? args["project-id"] || (await readActiveProject())
       : null;
     if (args["draft-only"]) {
@@ -102,7 +126,7 @@ if (args.stage && !routeOwnedPending) {
       }) + "\n");
       process.exit(fired.ok ? 0 : 1);
     }
-    const result = bypassEnabled
+    const result = shouldFire
       ? await fireAndWait({
           projectId,
           jobId,
@@ -131,6 +155,7 @@ await writePending({
   referenceSourceIds: [],
   model: PLANNED_MODEL,
   text: args.text,
+  autoRunId: args["auto-run-id"] || null,
 });
 
 let exitCode = 0;

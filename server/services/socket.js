@@ -43,6 +43,7 @@ import {
   compareResultSummaries,
   GENERATION_RESULTS_BUNDLE_LIMIT,
 } from "../lib/readers.js";
+import { publicAutoRun } from "../lib/auto_runs.js";
 import { updateProjectMeta } from "../lib/writers.js";
 
 const ptys = new Map();
@@ -273,7 +274,12 @@ export function registerSocketHandlers({ io, projects, nodePty }) {
       if (!p) return;
       socket.join(projectId);
       socket.emit("subscribed", { projectId });
-      socket.emit("title", { projectId, title: p.meta.title });
+      socket.emit("title", {
+        projectId,
+        title: p.meta.title,
+        dangerously_skip_draft_gate: !!p.meta.dangerously_skip_draft_gate,
+        auto_run: publicAutoRun(p.meta.auto_run),
+      });
       socket.emit("canvas-state",     { projectId, state: p.canvasState });
       socket.emit("canvas-positions", { projectId, state: p.canvasPositions });
       socket.emit("pending-generations", {
