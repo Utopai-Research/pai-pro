@@ -1,6 +1,6 @@
 # Video — multi-shot prompt construction
 
-For ad / MV / brand pieces, or short scripts that need ≥2 distinct beats inside ONE rendered clip. The 4-section scaffold below is the standard shape.
+For ad/MV/brand pieces or short scripts with ≥2 beats inside ONE rendered clip.
 
 ## When to skip
 
@@ -9,40 +9,40 @@ For ad / MV / brand pieces, or short scripts that need ≥2 distinct beats insid
 
 ## Cross-skill source — script shot notes
 
-When script shot notes exist on canvas, populate the timeline from their verbatim bodies. Locate them by `data.subtype === "shot"`; fall back to legacy `label: "Shot N (a–b s)"`.
+When script shot notes exist, populate the timeline from verbatim bodies. Locate by `data.subtype === "shot"`; fallback label `Shot N (a-b s)`.
 
 - The note's body is a verbatim screenplay slice (slug + action + dialogue).
-- Translate the action lines into Visuals + Action wording in the timeline.
-- Every dialogue/VO line from the shot note must appear in the video prompt verbatim.
+- Translate action into Visuals + Action wording.
+- Include every dialogue/VO line verbatim.
 - Preserve dialogue verbatim — write as `[Character] says exactly: "…"`. If a character image ref is also attached, use *"the character in @Image1 says exactly: …"*.
-- If an audio ref is a final read, include the text and add: *"Use @Audio1 for timing, cadence, and voice. Keep the words unchanged."* If it is a voice sample, use it only as a timbre anchor.
-- Preserve shot ordering — Shot 1 → SHOT 1 in the timeline, etc. Use the incoming `kind: "derived"` edge from the script note (`subtype === "script"`) to group shots that share a parent.
+- Final read: include text and *"Use @Audio1 for timing, cadence, and voice. Keep the words unchanged."* Voice sample: bind to speaker as timbre anchor with once/no-echo/no-repeat guard.
+- Preserve shot order and use `derived` edge from script note to group shared parent shots.
 
 ## Cross-skill source — storyboard mosaic
 
-When a storyboard mosaic exists on canvas (`image_result.data.subtype === "storyboard"`; legacy fallback: label `Storyboard` / `Storyboard — Shot <N>` or prompt panel-list evidence), render the entire mosaic as **one 15s video** — every panel becomes one SHOT block in the prompt timeline. The mosaic itself is passed as a reference image (the video model reads the panels visually and follows their order); the mosaic is **not** cropped, and the render is never split into multiple videos per mosaic.
+When a storyboard mosaic exists (`subtype:"storyboard"` or legacy evidence), render the whole mosaic as **one 15s video**. Every panel becomes one SHOT block; pass the mosaic as a ref; do not crop or split it.
 
-- **Pass the mosaic via `--ref-source-id <mosaic.id>`** alongside the character / location refs originally used to author it. The corner number badges and grid layout make the panel sequence machine-legible.
+- Pass the mosaic via `--ref-source-id <mosaic.id>` alongside original character/location refs.
 - **Do not use opening-frame language.** A storyboard ref is a sequence source. Never start with `Opening frame @Image1`.
-- **Open the prompt with an explicit directive.** *"Multi-shot sequence built from the storyboard panels in @Image1. Follow the storyboard sequence in panel-number order (cell 1 top-left → cell N×M bottom-right; left-to-right, row-by-row)."* Without this directive, the model may interpret panels out of order.
+- Open with: *"Multi-shot sequence built from the storyboard panels in @Image1. Follow panel-number order left-to-right, row-by-row."*
 - **Do not render the mosaic UI.** The panel borders, corner number badges, and grid layout are reading aids only. The output is a normal video sequence.
-- **Beat length is constrained by panel count.** 2×2 ≈ 3.75s/panel, 3×3 ≈ 1.67s/panel, 4×4 ≈ 0.94s/panel. Distribute across the 15s budget — beats can vary slightly within the budget if the storyboard implies a rhythm (e.g. slower setup, faster action), but the total stays at 15s.
-- **Per-panel timeline content.** Read the mosaic node's `data.prompt` field — it carries the per-panel briefs in its `[PANEL LIST]` section. Each brief becomes one SHOT block; tag each block with `(panel N)` so the panel-to-shot mapping stays legible.
-- **Identity continuity.** Re-use the character / location image refs that authored the mosaic (read them from the mosaic node's incoming `kind: "derived"` edges). The mosaic locked identity across cells; the video inherits that lock.
+- **Beat length:** distribute across 15s; 2×2 ≈3.75s/panel, 3×3 ≈1.67s, 4×4 ≈0.94s.
+- **Per-panel content:** read `data.prompt` `[PANEL LIST]`; each brief becomes `SHOT ... (panel N)`.
+- **Identity continuity:** re-use character/location refs from mosaic incoming `derived` edges.
 - **Grid ceiling.** 4×4 (16 panels at ~0.94s each) is the practical ceiling — past that, beats are too short to register. Warn the user before rendering a 5×5+ mosaic.
-- **Don't drop panels by default.** Use every panel. If the user wants only a subset, SUGGEST splitting the mosaic into per-tile nodes so they can name the ones to keep and re-ask: `node "$PAI_REPO_ROOT/server/cli/split_image.js" --url <mosaic URL> --cols <C> --rows <R> --source-node-id <mosaic.id>`, with `--cols`/`--rows` set to the mosaic's own panel grid (each 1-8; 1x1 rejected). `--url` is an image URL, not a node id — pass the mosaic's `output_url` (from its generation result) or the viewer URL for its `local_path` (`/projects/<id>/<local_path>`). Splitting is the explicit cherry-pick gesture — never something the agent does unprompted to make the math nicer.
+- **Don't drop panels.** If user wants a subset, suggest `split_image.js --url <mosaic URL> --cols <C> --rows <R> --source-node-id <mosaic.id>` so they can choose tiles. Splitting is the explicit cherry-pick gesture — never something the agent does unprompted to make the math nicer.
 
 ## The 4-section scaffold
 
-Write plainly — describe what happens. Prompt length should scale with complexity: add detail only when it locks timing, continuity, audio, camera behavior, or constraints.
+Write plainly. Add detail only to lock timing, continuity, audio, camera, or constraints.
 
-**1. Shot-by-shot timeline** — one block per shot. For action/ad/social/story clips, open mid-action in the first 2s:
+**1. Shot-by-shot timeline** — one block per shot; open action/ad/social/story clips mid-action in first 2s:
 
 ```
 SHOT N (a-bs) — [name]: [visual]. [camera]. [effect]. Sound: [ambient/SFX/music or No Music].
 ```
 
-Distribute the total `duration` across shots — sub-second beats are fine for fast-cut storyboard previews. Name effects precisely (*"speed ramp (deceleration)"* not *"speed ramp"*). Describe what the viewer sees, not editor tricks.
+Distribute total `duration`; use precise effect names; describe what the viewer sees.
 
 **2. Effects inventory** — one line listing every distinct effect with count + role:
 
@@ -56,14 +56,12 @@ speed ramp ×2 (shots 1, 4) — energy punch-ins; whip pan ×1 (shot 3) — venu
 0-3s HIGH (3 stacked), 3-6s LOW (clean hold), 6-10s HIGH (whip pan + zoom + bloom).
 ```
 
-**4. Energy arc** — one sentence naming the arc: *open with an impact beat, calm to a hero product shot, resolve on a held close-up.*
+**4. Energy arc** — one sentence naming the arc.
 
 ## Adjacent roles
 
-Pattern-specific notes (the role vocabulary itself is in SKILL.md):
-
 - **Character image refs:** identity locks across all shots in the timeline.
-- **Spoken audio:** assign to shots. Voice sample: *`Use @Audio1 as the voice/timbre reference only; speak the quoted line once, no echo.`* Final read: *`Use @Audio1 for timing, cadence, and voice. Keep the words unchanged.`*
+- **Spoken audio:** assign to shots and speakers. Voice sample: *`Use @Audio1 as the voice/timbre reference only; speak the quoted line exactly once, no echo, no repeated reads.`* Final read: *`Use @Audio1 for timing, cadence, and voice. Keep the words unchanged.`*
 - **Camera-move source:** rare — borrow camera grammar into one specific shot.
 
 ## Examples
@@ -85,9 +83,9 @@ No captions, subtitles, storyboard grid, panel numbers, or guide marks.
 
 ## What to lock vs. what to change
 
-- **Lock across shots:** wardrobe, props, locations, lighting state, color palette, character identity (via `@ImageN` refs).
+- **Lock across shots:** wardrobe/state variant, props, detailed location/location variant, lighting state, color palette, character identity (via `@ImageN` refs).
 - **Vary across shots:** framing, camera move, density, momentary atmosphere.
-- The continuity guarantee is in the timeline's wording — any time wardrobe / palette / time-of-day differs between shots, name it explicitly.
+- Name wardrobe/palette/time changes explicitly.
 
 ## Troubleshooting
 

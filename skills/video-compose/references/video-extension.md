@@ -1,27 +1,13 @@
 # Video — extension prompt construction
 
-For extending an existing canvas clip (Pattern 4). This file owns the continuity prefix and dependency check. Execution still follows the project `PROJECT_AGENT.md` § "Draft gate" and § "Choosing context".
-
-## Contents
-
-- Sub-intent decision tree
-- Slot-by-slot construction
-- Adjacent roles
-- What to lock vs. what to change
-- Why serialize
-- How staged serialization runs
-- Long sequences — surface cost upfront
-- Exception — explicit parallel drafts
-- Worked example
-- Troubleshooting
-- Fallback branch
+For extending an existing canvas clip (Pattern 4). Owns continuity prefix and dependency check.
 
 ## Sub-intent decision tree
 
 - **Forward extension (default)** — continue the action from the source clip's final frame.
 - **Backward extension (prequel beat)** — generate the moment that *led into* the source. Prompt-only — no API param. Phrase as *"leading into @Video1 from a moment N seconds earlier"*.
 - **Multi-clip chain (≥2 linked clips)** — triggers the sequencing rules below.
-- **Script-driven chain** — render shot notes from `script-compose` as dependent links when the story workflow/user chose Sequential/Hybrid or the dependency check below says the clips need continuity. Unrelated scenes can render independently. The shot note's body is the creative source; the prompt itself is built from the slot rules below. Any dialogue/VO from the shot note must appear in the prompt verbatim.
+- **Script-driven chain** — render shot notes as dependent links when Sequential/Hybrid or dependency check requires continuity. Unrelated scenes can render independently. Shot note body is creative source; dialogue/VO stays verbatim.
 
 ## Slot-by-slot construction
 
@@ -31,13 +17,11 @@ Prefix every extension prompt with the continuity anchor:
 Continue from @Video1 — start AFTER its final frame; do not include any frames from @Video1 in the new clip. Maintain visual continuity (same location, lighting, camera position).
 ```
 
-Then write what happens next, in plain language.
-
-For script-driven links, copy dialogue/VO exactly. If an audio ref is a final read, add: *"Use @Audio1 for timing, cadence, and voice. Keep the words unchanged."* If it is a voice sample, use it only as a timbre anchor.
+Then write what happens next. For script-driven links, copy dialogue/VO exactly. Final audio: *"Use @Audio1 for timing, cadence, and voice. Keep the words unchanged."* Voice sample: bind to speaker as timbre anchor and add once/no-echo/no-repeat guard.
 
 **Anti-pattern: re-describing the world.** The reference video provides composition, location, lighting, character pose; the prompt provides the *new action*.
 
-**Anti-pattern: frame repeats.** The new clip must not contain any frames from @Video1 — that produces a visible echo / stutter (the same beats play twice across the cut). The continuity prefix anchors the world; the action begins *after* the reference's final frame. If the prompt is missing the "start AFTER its final frame" direction, the model will sometimes ingest tail frames of the reference into the head of the new render — that's the failure mode.
+**Anti-pattern: frame repeats.** The new clip must start after @Video1's final frame and include no frames from @Video1.
 
 ✅ "Continue from @Video1 — … . The detective lifts a folder from the desk and steps toward the door."
 ❌ "A detective in a dim office at night, wearing a trench coat, opens a folder on his desk and looks up." → re-describes; loses the frame anchor.
@@ -47,7 +31,7 @@ For script-driven links, copy dialogue/VO exactly. If an audio ref is a final re
 Pattern-specific notes (the role vocabulary itself is in SKILL.md):
 
 - **Character image ref:** locks identity across links — the source video may drift, the explicit ref reinforces.
-- **Spoken audio:** include exact dialogue/VO. Use `@Audio1` as final read or timbre anchor per `SKILL.md`.
+- **Spoken audio:** include exact dialogue/VO. Bind each line to the intended character and use `@Audio1` as final read or timbre anchor per `SKILL.md`.
 - **Camera-move source:** rare — switch camera grammar mid-chain.
 
 ## What to lock vs. what to change
@@ -57,14 +41,14 @@ Pattern-specific notes (the role vocabulary itself is in SKILL.md):
 
 ## Why serialize
 
-Before firing two or more `generate_video.js` calls in one turn, run this dependency check on each pair. **Any "yes" → serialize.**
+Before firing 2+ `generate_video.js` calls in one turn, run this check on each pair. **Any "yes" -> serialize.**
 
 1. **Same location?** If clip A ends in a room and clip B opens in the same room, the geometry must match.
 2. **Same subject(s) mid-action?** If a character is holding / walking / reacting at the end of A and still mid-action at the start of B, costume folds and body pose must match.
 3. **Same lighting state?** Sunset, lamplight, firelight, sunrise — subtle gradients diverge between two parallel renders even with identical prompts.
 4. **Narrative handoff?** Does the last beat of A literally set up the first beat of B?
 
-If every answer is "no" for a given pair (two unrelated scenes), parallel is fine. Most scenes in a story chain — default to serial.
+If all answers are "no" for a given pair (two unrelated scenes), parallel is fine. Most scenes in a story chain — default to serial.
 
 **Why the check exists:**
 
@@ -75,21 +59,21 @@ If every answer is "no" for a given pair (two unrelated scenes), parallel is fin
 
 ## How staged serialization runs
 
-Each fired `generate_video.js` job takes 2–4 min wall-clock. With the draft gate, sequence through user-fired results:
+With the draft gate, sequence through user-fired results:
 
 1. Stage clip A and stop. Do not stage clip B in the same turn when B depends on A's actual output.
 2. After the user fires A and comes back, resolve A via the project `PROJECT_AGENT.md` § "Choosing context".
 3. Stage clip B with `--ref-source-id <video_A.id>`. Repeat for each dependent link.
 
-The user can interrupt with new instructions between links. For long chains, surface the total wall-clock cost upfront (see "Long sequences" below).
+User can interrupt between links. For long chains, surface total wall-clock/cost upfront.
 
 ## Long sequences — surface cost upfront
 
-For a long chain (≥4 linked clips), serial rendering adds ~3 min wall-clock per clip — that's 15–20 min of real time for a 6-scene sequence. The next dependent clip cannot be staged until the predecessor result exists, because the prompt depends on that output URL. Surface upfront: *"This is a 6-clip chain — each render is ~3 min, so the whole sequence takes 15–20 min end-to-end. You'll see each scene appear on the canvas as it lands. Ping me if any pair could run as independent drafts."*
+For ≥4 linked clips, serial rendering adds roughly one render wait per clip. Surface total wall-clock/cost before starting.
 
 ## Exception — explicit parallel drafts
 
-"Render two alternate takes of scene 3" or "give me three looks for this shot" — the clips are creatively independent by design. Parallelize. Name the exception; default otherwise is sequential for anything scene-like.
+"Alternate takes" / "three looks for this shot" are independent by design. Parallelize and name the exception.
 
 ## Worked example — two consecutive scenes
 

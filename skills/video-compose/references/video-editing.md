@@ -1,21 +1,8 @@
 # Video — editing prompt construction
 
-For transforming an existing canvas clip — restyle, partial edit, replace, or re-plot. The source video provides composition / motion / subject; the prompt names the change.
-
-## Contents
-
-- Sub-intent decision tree
-- Slot-by-slot construction (per sub-intent)
-- Adjacent roles
-- What to lock vs. what to change (per sub-intent)
-- Combinations to avoid
-- Troubleshooting
-- Worked example
-- Fallback branch
+For transforming an existing canvas clip. Source video provides composition/motion/subject; prompt names the change.
 
 ## Sub-intent decision tree
-
-Pick the closest mode based on the user's ask. If none fit, use **Fallback**.
 
 - **Restyle** — change the visual treatment (regrade, anime, golden hour, monochrome). Preserve composition, motion, subject.
 - **Partial edit** — change one element (rain, color, single object, single passerby). Preserve everything else.
@@ -24,8 +11,6 @@ Pick the closest mode based on the user's ask. If none fit, use **Fallback**.
 - **Other / doesn't fit** — see Fallback branch.
 
 ## Slot-by-slot construction (per sub-intent)
-
-Each mode has its own template. Preserve clauses differ — see "What to lock vs. what to change" below.
 
 **Restyle:**
 
@@ -63,10 +48,8 @@ Example: *"Re-render @Video1 keeping the detective and the diner, but the detect
 
 ## Adjacent roles
 
-Pattern-specific notes (the role vocabulary itself is in SKILL.md):
-
-- **Character image ref:** for Restyle and Partial that risk identity drift, attach a canvas character ref so the new render keeps the face.
-- **Camera-move source:** rare — only when the user explicitly wants to swap camera grammar during the edit.
+- **Character image ref:** attach for Restyle/Partial when identity may drift.
+- **Camera-move source:** only when user explicitly swaps camera grammar.
 
 ## What to lock vs. what to change (per sub-intent)
 

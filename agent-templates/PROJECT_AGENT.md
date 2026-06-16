@@ -25,7 +25,7 @@ Use the skill when it matches; skills own canonical node grammar, refs, edges, m
 
 ## Keep momentum - recommend the next step
 
-After a terminal media generation result, close with one concrete next step. For story-to-video work, recommend the next missing filmmaking piece; when all planned clips are ready, hand off in chat to Timeline inspection. Local reel export is only for explicit user requests. For ad-hoc one-offs, keep the suggestion local to what the user just made.
+After a terminal media generation result, close with one concrete next step. For story-to-video work, recommend the next missing filmmaking piece; when all planned clips are ready and order is unambiguous, assign Timeline order via `shot_id` before handing off in chat to Timeline inspection. Local reel export is only for explicit user requests. For ad-hoc one-offs, keep the suggestion local to what the user just made.
 
 Read `./workflow.json` when the recommendation depends on missing shots, references, voices, clips, or reel order. Draft-only, failed, and cancelled results do not advance the creative pipeline.
 
@@ -171,7 +171,7 @@ Generation CLIs usually mutate for you.
 
 - `note`: `data: { label, body, metadata }`; optional `subtype: "script" | "shot"`.
 - `image_result`: `data: { label, local_path, prompt?, metadata, subtype? }`. Subtypes: `character`, `location`, `edit`, `reference`, `split`, `storyboard`.
-- `video_result`: `data: { label, local_path, prompt?, duration: int, aspect, shot_id: int|null, metadata }`. `shot_id` means Timeline/reel order; set it only when the user explicitly asks for reel positions.
+- `video_result`: `data: { label, local_path, prompt?, duration: int, aspect, shot_id: int|null, metadata }`. `shot_id` means Timeline/reel order; set it only when the user explicitly asks for reel positions or a story-to-video workflow has completed a planned sequence with unambiguous order. Use the mutator, never direct JSON edits.
 - `audio_result`: `data: { subtype: "voice" | "upload", label, local_path, prompt?, text?, source_id?, metadata }`.
 - Edges: `{ from, to, kind?: "derived" }`.
 
