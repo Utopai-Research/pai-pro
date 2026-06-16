@@ -26,9 +26,7 @@ If a script or shot note authored the character design, add `--source-node-id <n
 - The 4-panel sheet prompt (verbatim — fill `{{...}}` placeholders)
 - After firing: how the sheet plugs into video gen
 - Optional: per-angle anchor crops for stress-test fidelity
-- Cross-character validation evidence
 - Gotchas (read before iterating)
-- Optional verification with `pai_analyze.compare` (internal toolset only)
 
 ## Pre-flight: choose Mode A or Mode B
 
@@ -104,12 +102,7 @@ No captions, no labels, no English words, no Chinese characters, no numbers, no 
 High-resolution 16:9 production sheet, clean editorial layout, no decorative borders between panels.
 ```
 
-Mode B is less robust than Mode A — identity has to come from words alone, so the model has more freedom to drift between panels. Mitigations:
-- Pick a `{{STYLE_HINT}}` that's specific ("photoreal 35mm cinema, Kodak Portra 400, available light" beats "realistic")
-- Make `{{CHARACTER_PHYSICAL_DESCRIPTION}}` concrete (3-5 distinguishing visual anchors the model can lock onto across panels)
-- Be explicit about `{{COSTUME_DESCRIPTION}}` — fabric, color, period, accessories. Vague costume → wardrobe drift between panels.
-
-After Mode B's sheet lands, suggest to the user that future video work for this character would benefit from uploading 1-3 reference shots if they have any — that would let later iterations use Mode A.
+Mode B relies on words, so make `{{STYLE_HINT}}`, `{{CHARACTER_PHYSICAL_DESCRIPTION}}`, and `{{COSTUME_DESCRIPTION}}` concrete. After it lands, mention that uploaded refs would improve future iterations.
 
 ## After firing: how the sheet plugs into video gen
 
@@ -128,17 +121,17 @@ Front close-ups, back-walking shots, 3/4 profile pauses — all use the same `--
 
 ## Optional: per-angle anchor crops (stress-test polish only)
 
-Use only when you need *maximum* fidelity on a difficult angle, or when you're running a long sequence of the same angle (10+ back-walking shots) and want byte-identical anchoring across all of them. Expected gain: ~3 points / 40 on Gemini's image-vs-video consistency rubric — often invisible in actual video output.
+Use only for difficult angles or long repeated-angle sequences.
 
 Workflow:
 
-1. **Crop** the relevant panel out of the sheet using `sips`:
+1. **Crop** the relevant panel with `sips`:
    ```
    sips --cropToHeightWidth <H> <W> --cropOffset <Y> <X> \
      ./assets/images/<sheet>.jpg \
      --out ./assets/.tmp/back_crop_$(date +%s).jpg
    ```
-   For the default pro 16:9 sheet (`--size 2560x1440`) with 4 equal panels: each panel is ~640px wide × 1440px tall. Front panel `--cropOffset 0 0`, profile `--cropOffset 0 640`, back `--cropOffset 0 1280`, closeup `--cropOffset 0 1920`. Tighten to the figure as needed.
+   For `2560x1440`, panels are ~640×1440. Offsets: front `0 0`, profile `0 640`, back `0 1280`, closeup `0 1920`.
 
 2. **Upload to canvas** as a new reference node via `canvas_mutate`:
    ```
@@ -149,20 +142,7 @@ Workflow:
 
 3. Use the returned `assigned.node_id` as the `--ref-source-id` for the stress-test shots.
 
-This sub-flow isn't needed for normal production work — the 4-panel sheet alone gets you 36-40/40 on Gemini's rubric across all shot types.
-
-## Cross-character validation
-
-The 4-panel template was validated 2026-05-25 across two distinct character archetypes (different costumes, ages, builds):
-
-| Character archetype | Profile shot (sheet as ref) | Back-walking shot (sheet as ref) |
-|---|---|---|
-| Middle-aged ruler (light-colored silk robe, decorated hairpiece) | 37/40 | 40/40 |
-| Elderly official (dark robe with embroidered chest panel, winged ceremonial cap) | 36/40 | ~32-35/40 |
-
-The elderly-official back-walking video's corrected score is ~32-35/40 — see the `pai_analyze.compare` README in `pai-pro-toolset` for the judge-trust caveats.
-
-Template holds across character archetypes. If your character's costume looks dramatically different from the period dramas this was validated on (e.g., contemporary, sci-fi, animated-style), the photo-priority clause still ensures the refs drive the look — the template doesn't assume any particular period.
+This sub-flow is unnecessary for normal production work; the 4-panel sheet is the default.
 
 ## Gotchas (read before iterating)
 
@@ -175,18 +155,3 @@ Template holds across character archetypes. If your character's costume looks dr
 4. **Only include `--source-node-id` when a real canvas note authored the design.** Actor photos and base sheets belong in `--ref-source-id`; those flags already create provenance edges.
 
 5. **One sheet per character or material variant.** Don't try to put two characters in the same 4-panel sheet. Identity drift between halves of the canvas is a real failure mode; the 4-panel layout assumes a single subject. For a persistent variant of an existing character, pass the base sheet as a `--ref-source-id` and describe only the wardrobe/state change.
-
-## Optional verification with `pai_analyze.compare` (internal toolset only)
-
-If you have `pai-pro-toolset` cloned alongside this repo at `../pai-pro-toolset/`, you can run a Gemini-3.1-Pro judge against the sheet + downstream video to score consistency. The `image_vs_video_consistency` rubric specifically rewards face/costume preservation:
-
-```
-cd ../pai-pro-toolset/scripts/pai-analyze
-CHARACTER_CONTEXT="<your character context>" \
-  uv run python -m pai_analyze.compare \
-    --refs 4 --rubric image_vs_video_consistency \
-    <ref1>.jpg <ref2>.jpg <ref3>.jpg <sheet>.jpg \
-    <generated_video>.mp4
-```
-
-OSS contributors can skip this — the judge is for iteration loops, not for shipping. And the judge has known unreliability modes; see the toolset's `pai-analyze/README.md` "Trusting the judge" section before acting on scores below ~28/40.

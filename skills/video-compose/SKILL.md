@@ -3,16 +3,14 @@ name: video-compose
 description: Generates and prompts video clips on the filmmaking canvas. Use when the user asks to generate, render, animate, continue, restyle, edit, shoot, or compose a video clip; render script or shot notes as video; animate a storyboard, starting frame, image, character, location, or reference; use image, video, audio, storyboard, starting-frame, or voice refs; compose an ad, brand film, product promo, music-video shot, or video sequence; or before calling generate_video.js. Owns video CLI flags, refs, prompt construction, audio-ref handling, and video-specific failure hints.
 ---
 
-This file is the intent dispatcher. Each pattern below names triggers, the CLI invocation, edge / node rules, and which reference owns the prompt construction. References live in `references/`.
+Intent dispatcher. Patterns name trigger, call, edges, and prompt reference.
 
 ## Hard defaults
 
-Behaviors that production-judgment instinct will silently flip when they aren't enshrined here. Don't override these without the user explicitly asking.
-
-- **STAGE BY DEFAULT** — every `generate_video.js` call goes through `--stage`; see the project `PROJECT_AGENT.md` § "Draft gate" for draft and result handling.
-- **AUDIO ON BY DEFAULT** — every `generate_video.js` call generates an audio track (`generate_audio: true`). Pass `--no-audio` ONLY when the user has explicitly asked for a silent clip ("silent", "no audio", "I'll add sound in post"). Trailer / portrait / cinematic framing is NOT a trigger; audio is the baseline, not optional polish.
-- **REFERENCE-TO-CLIP DEFAULT** — when character, character-variant, location, location-variant, or voice anchors exist, use them directly as refs for straight-to-video generation. Do not detour through storyboard unless the user asks for storyboard, the shot is hard to control without it, or storyboard frames are needed to diagnose composition.
-- **PRESERVE SCRIPTED SPEECH** — shot/script dialogue and VO are exact text. Do not summarize, translate, shorten, polish, or invent spoken words unless the user explicitly asks for a rewrite.
+- Stage by default per `PROJECT_AGENT.md`.
+- Audio on by default; pass `--no-audio` only for explicit silent/no-audio requests.
+- Reference-to-clip default: use available character/variant/location/voice refs directly. Storyboard only if requested, hard to control, or needed for diagnosis.
+- Preserve scripted dialogue/VO exactly unless the user asks for rewrite.
 
 ## First-use video mode
 
@@ -27,40 +25,21 @@ node "$PAI_REPO_ROOT/server/cli/generate_video.js" --prompt "..." [--duration <s
   [--source-node-id <id>] [--shot-id <N>]
 ```
 
-`$PAI_REPO_ROOT` is exported by the viewer — see the project `PROJECT_AGENT.md` § "Media CLIs (server/cli/)".
-
 Calls go via `--stage` — see the project `PROJECT_AGENT.md` § "Draft gate".
 
-`--label` defaults to the truncated prompt (≤30 chars) if omitted. Pass
-`--ref-source-id <id>` once per `image_result` / `video_result` source
-node you want as a byte ref — the CLI resolves each source's
-`local_path`, hands the tunnel URL to PAI's `video-generation-assets`
-endpoint, and emits one `derived` edge per ref. Pass
-`--ref-audio-source-id <audio_id>` once per canvas `audio_result` node
-you want as an audio ref (same wiring; separate flag so the CLI can
-partition by type without reading the workflow). External URLs (a
-pasted CDN link, a still you want as a ref) must be mirrored onto the
-canvas first via `mirror_url.js --url <URL>` — the returned
-`node_id` plugs into `--ref-source-id` like any other canvas source.
-When a canvas note authored the clip (most commonly a shot note being
-rendered), pass `--source-node-id <note_id>` — see the project `PROJECT_AGENT.md` §
-"Asset, ref, and edge rules". Don't set `--shot-id` during speculative or partial
-clip generation unless the user asked for a specific reel position. For story
-sequences, `story-to-video-workflow` assigns Timeline order after the planned
-clips land.
+`--label` defaults to truncated prompt. Use `--ref-source-id` for image/video refs, `--ref-audio-source-id` for audio refs, and `--source-node-id` for the authoring note. Mirror external URLs first. Do not set `--shot-id` during speculative/partial generation unless user asks for a reel position; story sequences assign Timeline order after planned clips land.
 
-Match any stated single-clip duration with `--duration <seconds>`; omit only
-for the 15s default. Split or chain >15s totals.
+Match stated single-clip duration with `--duration`; omit for 15s default. Split or chain >15s totals.
 
 Each clip costs real money even after staging — only stage after the user has explicitly asked for a video.
 
 ## Reference caps (video-generation)
 
-≤9 image refs, ≤3 audio refs, ≤3 video refs. Each audio / video ref must be **1.8s–15.2s per file**. **Video refs additionally cap at 15s aggregate** (sum across the ≤3 video refs); audio has no aggregate cap. Audio refs need an image or video anchor — they can't be the only reference. Don't preflight — submit and read `limits` + `sent` on failure. Audio / video durations are already on the canvas — read `audio_result.data.metadata.duration_sec` and `video_result.data.duration` from `workflow.json` instead of probing the files.
+≤9 image refs, ≤3 audio refs, ≤3 video refs. Audio/video refs must be **1.8s-15.2s each**; video refs also cap at **15s aggregate**. Audio refs need image/video anchor. Read durations from `workflow.json`; on failure, use returned `limits` + `sent`.
 
 ## Reference roles — vocabulary
 
-The same CLI flag can serve different semantic roles depending on how the prompt names the ref. Choose the role first; the prompt phrasing binds it.
+Prompt wording binds each ref role:
 
 | Role | Flag | Wording in prompt |
 |---|---|---|
@@ -73,54 +52,54 @@ The same CLI flag can serve different semantic roles depending on how the prompt
 | Camera-move source | `--ref-source-id` (video) | "camera moves match @Video1" |
 | Action source | `--ref-source-id` (video) | "action choreography matches @Video1" |
 | VFX template | `--ref-source-id` (video) | "use the visual-effects template from @Video1" |
-| Voice / timbre anchor | `--ref-audio-source-id` | "Use @Audio1 as the voice/timbre reference. Speak the quoted line exactly once, no echo." |
+| Voice / timbre anchor | `--ref-audio-source-id` | "Use @Audio1 as voice/timbre reference. Speak once, no echo." |
 
 ## Prompt-language conventions
 
-- Reference syntax: `@Image1` / `@Video1` / `@Audio1`, positional, in `--ref-source-id` / `--ref-audio-source-id` order (image and video refs share the `@Image…` / `@Video…` slot per their source node type).
-- Spoken text rule: when a script note, shot note, or user request contains dialogue/VO, include those words in the video prompt verbatim. Do not summarize, translate, shorten, polish, or invent dialogue/VO.
+- Ref syntax: `@Image1` / `@Video1` / `@Audio1`, positional by flag order.
+- Spoken text: include script/shot/user dialogue/VO verbatim; do not summarize, translate, shorten, polish, or invent.
 - Dialogue scenes: keep the shot/script dialogue in the prompt; use one approved voice sample per speaker as a timbre anchor. Bind each quoted line to the intended character and the matching `@AudioN` reference. Do not generate per-line audio refs unless the user explicitly wants separate final audio.
 - Final audio exception: if an audio node is the approved narration/line read, use `audio_result.data.text` verbatim. If it is just a character voice sample, do not replace the shot dialogue with the sample text.
 - Add dialogue guards for model-spoken lines: *"each line spoken exactly once, no echo, no repeated reads."* Add phonetic spelling for names or words likely to slur.
-- Direction beats adjectives: one camera move, one action speed, concrete sound/music (`No Music` if none). Use exact terms: `locked off`, `handheld, subtle`, `slow dolly in`, `slow orbit`, `whip pan`, `speed ramp`.
+- One camera move, one action speed, concrete sound/music (`No Music` if none). Use exact terms: `locked off`, `handheld, subtle`, `slow dolly in`, `slow orbit`, `whip pan`, `speed ramp`.
 - Avoid conflicts ("static camera" + "orbit shot").
 - For brand / MV / ad work, end the prompt with a negative line: *"no captions, watermarks, distortion, stretching."*
 - For polish on a single-shot clip: see [`references/video-single-shot.md`](references/video-single-shot.md).
 
 ## Patterns
 
-Pick the one that fits. For source lookup, follow the project `PROJECT_AGENT.md` § "Choosing context"; this skill only owns video-specific prompt and CLI shape.
+Pick the one that fits. Source lookup follows `PROJECT_AGENT.md`.
 
-**Storyboard guard:** if a source image has `data.subtype === "storyboard"`, or legacy label/prompt evidence clearly marks it as a storyboard mosaic, route to Pattern 7 / `references/video-multi-shot.md` before generic I2V. Never describe a storyboard mosaic as `Opening frame @Image1`; it is a panel sequence, not a single starting frame.
+**Storyboard guard:** storyboard images route to Pattern 7 / `references/video-multi-shot.md`, never generic I2V/opening-frame wording.
 
 ### 1. Standalone T2V
 
-**Triggers:** a fresh clip unrelated to canvas content ("a noir alley at dawn, slow dolly-in", "a runner in a stadium, 10 seconds").
+**Triggers:** fresh clip unrelated to canvas content.
 **Call:** `node "$PAI_REPO_ROOT/server/cli/generate_video.js" --prompt "..."`; omitted flags default to 15s, 16:9, 720p, audio on. Add `--resolution 480p` or `--resolution 1080p` only if the chosen video mode requires it.
 **Edges:** none.
 **For the bracket scaffold and slot-by-slot construction when the user wants polish:** see [`references/video-single-shot.md`](references/video-single-shot.md).
 
 ### 2. Animate a canvas image (I2V)
 
-**Triggers:** "animate this", "make a video of this image", "put motion on this still" — applied to a specific canvas `image_result` (character, location, or otherwise).
-**Source:** the named `image_result` node — just `id`; excludes storyboard mosaics, which route through the Storyboard guard above.
+**Triggers:** animate/make video/put motion on a specific canvas `image_result`.
+**Source:** named `image_result`; storyboard mosaics route through Storyboard guard.
 **Call:** `node "$PAI_REPO_ROOT/server/cli/generate_video.js" --prompt "..." --ref-source-id <image.id>`.
 **Edges:** `{ from: <source.id>, to: video_<N>, kind: "derived" }` — emitted by the CLI.
-**Anchor sub-variants:** opening-frame (default — *"opening frame @Image1, …"*) and closing-frame (*"closing on the frame from @Image1"*) — both pass the image as `--ref-source-id`; the anchor direction lives in the prompt wording, since the upstream model exposes no separate last-frame param.
+**Anchor wording:** opening-frame default (`opening frame @Image1`) or closing-frame (`closing on the frame from @Image1`); both use `--ref-source-id`.
 **For slot-by-slot construction and the opening- vs closing-frame phrasing:** see [`references/video-single-shot.md`](references/video-single-shot.md).
 
 ### 3. Compose with canvas characters / locations
 
-**Triggers:** "a video of [character]", "put [character] in [setting]", "[character] does [action]" — when at least one canvas character or location is involved.
+**Triggers:** video of character, character in setting, character action in location.
 **Source:** character / location `image_result` nodes (cap from §Reference caps).
 **Call:** `node "$PAI_REPO_ROOT/server/cli/generate_video.js" --prompt "..." --ref-source-id <char1.id> --ref-source-id <char2.id> ...`.
 **Edges:** `{ from: <char.id>, to: video_<N>, kind: "derived" }` — one per `--ref-source-id`.
-- Prefer the exact base or variant refs that match the shot: current wardrobe/state character sheet, detailed location anchor, and same-location variant for framing/time/weather/light/story state.
+- Prefer exact shot refs: current wardrobe/state character sheet, detailed location, same-location variant.
 **For single-shot composition and adjacent-role wording:** see [`references/video-single-shot.md`](references/video-single-shot.md). **For ≥2 internal shots in one render:** see [`references/video-multi-shot.md`](references/video-multi-shot.md).
 
 ### 4. Extend a canvas clip
 
-**Triggers:** "continue from this", "extend this clip by Ns", "what happens after", "scene 2 follows scene 1" — applied to an existing canvas `video_result`.
+**Triggers:** continue/extend/what happens after/scene follows existing `video_result`.
 **Source:** any canvas `video_result` node — agent-generated *or* user-uploaded (`data.metadata.source` is `"pai"` for generated and `"user_upload"` for dropped).
 **Call:** `node "$PAI_REPO_ROOT/server/cli/generate_video.js" --prompt "..." --ref-source-id <source_video.id>`.
 **Edges:** `{ from: <source_video.id>, to: video_<N>, kind: "derived" }`.
@@ -128,7 +107,7 @@ Pick the one that fits. For source lookup, follow the project `PROJECT_AGENT.md`
 
 ### 5. Edit a canvas clip
 
-**Triggers:** "re-render in golden hour", "restyle as anime", "add rain", "remove the passerby", "swap the product", "change the wardrobe color", "rewrite what happens" — applied to an existing canvas `video_result`. Creative edits go through `generate_video.js`, not local `ffmpeg` (which is reserved for mechanical ops).
+**Triggers:** re-render/restyle/add/remove/swap/change/rewrite existing `video_result`. Creative edits use `generate_video.js`; ffmpeg is for mechanical ops.
 **Source:** any canvas `video_result` node — agent-generated *or* user-uploaded.
 **Call:** `node "$PAI_REPO_ROOT/server/cli/generate_video.js" --prompt "..." --ref-source-id <source_video.id>`.
 **Edges:** `{ from: <source_video.id>, to: video_<N>, kind: "derived" }`.
@@ -136,7 +115,7 @@ Pick the one that fits. For source lookup, follow the project `PROJECT_AGENT.md`
 
 ### 6. Voice-driven clip
 
-**Triggers:** "have [character] say this", "make a video where [character] says / narrates …", "use [character]'s voice in this clip".
+**Triggers:** have character say/narrate, use character voice.
 **Source:** any canvas `audio_result` node — agent-generated or user-uploaded.
 **Call:** `node "$PAI_REPO_ROOT/server/cli/generate_video.js" --prompt "..." --ref-audio-source-id <audio_id>`. Often combined with character image refs for face + voice — pass both `--ref-source-id <character_id>` (for the character image) and `--ref-audio-source-id <audio_id>` (for the voice).
 **Prompt:**
@@ -144,21 +123,21 @@ Pick the one that fits. For source lookup, follow the project `PROJECT_AGENT.md`
 - Multiple speakers: bind each visual ref and audio ref explicitly, e.g. *`The character in @Image1 uses @Audio1 and says exactly: "..."; the character in @Image2 uses @Audio2 and replies exactly: "...". Each line is spoken exactly once, no echo, no repeated reads.`*
 - Approved final narration/line read: use `audio_result.data.text` exactly and bind it with *`Use @Audio1 for timing, cadence, and voice. Keep the words unchanged.`*
 - No audio node: preserve requested dialogue verbatim as `[Character] says exactly: "..."`; add the once/no-echo guard and phonetic spellings for risky words.
-- Audio uploads without `data.text`: reference the audio for sound/timing only; do not invent transcript text.
-- Never treat an image as the speech source; images can identify the speaker, but the spoken words come from the audio node, script/shot note, or user-provided dialogue.
+- Audio uploads without `data.text`: sound/timing only; do not invent transcript.
+- Images identify speakers; spoken words come from audio text, script/shot note, or user dialogue.
 
 **Edges:** depends on which character refs attach (one `kind: "derived"` per ref).
 
 ### 7. Multi-shot / brand / ad / MV
 
-**Triggers:** ≥2 distinct shots inside one render, ad / music-video / brand framing, durations ≥10s with multiple movements.
+**Triggers:** ≥2 shots inside one render, ad/MV/brand framing, or ≥10s with multiple movements.
 **Call:** `node "$PAI_REPO_ROOT/server/cli/generate_video.js" --prompt "..." [--ref-source-id <image|video.id> ...] [--ref-audio-source-id <audio.id> ...]`.
 **Edges:** as per the underlying pattern (3, 4, 5) for any refs attached.
 **For the 4-section scaffold (timeline / effects inventory / density map / energy arc) and how to populate the timeline from canvas script shot notes or storyboard mosaic panels:** see [`references/video-multi-shot.md`](references/video-multi-shot.md).
 
 ## Common combinations
 
-Cross-pattern asks. Each combo routes to one primary reference — references don't link to each other.
+Cross-pattern asks route to one primary reference:
 
 | Combo | Primary reference | Extra refs to attach |
 |---|---|---|
@@ -174,7 +153,7 @@ Cross-pattern asks. Each combo routes to one primary reference — references do
 
 ## Sequence dispatch guidance
 
-For multiple clips, prefer hybrid dispatch: render separate scenes, time jumps, wardrobe/state changes, or montage beats independently; chain only dependent shots within the same continuous action, location, lighting, wardrobe/state, and emotional beat. Do not chain video refs across location changes, time jumps, wardrobe/state changes, dream/reality breaks, or montage cuts where continuity is undesirable.
+For multiple clips, prefer hybrid dispatch: independent for separate scenes/time jumps/wardrobe-state changes/montage; chain only same continuous action/location/lighting/wardrobe-state/emotional beat. Do not chain across breaks where continuity is undesirable.
 
 If a budget-aware caller needs savings, lower video resolution before shortening runtime. Do not suggest dropping material character variants, location variants, or voice anchors that preserve continuity.
 

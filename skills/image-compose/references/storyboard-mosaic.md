@@ -1,18 +1,10 @@
 # NxN storyboard mosaic — prompt template
 
-Bracketed-section format for `node "$PAI_REPO_ROOT/server/cli/generate_image_pro.js"` (the pro image tier). Produces ONE composite image of N×M storyboard panels on a single sheet, with per-cell number badges so downstream video-compose can read panel order. Default to exact `--size 2560x1440`.
-
-## Contents
-
-- Pre-flight: current canvas state
-- Per-shot-note iteration
-- Prompt template (use verbatim, fill the bracketed parts)
-- Style presets (pick one — paste into [STYLE])
-- Default per-panel coverage when the user didn't specify
+Bracketed-section format for `generate_image_pro.js`. Produces ONE N×M storyboard sheet with per-cell number badges so `video-compose` can read panel order. Default `--size 2560x1440`.
 
 ## Pre-flight: current canvas state
 
-This flow needs the current canvas, so per the project `PROJECT_AGENT.md` § "Choosing context", read `./workflow.json` and identify:
+Read `workflow.json` and identify:
 
 - script note (`data.subtype === "script"`; fall back to label starting `"Script:"` for legacy notes)
 - shot notes (`data.subtype === "shot"`; fall back to label matching `"Shot <N> (<a>–<b>s)"` for legacy notes)
@@ -21,17 +13,17 @@ This flow needs the current canvas, so per the project `PROJECT_AGENT.md` § "Ch
 
 Decide how many mosaics to emit:
 
-- **Shot notes exist.** Emit ONE mosaic PER SHOT NOTE. Each shot note already represents one planned clip capped at <=15s. For each mosaic: pass `--source-node-id <shot_note_id>`, refs = `[location.id if the shot has one, ...each character.id appearing in the shot]` capped at 32, and `[SCRIPT SLICE]` = that one shot note body verbatim.
-- **No shot notes, but one <=15s script/story/clip brief exists.** Behave as a single planned clip: ONE 2×2 mosaic. Pass `--source-node-id <script_note_id>` if the brief is a canvas note. Refs are optional — pass any relevant characters / locations / user-uploaded images on the canvas via repeated `--ref-source-id` flags for identity lock.
-- **No shot notes and the script/story is longer than <=15s.** Recommend `script-compose` splitting first. Do not collapse a multi-clip script into one storyboard unless the user explicitly asks for an overview board.
+- **Shot notes exist:** one mosaic per shot note. Pass `--source-node-id <shot_note_id>`, relevant location/character refs (≤32), and verbatim shot body as `[SCRIPT SLICE]`.
+- **No shot notes, one <=15s brief:** one 2×2 mosaic. Pass `--source-node-id <script_note_id>` if applicable plus relevant refs.
+- **Longer script/story:** recommend `script-compose` splitting first unless user explicitly asks for overview board.
 
-Missing character/location anchors do not change the storyboard unit. If a shot clearly needs a missing anchor, say so and ask with the project `PROJECT_AGENT.md` § "Recommendation and choice shape". Recommend `Make the missing anchor first`; offer `Storyboard from text` as the alternative.
+Missing anchors do not change storyboard unit. If needed, recommend `Make the missing anchor first`; offer `Storyboard from text`.
 
-Default grid: 2×2 unless the user specified otherwise. Before each `generate_image_pro.js` call, announce in chat: `"Generating a 2×2 mosaic for Shot <N>"` (shot-note case) or `"Generating a 2×2 mosaic."` (single-clip case). Don't paste the prompt; one short line.
+Default grid 2×2. Announce one short line before each call; don't paste prompt.
 
 ## Per-shot-note iteration
 
-If the canvas has N shot notes, fill the prompt template N times — once per shot note — and call `generate_image_pro.js` N times. Don't combine multiple shot notes into one storyboard unless the user asks for an overview board.
+If the canvas has N shot notes, fill/call once per shot note. Combine only if user asks for overview board.
 
 ## Prompt template (use verbatim, fill the bracketed parts)
 
@@ -74,7 +66,7 @@ No captions, subtitles, panel titles, dialogue text, or any text inside cells ot
 
 ## Style presets
 
-Pick ONE and paste verbatim into `[STYLE]`. Don't combine. Each preset gives the model concrete render cues, not abstract labels.
+Pick ONE and paste verbatim into `[STYLE]`.
 
 **Photoreal cinematic**
 ```
@@ -93,11 +85,11 @@ Digital painted concept-art finish. Soft brushwork, atmospheric perspective, pai
 
 ## Default per-panel coverage when the user didn't specify
 
-If the user gave a scene description but no per-panel breakdown, propose cinematic shot coverage — wide, medium, close-up, end beat. A 2×2 default coverage:
+If no per-panel breakdown, use 2×2 coverage:
 
 1. WIDE ESTABLISHING
 2. CLOSE-UP on subject's face
 3. REACTION / CUT-AWAY to secondary character or environment
 4. END BEAT (subject moving toward / away from frame)
 
-Use the user's scene description to fill in the action for each. Don't ask the user to specify all N×M panels themselves unless they explicitly asked for input control.
+Use the scene description for each panel. Ask for panel details only when the user wants input control.

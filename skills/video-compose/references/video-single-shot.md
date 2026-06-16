@@ -1,14 +1,14 @@
 # Video — single-shot prompt construction
 
-For one polished cinematic clip. Patterns 1, 2, 3 dispatch here for polish.
+For one polished cinematic clip. Patterns 1-3 dispatch here for polish.
 
 ## When to skip
 
-A quick T2V request where a direct sentence works ("a runner at sunset, slow dolly-in"). Don't add the bracket scaffold reflex — direct prose is faster and produces the same result.
+For quick T2V ("runner at sunset, slow dolly-in"), use direct prose.
 
 ## Slot-by-slot bracket scaffold
 
-For ordinary single-shot polish (non-storyboard), choose emotion, power holder, and key visual first, then fill:
+For ordinary single-shot polish, fill:
 
 ```
 [Style] one dense one-liner — camera, palette, grain, lens
@@ -23,17 +23,15 @@ For ordinary single-shot polish (non-storyboard), choose emotion, power holder, 
 ```
 
 - **Duration** — also pass `--duration N`; split or chain >15s totals.
-- **Style** — concrete equipment cues land better than adjectives. *"Shot on a full-frame digital cinema camera, fast prime lens, shallow DOF, naturalistic palette, subtle grain"* beats *"cinematic, high-quality"*.
-- **Scene** — one paragraph; weather and time matter (fog, golden hour, dusk).
-- **Character** — name each character's face / build / wardrobe; if there's a canvas character, reference it as `@Image1` and bind by role.
+- **Style** — use concrete camera/palette/lens cues, not generic quality adjectives.
+- **Scene** — location, light, time, weather.
+- **Character** — describe or bind canvas character by role (`the character in @Image1`).
 - **Shot.Action** — one motion beat, one sentence.
 - **Spoken lines** — copy script/shot/user dialogue and VO verbatim. Bind each quoted line to the intended character and, when available, the matching `@AudioN` timbre or final-read ref.
 - **Sound / Atmosphere** — ambient + action SFX + music, or `No Music`.
 - **Negative** — closing line every time for brand / portrait work.
 
 ## Adjacent roles
-
-Pattern-specific notes (the role vocabulary itself is in SKILL.md):
 
 - **Lip-sync:** character voice sample uses *`Use @Audio1 as the voice/timbre reference only. Speak the quoted line exactly once, no echo, no repeated reads.`* Final line audio uses *`Use @Audio1 for timing, cadence, and voice. Keep the words unchanged.`* Never `@Image1 says`; write `the character in @Image1 says`.
 - **Camera-move source:** borrow camera grammar from `@Video1` without re-rendering the source.
@@ -66,4 +64,4 @@ Pattern-specific notes (the role vocabulary itself is in SKILL.md):
 
 ## Fallback branch
 
-When the user's ask doesn't fit a slot — e.g., a clip with ambiguous framing, or a creative experiment that doesn't have a clear "scene" — default rule: describe the resulting frame, not the editor process. Tell the model what the viewer sees, not what tool did it.
+If no slot fits, describe the resulting frame/viewer-visible action, not the editor process.
