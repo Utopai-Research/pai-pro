@@ -71,12 +71,14 @@ docs/reports/
 docs/roadmaps/
 docs/plans/*
 !docs/plans/.gitkeep
+docs/research/
 
 # Local-only tech debt audits.
 TECH_DEBT_AUDIT.md
 
 # Design bundles + scratch work
 tmp/
+.results/
 
 # test/ — local-only smoke tests, scratch outputs, .env with keys
 test/

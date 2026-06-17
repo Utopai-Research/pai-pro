@@ -47,7 +47,7 @@ Prompt wording binds each ref role:
 | Location / setting | `--ref-source-id` (image) | "the location shown in @Image1" |
 | Opening frame | `--ref-source-id` (image) | "opening frame @Image1, …" |
 | Closing frame | `--ref-source-id` (image) | "closing on the frame from @Image1" |
-| Source clip — continue | `--ref-source-id` (video) | "Continue from @Video1 — start after its final frame, no frames from @Video1 in the new clip" |
+| Source clip — continue (next clip in a chain) | `--ref-source-id` (video) | **Default = hard cut:** "Hard cut from @Video1: open on a NEW camera angle; do not match its final frame." Same-shot ("Continue from @Video1 … maintain camera position") only for an authored held beat / oner / explicit user request — see [`references/video-extension.md`](references/video-extension.md) |
 | Source clip — transform | `--ref-source-id` (video) | "Re-render @Video1 in …" |
 | Camera-move source | `--ref-source-id` (video) | "camera moves match @Video1" |
 | Action source | `--ref-source-id` (video) | "action choreography matches @Video1" |
@@ -103,7 +103,8 @@ Pick the one that fits. Source lookup follows `PROJECT_AGENT.md`.
 **Source:** any canvas `video_result` node — agent-generated *or* user-uploaded (`data.metadata.source` is `"pai"` for generated and `"user_upload"` for dropped).
 **Call:** `node "$PAI_REPO_ROOT/server/cli/generate_video.js" --prompt "..." --ref-source-id <source_video.id>`.
 **Edges:** `{ from: <source_video.id>, to: video_<N>, kind: "derived" }`.
-**For the continuity prefix, sub-intent decision tree, and sequencing across multiple linked calls:** see [`references/video-extension.md`](references/video-extension.md).
+**Boundary defaults to a HARD CUT** (clip 2 opens on a new angle — this avoids the same-shot seam morph). If the whole sequence fits ≤15s, render ONE multi-shot clip (Pattern 7) instead of chaining. Same-shot continuation is the exception (authored held beat / story-required oner / explicit user request).
+**For the hard-cut + same-shot prefixes, the ≤15s guard, the sub-intent decision tree, and sequencing across linked calls:** see [`references/video-extension.md`](references/video-extension.md).
 
 ### 5. Edit a canvas clip
 
@@ -147,7 +148,7 @@ Cross-pattern asks route to one primary reference:
 | Multi-clip chained sequence | `video-extension.md` | source video for each link |
 | Compose with camera-move from reference | `video-single-shot.md` | character images + camera-move video ref |
 | Render one script shot from canvas | Pattern 1, 2, or 3 by shot content (no dispatch — translate the shot note body to slot rules; preserve dialogue/VO verbatim) | character / variant refs + location / variant refs + voice anchors if the shot involves them |
-| Render a continuous script span (>15s total) as a dependent sequence | `video-extension.md` (script-driven chain) | source video only for dependent links; character refs for identity continuity |
+| Render a continuous script span (>15s total) as a dependent sequence | `video-extension.md` (script-driven chain; **hard-cut handoffs by default** — keep a link same-shot only for an unbroken oner the viewer must read as one motion) | source video per link + **character refs (mandatory under hard cut)** for identity |
 | Render a short script (≤15s total) as one piece | `video-multi-shot.md` (cross-skill source) | character image refs locked across shots |
 | Render a storyboard mosaic as one 15s video (every panel becomes a shot block) | `video-multi-shot.md` (storyboard cross-skill source; required for `image_result.subtype === "storyboard"`) | mosaic image + character / location image refs that authored the mosaic |
 
