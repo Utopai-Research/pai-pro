@@ -8,7 +8,7 @@ import type { NodeProps } from '@xyflow/react'
 import { Handle, Position } from '@xyflow/react'
 import type { AudioResultData } from '@/types/canvas'
 import { formatAudioTime, notifyPaused, notifyPlaying } from '../audioPlayback'
-import { type NodeState } from '../nodeData'
+import { downloadHref, type NodeState } from '../nodeData'
 import { useIsInSelectedFrame } from './_shared'
 
 type AudioResultRenderData = Partial<AudioResultData> & { state?: NodeState }
@@ -84,6 +84,19 @@ export function AudioResultNode({ id, data, selected }: NodeProps): JSX.Element 
             <div className="audio-scrubber-fill" style={{ width: `${progress}%` }} />
           </div>
           <span className="audio-time">{timeText}</span>
+          {url !== null && url !== '' ? (
+            <a
+              className="audio-download nodrag"
+              href={downloadHref(url)}
+              download
+              title="Download"
+              aria-label="Download audio"
+              onClick={(e) => e.stopPropagation()}
+              onDoubleClick={(e) => e.stopPropagation()}
+            >
+              ⬇
+            </a>
+          ) : null}
         </div>
       </div>
       {url !== null && url !== '' ? (
