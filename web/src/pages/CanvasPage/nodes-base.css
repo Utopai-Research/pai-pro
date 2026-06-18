@@ -708,6 +708,30 @@
   letter-spacing: 0.04em;
   font-variant-numeric: tabular-nums;
 }
+/* Inline download button — trailing the time readout, always visible.
+   A muted glyph that lights up on hover (vs the image/video nodes'
+   hover-revealed corner overlay, which would collide with the @id ref
+   label on this compact pill). */
+.node.audio_result .audio-download {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--ink-3);
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1;
+  text-decoration: none;
+  transition: color 120ms ease, background 120ms ease;
+}
+.node.audio_result .audio-download:hover {
+  color: var(--ink-1);
+  background: var(--line-1);
+}
 
 /* ─────────────────────── video_result shot-badge ─────────────────────── */
 
