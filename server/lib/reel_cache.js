@@ -78,16 +78,23 @@ export async function ensureReelMaster({ projects, id, buildId }) {
     throw err;
   }
   const outPath = reelCachePath(id, buildId);
-  // Already cached? Touch mtime to keep it warm in the LRU and return.
-  try {
-    await fsp.access(outPath);
-    const now = new Date();
-    await fsp.utimes(outPath, now, now).catch(() => {});
-    return outPath;
-  } catch { /* not cached; build it */ }
-
+  // Register the in-flight promise SYNCHRONOUSLY — before the first await —
+  // so concurrent cold-cache callers collapse onto this single build. The
+  // cached-file check has to live INSIDE the promise: when it sat before the
+  // registration, its `await fsp.access` yielded the event loop, letting two
+  // requests both miss the cache and each spawn an ffmpeg writing the same
+  // path. buildReelMaster now renames atomically so that race no longer
+  // corrupts the master, but collapsing it also avoids the wasted duplicate
+  // encodes.
   const buildPromise = (async () => {
     try {
+      // Already cached? Touch mtime to keep it warm in the LRU and reuse.
+      try {
+        await fsp.access(outPath);
+        const now = new Date();
+        await fsp.utimes(outPath, now, now).catch(() => {});
+        return outPath;
+      } catch { /* not cached; build it */ }
       await buildReelMaster(p.canvasState, projectDir(id), outPath, id);
       pruneReelCache(id, buildId).catch(() => {});
       return outPath;
