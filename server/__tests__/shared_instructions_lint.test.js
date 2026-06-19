@@ -18,11 +18,19 @@ const FORBIDDEN = [
   "Claude Code",
   "claude-",
   "[task-notification]",
-  "/image-compose",
-  "/video-compose",
-  "/voice-compose",
-  "/script-compose",
-  "/groups-compose",
+];
+
+// Claude-only slash commands. Checked with a word-boundary regex rather than
+// a plain substring so a relative-path link such as
+// ../../image-compose/references/character-sheet.md doesn't false-positive —
+// only a real invocation like "/image-compose" (at line start or after
+// whitespace/punctuation) is flagged.
+const FORBIDDEN_SLASH_COMMANDS = [
+  "image-compose",
+  "video-compose",
+  "voice-compose",
+  "script-compose",
+  "groups-compose",
 ];
 
 const STALE_SHARED_GUIDANCE = [
@@ -107,6 +115,14 @@ test("shared project instructions and skills do not contain Claude-only phrases"
         text.includes(phrase),
         false,
         `${file} contains forbidden phrase ${JSON.stringify(phrase)}`,
+      );
+    }
+    for (const name of FORBIDDEN_SLASH_COMMANDS) {
+      const re = new RegExp(String.raw`(?<![\w./])/${name}\b`);
+      assert.equal(
+        re.test(text),
+        false,
+        `${file} invokes the Claude-only slash command "/${name}"; reference the skill's recipe path instead of the slash command`,
       );
     }
   }
