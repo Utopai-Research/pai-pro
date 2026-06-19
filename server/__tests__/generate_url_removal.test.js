@@ -7,7 +7,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, rm, writeFile, rename } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
@@ -34,11 +34,15 @@ function runCli({ script, args, cwd, env }) {
         if (parsed?.stage !== "draft" || typeof parsed.job_id !== "string") continue;
         if (resolved.has(parsed.job_id)) continue;
         resolved.add(parsed.job_id);
+        const target = join(cwd, ".results", `${parsed.job_id}.json`);
+        const body = JSON.stringify({ ok: true, job_id: parsed.job_id, model: parsed.model }) + "\n";
+        // Atomic write (tmp + rename): the CLI polls this sidecar with JSON.parse;
+        // a bare writeFile truncates to 0 bytes mid-write, and a poll landing in
+        // that window parses "" -> terminal ok:false -> the CLI exits 1. Mirrors
+        // production's writeResultSidecar/writeFileOnce.
         mkdir(join(cwd, ".results"), { recursive: true })
-          .then(() => writeFile(
-            join(cwd, ".results", `${parsed.job_id}.json`),
-            JSON.stringify({ ok: true, job_id: parsed.job_id, model: parsed.model }) + "\n",
-          ))
+          .then(() => writeFile(`${target}.tmp`, body))
+          .then(() => rename(`${target}.tmp`, target))
           .catch((e) => {
             stderr += `\n[test harness result write failed: ${e.message}]`;
             try { child.kill("SIGTERM"); } catch {}
