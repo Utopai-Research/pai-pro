@@ -27,10 +27,14 @@ async function startViewer({ paiDefaultAgentId, paiAgent } = {}) {
     PAI_ROOT_LINK: join(projectsDir, "workflow.json"),
     WEB_ORIGIN: "http://localhost:0",
   };
-  if (paiAgent === undefined) delete env.PAI_AGENT;
-  else env.PAI_AGENT = paiAgent;
-  if (paiDefaultAgentId === undefined) delete env.PAI_DEFAULT_AGENT_ID;
-  else env.PAI_DEFAULT_AGENT_ID = paiDefaultAgentId;
+  // Use "" (not delete) for the unset case. The spawned viewer reloads the
+  // repo .env on boot, and dotenv only fills *absent* keys — so deleting a
+  // var lets a developer's local .env (e.g. PAI_DEFAULT_AGENT_ID=codex)
+  // re-inject it and break these default-agent assertions. An empty string is
+  // "present but unset": dotenv leaves it untouched and normalize() falls back
+  // to the default agent, so the test stays hermetic regardless of local .env.
+  env.PAI_AGENT = paiAgent === undefined ? "" : paiAgent;
+  env.PAI_DEFAULT_AGENT_ID = paiDefaultAgentId === undefined ? "" : paiDefaultAgentId;
 
   const proc = spawn(process.execPath, [VIEWER_PATH], { env, stdio: ["ignore", "pipe", "pipe"] });
   const start = Date.now();
