@@ -284,6 +284,8 @@ export interface PendingGeneration {
    * end up with. Deduped against `reference_source_ids` upstream so
    * the same node never produces two dashed edges. */
   source_node_id?: string
+  /** Scoped Auto Mode run that owns this generation, when applicable. */
+  auto_run_id?: string
 }
 
 export interface GenerationResult {
@@ -312,8 +314,28 @@ export interface GenerationResult {
   position?: { x: number; y: number }
   reference_source_ids?: string[]
   source_node_id?: string
+  auto_run_id?: string
   sent?: unknown
   limits?: unknown
+}
+
+export interface AutoRun {
+  id: string | null
+  status: 'approved' | 'running' | 'completed' | 'cancelled' | 'blocked' | 'unknown'
+  budget_cap_usd: number | null
+  spent_usd: number
+  estimate_usd: number | null
+  planned_runtime_seconds: number | null
+  brief: string
+  created_at: string | null
+  updated_at: string | null
+  jobs: Array<{
+    job_id: string
+    kind: string | null
+    model: string | null
+    cost_usd: number
+    created_at: string | null
+  }>
 }
 
 /** Bundle the viewer returns for `GET /projects/:id`. */
@@ -341,6 +363,8 @@ export interface ProjectBundle {
   generation_results?: GenerationResult[]
   /** True iff the user has opted out of the draft gate for this project. */
   dangerously_skip_draft_gate?: boolean
+  /** Current scoped Auto Mode run, if one has been approved recently. */
+  auto_run?: AutoRun | null
 }
 
 /** Row shape for `GET /projects` listing. */
@@ -354,4 +378,5 @@ export interface ProjectRow {
   last_active_at?: string
   /** First non-archived video_result's video_url, or null. */
   cover_url: string | null
+  auto_run?: AutoRun | null
 }

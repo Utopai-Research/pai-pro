@@ -30,6 +30,7 @@ import {
   readResultEntry,
   normalizeResultEntry,
 } from "../lib/readers.js";
+import { publicAutoRun } from "../lib/auto_runs.js";
 import { withProjectMutationLock } from "../lib/writers.js";
 import { loadProject } from "./projects.js";
 
@@ -111,6 +112,7 @@ export async function watchProjects({ projects, io, broadcasters }) {
       projectId: id,
       title: meta.title,
       dangerously_skip_draft_gate: !!meta.dangerously_skip_draft_gate,
+      auto_run: publicAutoRun(meta.auto_run),
     });
   };
 
