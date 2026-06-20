@@ -105,8 +105,14 @@ export async function stitchReel(state, projectDir, slug = "local") {
       // Fallback: re-encode. Handles mismatched codecs/resolutions/fps.
       console.warn(`[stitch ${slug}] copy-mode failed, re-encoding: ${copyErr.message.slice(0, 200)}`);
       const inputs = files.flatMap((f) => ["-i", f]);
+      // No "?" on the audio pad: the container's ffmpeg (5.1.x) rejects the
+      // optional-stream "?" inside a filtergraph ("Invalid stream specifier:
+      // a:0?"), which made this whole fallback error out there. Reel clips
+      // carry audio (generate_audio defaults on), so a plain [i:a:0] is safe;
+      // a clip with no audio track would need a probe + anullsrc silence pad
+      // (not handled here — see docs handover).
       const filter = files
-        .map((_, i) => `[${i}:v:0][${i}:a:0?]`)
+        .map((_, i) => `[${i}:v:0][${i}:a:0]`)
         .join("") + `concat=n=${files.length}:v=1:a=1[outv][outa]`;
       await runFfmpeg([
         "-y",
@@ -234,8 +240,14 @@ export async function buildReelMaster(state, projectDir, outPath, slug = "local"
       }
       console.warn(`[stitch ${slug}] copy-mode failed, re-encoding: ${copyErr.message.slice(0, 200)}`);
       const inputs = files.flatMap((f) => ["-i", f]);
+      // No "?" on the audio pad: the container's ffmpeg (5.1.x) rejects the
+      // optional-stream "?" inside a filtergraph ("Invalid stream specifier:
+      // a:0?"), which made this whole fallback error out there. Reel clips
+      // carry audio (generate_audio defaults on), so a plain [i:a:0] is safe;
+      // a clip with no audio track would need a probe + anullsrc silence pad
+      // (not handled here — see docs handover).
       const filter = files
-        .map((_, i) => `[${i}:v:0][${i}:a:0?]`)
+        .map((_, i) => `[${i}:v:0][${i}:a:0]`)
         .join("") + `concat=n=${files.length}:v=1:a=1[outv][outa]`;
       await runFfmpeg([
         "-y",
