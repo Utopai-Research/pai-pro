@@ -92,3 +92,6 @@ server/__tests__/_smoke/
 # Stale symlink from early smoke testing (points into projects/, already ignored).
 # No trailing slash — git treats symlinks as files, not directories.
 wiki
+
+# Local media library — downloaded reusable drama assets (per-drama subfolders). Not tracked.
+assets/
