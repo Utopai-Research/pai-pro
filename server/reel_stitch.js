@@ -25,6 +25,21 @@ export function selectReel(state) {
     .sort((a, b) => a.data.shot_id - b.data.shot_id);
 }
 
+// Browser-safe H.264 for every re-encode path. Without an explicit -level,
+// libx264 can write a level (up to 6.2) into the SPS that Chrome / macOS
+// VideoToolbox silently refuse to decode (>~5.1): the <video> stalls at
+// readyState 0 with NO error event (curl/ffprobe still pass). Pin pix_fmt +
+// a <=5.1 level so the re-encoded master always plays in the browser.
+// Matches pai-pro-desktop (commit 537cc92) and pai-next clean_video.py.
+const H264_WEB_SAFE = [
+  "-c:v", "libx264",
+  "-pix_fmt", "yuv420p",
+  "-profile:v", "high",
+  "-level:v", "5.1",
+  "-preset", "veryfast",
+  "-c:a", "aac",
+];
+
 function runFfmpeg(args) {
   return new Promise((resolve, reject) => {
     const p = spawn("ffmpeg", args, { stdio: ["ignore", "ignore", "pipe"] });
@@ -99,6 +114,7 @@ export async function stitchReel(state, projectDir, slug = "local") {
         "-filter_complex", filter,
         "-map", "[outv]",
         "-map", "[outa]",
+        ...H264_WEB_SAFE,
         "-movflags", "+faststart",
         outPath,
       ]);
@@ -227,6 +243,7 @@ export async function buildReelMaster(state, projectDir, outPath, slug = "local"
         "-filter_complex", filter,
         "-map", "[outv]",
         "-map", "[outa]",
+        ...H264_WEB_SAFE,
         "-movflags", "+faststart",
         "-f", "mp4",
         tmpOut,
