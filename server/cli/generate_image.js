@@ -44,6 +44,7 @@ import {
 import { getDefault, getCost } from "../model_registry.js";
 import { kickPreupload } from "./_preupload_hook.js";
 import { IMAGE_LIMITS } from "./_limits.js";
+import { checkPromptRefsWired } from "./_ref_guard.js";
 
 const rawArgv = process.argv.slice(2);
 
@@ -91,6 +92,19 @@ if (refSources.length > IMAGE_LIMITS.max_image_refs) {
   fail("bad_args", `reference cap exceeded: image_refs ${refSources.length} > ${IMAGE_LIMITS.max_image_refs}`);
   process.exit(2);
 }
+
+// Reject prompts that name @ImageN without wiring the matching --ref-source-id
+// (and @Video/@Audio, unsupported on the image tier). See _ref_guard.js.
+const refGuardMsg = checkPromptRefsWired({
+  prompt: args.prompt,
+  refSourceCount: refSources.length,
+  tier: "image",
+});
+if (refGuardMsg) {
+  fail("bad_args", refGuardMsg);
+  process.exit(2);
+}
+
 const jobId = args["existing-job-id"] || newJobId();
 const routeOwnedPending = !!args["existing-job-id"];
 const plannedModel = getDefault("image").id;
