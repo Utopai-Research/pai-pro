@@ -56,7 +56,7 @@ Prompt wording binds each ref role:
 
 ## Prompt-language conventions
 
-- Ref syntax: `@Image1` / `@Video1` / `@Audio1`, positional by flag order.
+- Ref syntax: `@Image1` / `@Video1` / `@Audio1`, positional by flag order. Every `@ImageN`/`@VideoN`/`@AudioN` MUST have a matching `--ref-source-id`/`--ref-audio-source-id` flag — the CLI rejects a mismatch (`bad_args`) before generating. Mentioning the same ref many times is fine; only the highest index per kind needs a flag.
 - Spoken text: include script/shot/user dialogue/VO verbatim; do not summarize, translate, shorten, polish, or invent.
 - Dialogue scenes: keep the shot/script dialogue in the prompt; use one approved voice sample per speaker as a timbre anchor. Bind each quoted line to the intended character and the matching `@AudioN` reference. Do not generate per-line audio refs unless the user explicitly wants separate final audio.
 - Final audio exception: if an audio node is the approved narration/line read, use `audio_result.data.text` verbatim. If it is just a character voice sample, do not replace the shot dialogue with the sample text.
