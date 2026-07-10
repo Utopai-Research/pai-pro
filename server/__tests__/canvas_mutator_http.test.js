@@ -358,3 +358,27 @@ test("mutations.jsonl has one line per applied mutation", async () => {
     assert.ok(obj.request_id, "log line has request_id");
   }
 });
+
+// --- body-size limit (N61) ---------------------------------------------
+
+test("POST /mutate addNode with a >100KB note body → 200, not 413", async () => {
+  // 200KB of inline text: over express.json's 100kb default, well under the
+  // 4mb cap. Long scripts/screenplays exceed 100KB and the agent/CLIs create
+  // notes over HTTP — before the limit bump this 413'd before reaching the
+  // mutator. Raw fetch (not postMutate) so a pre-fix 413 asserts cleanly
+  // instead of throwing in res.json().
+  const bigBody = "x".repeat(200 * 1024);
+  const r = await fetch(`${baseUrl}/projects/${TEST_PROJECT_ID}/mutate`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      request_id: `http-big-note-${Date.now()}`,
+      op: "addNode",
+      payload: { node: { type: "note", data: { label: "big", body: bigBody } } },
+    }),
+  });
+  assert.equal(r.status, 200);
+  const body = await r.json();
+  assert.equal(body.ok, true);
+  assert.equal(body.assigned.node_id.startsWith("note_"), true);
+});
