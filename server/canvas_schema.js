@@ -379,7 +379,6 @@ for (const [name, schema] of Object.entries(opSchemas)) {
 
 const validateEnvelope = ajv.getSchema("#envelope");
 const validateWorkflow = ajv.getSchema("#workflow");
-const validateNode = ajv.getSchema("#canvasNode");
 
 function formatErrors(errors) {
   if (!errors) return "unknown validation error";
@@ -392,7 +391,6 @@ export {
   ajv,
   validateEnvelope,
   validateWorkflow,
-  validateNode,
   opValidators,
   formatErrors,
 };

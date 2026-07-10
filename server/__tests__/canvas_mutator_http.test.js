@@ -212,6 +212,40 @@ test("PATCH /nodes/:nodeId/data on missing node → 404", async () => {
   assert.equal(r.status, 404);
 });
 
+test("PATCH /nodes/:nodeId/data with a __proto__/constructor body is neutralized (N59)", async () => {
+  // Seed a note to patch.
+  await postMutate({
+    request_id: `seed-proto-${Date.now()}`,
+    op: "addNode",
+    payload: { node: { type: "note", data: { label: "proto-seed", body: "b" } } },
+  });
+  const wf0 = await readWorkflow();
+  const note = wf0.nodes.find((n) => n.type === "note" && n.data.label === "proto-seed");
+  assert.ok(note, "seed note present");
+  // Hostile body: express.json parses __proto__ / constructor as own-enumerable
+  // keys (the exploit shape). deepMergePatch's guard skips them, so the merge is
+  // a valid no-op on those keys and the legit key still lands.
+  const r = await fetch(`${baseUrl}/projects/${TEST_PROJECT_ID}/nodes/${note.id}/data`, {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: '{"__proto__":{"polluted":"yes"},"constructor":{"polluted":"yes"},"label":"safe"}',
+  });
+  assert.equal(r.status, 200);
+  const body = await r.json();
+  // Dangerous keys never became node data (without the guard, `constructor`
+  // lands as an own key here); the legit key merged.
+  assert.equal(Object.prototype.hasOwnProperty.call(body.node.data, "polluted"), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(body.node.data, "constructor"), false);
+  assert.equal(body.node.data.label, "safe");
+  // Server is still healthy after the hostile request.
+  const health = await postMutate({
+    request_id: `post-proto-${Date.now()}`,
+    op: "addNode",
+    payload: { node: { type: "note", data: { label: "after-proto", body: "ok" } } },
+  });
+  assert.equal(health.body.ok, true);
+});
+
 // --- Migrated PATCH .../nodes/batch-data --------------------------------
 
 test("PATCH /nodes/batch-data → all updates atomic on disk", async () => {
