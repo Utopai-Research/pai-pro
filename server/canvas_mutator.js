@@ -2,7 +2,7 @@
 //
 // Owns every write to projects/<id>/workflow.json. The viewer wires this
 // up by:
-//   1. calling initProjectMutatorState(p, workflowPath, mutationLogPath)
+//   1. calling initProjectMutatorState(p, { workflowPath, mutationLogPath })
 //      once per project (in primeProjects), which attaches mutationQueue,
 //      stenoWriter, idempotencyCache, and version to the project entry,
 //   2. calling mutate(p, envelope, hooks) on every mutation,
@@ -125,6 +125,13 @@ function assertNodeExists(draft, id, role) {
 // PATCH /projects/:id/nodes/:nodeId/data behavior at the data.* level.
 function deepMergePatch(target, patch) {
   for (const [k, v] of Object.entries(patch)) {
+    // Prototype-pollution guard. An own __proto__ key — which JSON.parse and
+    // express.json materialize as an own-enumerable property — would otherwise
+    // recurse into the live Object.prototype via the object-merge branch below.
+    // constructor/prototype can't pollute here (they'd fall to a harmless
+    // own-key assign), but skip them too so no such junk key lands in node data.
+    // None are legitimate node-data fields (see canvas_schema.js).
+    if (k === "__proto__" || k === "constructor" || k === "prototype") continue;
     if (v === null || v === undefined) {
       delete target[k];
     } else if (Array.isArray(v)) {

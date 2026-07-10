@@ -168,6 +168,46 @@ test("updateNode: missing id returns klass:not_found", async () => {
   }
 });
 
+test("updateNode: __proto__/constructor/prototype keys in patch can't pollute (N59)", async () => {
+  const { p, dir } = await setupProject({
+    version: 2,
+    workflow_id: "t",
+    title: "T",
+    nodes: [
+      { id: "image_1", type: "image_result", data: { label: "a", local_path: "assets/images/dummy_a.png", metadata: { source: "test" } } },
+    ],
+    edges: [],
+  });
+  try {
+    // JSON.parse creates __proto__ as an OWN enumerable key — exactly the shape
+    // express.json() hands the mutator from a hostile request body.
+    const malicious = JSON.parse(
+      '{"__proto__":{"polluted":"yes"},"constructor":{"polluted":"yes"},"prototype":{"polluted":"yes"},"metadata":{"__proto__":{"nested":"yes"}},"label":"safe"}',
+    );
+    const probe = {};
+    const r = await mutate(p, {
+      request_id: newRid(),
+      op: "updateNode",
+      payload: { id: "image_1", patch: malicious },
+    });
+    assert.equal(r.ok, true, "dangerous keys are skipped; the merge stays valid");
+    // No prototype was polluted, at any nesting level.
+    assert.equal(probe.polluted, undefined, "Object.prototype untouched");
+    assert.equal(probe.nested, undefined, "nested __proto__ untouched");
+    assert.equal(Object.prototype.polluted, undefined);
+    // The dangerous keys were not written as node data either (without the
+    // guard, `constructor` would shadow as an own key on data)...
+    const data = p.canvasState.nodes[0].data;
+    assert.equal(Object.prototype.hasOwnProperty.call(data, "polluted"), false);
+    assert.equal(Object.prototype.hasOwnProperty.call(data, "constructor"), false);
+    assert.equal(Object.prototype.hasOwnProperty.call(data.metadata, "nested"), false);
+    // ...but a legitimate key in the same patch still merged.
+    assert.equal(data.label, "safe", "non-dangerous keys still merge");
+  } finally {
+    await teardown(dir);
+  }
+});
+
 test("deleteNode: cascades edges and drops legacy workflow groups", async () => {
   const { p, dir } = await setupProject({
     version: 2,
