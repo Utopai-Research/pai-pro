@@ -102,7 +102,12 @@ const app = express();
 // is applied to Socket.IO below.
 const corsOptions = IS_PROD ? null : { origin: WEB_ORIGIN, credentials: true };
 if (corsOptions) app.use(cors(corsOptions));
-app.use(express.json());
+// Inline note/script bodies ride through here inside the /mutate envelope and
+// can reach the 2MB TEXT_INLINE_LIMIT (lib/upload_payload.js). Express's 100kb
+// default would 413 them on create and on every later data PATCH. 4mb = 2x that
+// ceiling (absorbs JSON-string escaping + the envelope wrapper) and stays far
+// under the 100MB multipart cap in routes/uploads.js.
+app.use(express.json({ limit: "4mb" }));
 
 // Production: serve the prebuilt web bundle from web/dist BEFORE the API
 // routes. express.static passes through to next() when a path doesn't
