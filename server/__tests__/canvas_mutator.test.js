@@ -194,7 +194,6 @@ test("updateNode: __proto__/constructor/prototype keys in patch can't pollute (N
     // No prototype was polluted, at any nesting level.
     assert.equal(probe.polluted, undefined, "Object.prototype untouched");
     assert.equal(probe.nested, undefined, "nested __proto__ untouched");
-    assert.equal(Object.prototype.polluted, undefined);
     // The dangerous keys were not written as node data either (without the
     // guard, `constructor` would shadow as an own key on data)...
     const data = p.canvasState.nodes[0].data;
