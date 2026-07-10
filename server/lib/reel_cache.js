@@ -22,9 +22,11 @@ import { projectDir } from "./paths.js";
 const REEL_CACHE_LRU = 3;                 // keep the 3 most recent build ids per project
 const REEL_PREBUILD_DEBOUNCE_MS = 500;
 
-// projectId -> { timer, lastTriggerBuildId }
+// projectId -> { timer }
 const _reelPrebuildTimers = new Map();
-// projectId -> Promise (in-flight build, prevents duplicate concurrent builds)
+// `${projectId}:${buildId}` -> Promise (in-flight build). Keyed by build id too,
+// so a request for build B that lands mid-build of A gets its own build (and
+// streams B's bytes) instead of being handed A's in-flight promise.
 const _reelBuildsInFlight = new Map();
 
 export function reelCacheDir(id) {
@@ -69,7 +71,8 @@ async function pruneReelCache(id, keepBuildId) {
 // concurrent calls so a /preview.mp4 request that arrives during a
 // background build just awaits the same Promise.
 export async function ensureReelMaster({ projects, id, buildId }) {
-  const inflight = _reelBuildsInFlight.get(id);
+  const key = `${id}:${buildId}`;
+  const inflight = _reelBuildsInFlight.get(key);
   if (inflight) return inflight;
   const p = projects.get(id);
   if (!p?.canvasState) {
@@ -99,10 +102,10 @@ export async function ensureReelMaster({ projects, id, buildId }) {
       pruneReelCache(id, buildId).catch(() => {});
       return outPath;
     } finally {
-      _reelBuildsInFlight.delete(id);
+      _reelBuildsInFlight.delete(key);
     }
   })();
-  _reelBuildsInFlight.set(id, buildPromise);
+  _reelBuildsInFlight.set(key, buildPromise);
   return buildPromise;
 }
 
@@ -115,7 +118,7 @@ export function kickReelPrebuild({ projects, id }) {
   if (!buildId) return;
   // If a build for this exact composition already exists or is in
   // flight, skip — nothing to do.
-  if (_reelBuildsInFlight.has(id)) return;
+  if (_reelBuildsInFlight.has(`${id}:${buildId}`)) return;
   fsp.access(reelCachePath(id, buildId)).then(
     () => { /* already cached */ },
     () => {
@@ -129,7 +132,7 @@ export function kickReelPrebuild({ projects, id }) {
           }
         });
       }, REEL_PREBUILD_DEBOUNCE_MS);
-      _reelPrebuildTimers.set(id, { timer, lastTriggerBuildId: buildId });
+      _reelPrebuildTimers.set(id, { timer });
     },
   );
 }
