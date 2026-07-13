@@ -67,6 +67,15 @@ const dataValidatorIdByType = {
   audio_result: "#audioResultData",
 };
 
+// Exposed for server/__tests__/workflow_contract.test.js, which cross-checks
+// these maps against the Ajv schemas so a new node type can't land
+// half-registered. Not part of the public mutator API.
+export const __mutatorInternals = {
+  NODE_ID_PREFIX,
+  ASSET_BUCKET_BY_TYPE,
+  dataValidatorIdByType,
+};
+
 function validateNodeData(type, data) {
   const v = ajv.getSchema(dataValidatorIdByType[type]);
   if (!v) throw new MutatorError("validation", `unknown node type: ${type}`);

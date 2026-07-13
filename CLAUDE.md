@@ -47,9 +47,9 @@ Spirit borrowed from [Karpathy's observations](https://x.com/karpathy/status/201
 
 ### When adding a new node type
 
-1. Update `web/src/types/canvas.ts` (renderer source of truth). Add a React component to `web/src/pages/CanvasPage/nodes.tsx` and a `NODE_SIZES` entry in `web/src/pages/CanvasPage/nodeData.ts`.
+1. Update `web/src/types/canvas.ts` (renderer source of truth). Add a React component under `web/src/pages/CanvasPage/nodes/` and register it in `nodes/index.ts`, plus a `NODE_SIZES` entry in `web/src/pages/CanvasPage/nodeData.ts`.
 2. Mirror the type into `server/canvas_schema.js`: add the data-validator (`#<type>Data`), the node-validator (`#<type>Node`), add it to `#canvasNode.oneOf`, and add a `NODE_ID_PREFIX` entry + `dataValidatorIdByType` entry in `server/canvas_mutator.js`.
-3. Run `npm test` in `server/` — the `real <project>/workflow.json validates against doc schema` test catches drift.
+3. Run `npm test` in `server/` — `server/__tests__/workflow_contract.test.js` cross-checks the mutator/schema type maps and validates every local `projects/*/workflow.json` against the doc schema.
 4. Update the "Node grammar (what to put in payloads)" section in `agent-templates/PROJECT_AGENT.md`. If a media CLI emits this type, update the relevant `<x>-compose` skill recipe.
 
 ### When changing the agent template
