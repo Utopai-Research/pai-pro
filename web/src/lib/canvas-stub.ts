@@ -14,7 +14,7 @@
  * The server persists each mutation to projects/<id>/canvas_positions.json
  * and rebroadcasts the new full state to every subscribed socket.
  */
-import { getSocket, VIEWER_URL } from './socket'
+import { getSocket, subscribeProject, VIEWER_URL } from './socket'
 
 export interface CanvasGroupFrame {
   memberIds: string[]
@@ -348,8 +348,9 @@ export function subscribeCanvasPositions(
     }
   }
   socket.on('canvas-positions', handler)
-  socket.emit('subscribe', { projectId })
+  const releaseSubscription = subscribeProject(projectId)
   return () => {
     socket.off('canvas-positions', handler)
+    releaseSubscription()
   }
 }
