@@ -51,9 +51,11 @@ let exitCode = 0;
 try {
   const projectId = args["project-id"] || (await readActiveProject());
 
-  // Fetch the URL. Network / 4xx / 5xx all surface as bad_args with the
-  // original URL in the message — the agent's recourse is to fix the
-  // URL or pick a different ref.
+  // Fetch the URL. Network errors / 4xx surface as bad_args (the agent's
+  // recourse is to fix the URL or pick a different ref); 5xx means the
+  // remote host is unhealthy, not that the URL is wrong — classify it
+  // transient so the agent retries instead of "fixing" a valid URL
+  // (same 5xx→transient rule as pai_client.js).
   let resp;
   try {
     resp = await fetch(args.url);
@@ -62,7 +64,8 @@ try {
     process.exit(1);
   }
   if (!resp.ok) {
-    fail("bad_args", `fetch failed for ${args.url}: ${resp.status} ${resp.statusText}`);
+    const klass = resp.status >= 500 ? "transient" : "bad_args";
+    fail(klass, `fetch failed for ${args.url}: ${resp.status} ${resp.statusText}`);
     process.exit(1);
   }
   const ct = resp.headers.get("content-type") || "application/octet-stream";
