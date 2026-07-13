@@ -273,7 +273,11 @@ export function registerSocketHandlers({ io, projects, nodePty }) {
       if (!p) return;
       socket.join(projectId);
       socket.emit("subscribed", { projectId });
-      socket.emit("title", { projectId, title: p.meta.title });
+      socket.emit("title", {
+        projectId,
+        title: p.meta.title,
+        dangerously_skip_draft_gate: !!p.meta.dangerously_skip_draft_gate,
+      });
       socket.emit("canvas-state",     { projectId, state: p.canvasState });
       socket.emit("canvas-positions", { projectId, state: p.canvasPositions });
       socket.emit("pending-generations", {
