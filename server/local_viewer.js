@@ -66,7 +66,7 @@ const IS_PROD = process.env.NODE_ENV === "production";
 // Docker layer to defend behind, and the upload / pty:spawn surfaces
 // are unauthenticated. Override via VIEWER_BIND.
 const BIND = process.env.VIEWER_BIND ?? (IS_PROD ? "0.0.0.0" : "127.0.0.1");
-import { readActive, writeActive } from "./lib/writers.js";
+import { pendingSidecarWrites, readActive, writeActive } from "./lib/writers.js";
 import { registerCanvasRoutes } from "./routes/canvas.js";
 import { registerPendingRoutes } from "./routes/pending.js";
 import { registerProjectsRoutes } from "./routes/projects.js";
@@ -214,6 +214,10 @@ async function shutdown(signal) {
   try { io.emit("viewer-shutdown"); } catch { /* noop */ }
   const drains = Array.from(projects.values())
     .map((p) => p.mutationQueue?.onIdle?.() ?? Promise.resolve());
+  // Sidecar writes (meta.json / canvas_positions.json) queue outside the
+  // mutation queues — await their tails too or a SIGTERM mid-drag can
+  // drop the last positions write.
+  drains.push(pendingSidecarWrites());
   await Promise.race([
     Promise.all(drains),
     new Promise((r) => setTimeout(r, 10_000)),         // hard cap 10s
