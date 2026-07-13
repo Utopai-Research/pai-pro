@@ -58,6 +58,14 @@ export async function writeResult(id, jobId, result) {
 // once nothing else has chained on top of it.
 const projectMutationLocks = new Map(); // projectId -> tail Promise
 
+// Snapshot of every in-flight sidecar write chain — awaited by the
+// viewer's graceful shutdown so meta.json / canvas_positions.json writes
+// queued at SIGTERM land before the process exits (workflow.json writes
+// are drained separately via each project's mutationQueue).
+export function pendingSidecarWrites() {
+  return Promise.allSettled(Array.from(projectMutationLocks.values()));
+}
+
 export function withProjectMutationLock(id, fn) {
   const prev = projectMutationLocks.get(id) ?? Promise.resolve();
   const next = prev.catch(() => {}).then(fn);
