@@ -59,6 +59,7 @@ function failedResultToPending(result: GenerationResult): PendingGeneration | nu
     position: result.position,
     reference_source_ids: result.reference_source_ids,
     source_node_id: result.source_node_id,
+    auto_run_id: result.auto_run_id,
     klass: result.klass,
     message: result.message,
     completed_at: result.completed_at,

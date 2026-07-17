@@ -10,6 +10,7 @@ import {
   AutoRunError,
   createAutoRun,
   finishAutoRun,
+  isActiveAutoRun,
   publicAutoRun,
   reserveAutoRunBudget,
 } from "../lib/auto_runs.js";
@@ -187,9 +188,16 @@ export function registerProjectsRoutes({ app, io, projects, mutatorHooks }) {
   app.post("/projects/:id/auto-runs", async (req, res) => {
     const id = req.params.id;
     const p = projects.get(id);
-    if (!p) return res.status(404).json({ error: "not found" });
+    if (!p) return res.status(404).json({ ok: false, klass: "not_found", error: "not found" });
     try {
       const { result: run, meta } = await updateProjectMeta(id, p, (next) => {
+        if (isActiveAutoRun(next.auto_run)) {
+          throw new AutoRunError(
+            409,
+            "conflict",
+            `auto run ${next.auto_run.id} is still ${next.auto_run.status}; cancel or complete it first`,
+          );
+        }
         const created = createAutoRun({
           budgetCapUsd: req.body?.budget_cap_usd,
           estimateUsd: req.body?.estimate_usd,
@@ -213,16 +221,21 @@ export function registerProjectsRoutes({ app, io, projects, mutatorHooks }) {
     const p = projects.get(id);
     if (!p) return res.status(404).json({ ok: false, klass: "not_found", error: "not found" });
     try {
-      const { result, meta } = await updateProjectMeta(id, p, (next) => (
-        reserveAutoRunBudget(next, {
+      const { result, meta } = await updateProjectMeta(id, p, (next) => {
+        // updateProjectMeta shallow-copies meta, so the run object is
+        // shared with the live project.meta. Clone it before the ledger
+        // mutates it in place: if the meta write fails, the in-memory
+        // ledger must not keep a reservation that never persisted.
+        next.auto_run = structuredClone(next.auto_run);
+        return reserveAutoRunBudget(next, {
           runId,
           jobId: req.body?.job_id,
           costUsd: req.body?.cost_usd,
           kind: req.body?.kind,
           model: req.body?.model,
           prompt: req.body?.prompt,
-        })
-      ));
+        });
+      });
       emitMetaSlice(io, id, meta);
       res.json({
         ok: true,
@@ -251,12 +264,13 @@ export function registerProjectsRoutes({ app, io, projects, mutatorHooks }) {
         });
       }
       const status = requestedStatus || "completed";
-      const { result: run, meta } = await updateProjectMeta(id, p, (next) => (
-        finishAutoRun(next, {
+      const { result: run, meta } = await updateProjectMeta(id, p, (next) => {
+        next.auto_run = structuredClone(next.auto_run);
+        return finishAutoRun(next, {
           runId,
           status,
-        })
-      ));
+        });
+      });
       emitMetaSlice(io, id, meta);
       res.json({ ok: true, auto_run: publicAutoRun(run) });
     } catch (e) {
@@ -271,9 +285,10 @@ export function registerProjectsRoutes({ app, io, projects, mutatorHooks }) {
     const p = projects.get(id);
     if (!p) return res.status(404).json({ ok: false, klass: "not_found", error: "not found" });
     try {
-      const { result: run, meta } = await updateProjectMeta(id, p, (next) => (
-        finishAutoRun(next, { runId, status: "cancelled" })
-      ));
+      const { result: run, meta } = await updateProjectMeta(id, p, (next) => {
+        next.auto_run = structuredClone(next.auto_run);
+        return finishAutoRun(next, { runId, status: "cancelled" });
+      });
       emitMetaSlice(io, id, meta);
       res.json({ ok: true, auto_run: publicAutoRun(run) });
     } catch (e) {

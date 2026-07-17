@@ -58,6 +58,11 @@ export function publicAutoRun(run) {
   };
 }
 
+export function isActiveAutoRun(run) {
+  return !!run && typeof run === "object"
+    && (run.status === "approved" || run.status === "running");
+}
+
 export function createAutoRun({
   budgetCapUsd,
   estimateUsd,
@@ -103,10 +108,13 @@ export function reserveAutoRunBudget(meta, {
   if (typeof jobId !== "string" || jobId.trim() === "") {
     throw new AutoRunError(400, "bad_args", "job id is required");
   }
-  const cost = money(costUsd);
-  if (cost === null || cost < 0) {
+  // Validate the raw value, not the rounded one: `Number(null)` is 0 and
+  // -0.0004 rounds to -0, both of which would slip past a post-rounding
+  // check and record a $0 reservation for a job that spends real money.
+  if (typeof costUsd !== "number" || !Number.isFinite(costUsd) || costUsd < 0) {
     throw new AutoRunError(400, "bad_args", "cost_usd must be a non-negative number");
   }
+  const cost = money(costUsd);
 
   const run = meta.auto_run;
   if (!run || run.id !== runId) {

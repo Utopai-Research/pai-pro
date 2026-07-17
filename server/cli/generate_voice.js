@@ -69,11 +69,22 @@ const jobId = args["existing-job-id"] || newJobId();
 const routeOwnedPending = !!args["existing-job-id"];
 const sourceNodeId = args["source-node-id"] || null;
 
+if (args["auto-run-id"] !== undefined) {
+  if (args["auto-run-id"] === "") {
+    fail("bad_args", "--auto-run-id must not be empty");
+    process.exit(2);
+  }
+  if (!args.stage && !routeOwnedPending) {
+    fail("bad_args", "--auto-run-id requires --stage so the run's budget is reserved before spending");
+    process.exit(2);
+  }
+}
+
 if (args.stage && !routeOwnedPending) {
   const costUsd = getCost(PLANNED_MODEL, { text: args.text });
   const autoRunId = args["auto-run-id"] || null;
   const autoProjectId = autoRunId
-    ? args["project-id"] || (await readActiveProject())
+    ? args["project-id"] || (await readActiveProject().catch(() => null))
     : null;
   if (autoRunId) {
     const reserved = await reserveAutoBudget({

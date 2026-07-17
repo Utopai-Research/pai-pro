@@ -136,19 +136,21 @@ If the canvas is in Run immediately mode, still pass `--stage`; the viewer fires
 
 Auto Mode is a scoped, one-run approval gate from the viewer UI. It is not the same as project-wide Run immediately.
 
-When the viewer sends an approved Auto run id, run the story-to-video workflow end to end with the same skill routing rules above. Every paid media generation command must still include `--stage`, and must also include the Auto run id exactly as provided:
+When the viewer sends an approved Auto run id, run the story-to-video workflow end to end with the same skill routing rules above. Every `generate_image.js`, `generate_image_pro.js`, `generate_voice.js`, and `generate_video.js` command must still include `--stage`, and must also include the Auto run id exactly as provided:
 
 ```bash
 --auto-run-id <auto_run_id>
 ```
 
-That flag lets the CLI reserve budget and fire the staged draft through the approved Auto run without changing the global draft gate. If a CLI returns `budget_exceeded`, `conflict`, or `not_found` for the Auto run, stop staging new jobs and report what completed plus the next minimum viable budget or runtime adjustment.
+Only those four CLIs accept the flag. `upscaler.js` and `reel_stitch.js` are outside the Auto budget ledger — do not run them inside an Auto run unless the user explicitly asks, and say that their cost is not counted against the cap.
+
+That flag lets the CLI reserve budget and fire the staged draft through the approved Auto run without changing the global draft gate. Reservations are taken from the stage-time estimate and are never refunded: a failed or cancelled job keeps its slice of the cap, and a retry reserves again. Plan with headroom, and if a retry would no longer fit, stop and report instead of shaving the anchor plan. If a CLI returns `budget_exceeded`, `conflict`, or `not_found` for the Auto run, stop staging new jobs and report what completed plus the next minimum viable budget or runtime adjustment.
 
 Auto defaults: use straight-to-video reference-to-clip, 720p unless the budget requires 480p, and hybrid dispatch (parallel independent clusters, sequential continuity-dependent clusters). Under budget pressure, lower video resolution before shortening runtime. Do not remove character variants, location variants, detailed location anchors, or required voice anchors to fit the cap. When all planned clips land, assign Timeline `shot_id` order with one `updateBatch`; do not run `reel_stitch.js` unless explicitly asked.
 
 ### Failure handling
 
-On `{ ok: false, klass, message, limits, sent, ... }`, do not advance the creative pipeline. Classes you may see: `cancelled`, `aborted`, `timeout`, `bad_args`, `asset_rejected`, `content_filtered`, `rate_limited`, `transient`, `transient_exhausted`, `not_found`, `validation`, `conflict`, `infra`.
+On `{ ok: false, klass, message, limits, sent, ... }`, do not advance the creative pipeline. Classes you may see: `cancelled`, `aborted`, `timeout`, `bad_args`, `asset_rejected`, `content_filtered`, `rate_limited`, `transient`, `transient_exhausted`, `not_found`, `validation`, `conflict`, `infra`, `budget_exceeded`.
 
 | Situation | Response |
 |---|---|
@@ -159,6 +161,7 @@ On `{ ok: false, klass, message, limits, sent, ... }`, do not advance the creati
 | `rate_limited` | Wait `retryAfterSec`; ask before retrying. |
 | `timeout` / `aborted` | Check recent results once, then ask before rerunning. |
 | `transient` / `transient_exhausted` / `infra` | Explain plainly; ask before retrying. |
+| `budget_exceeded` | Auto run cap would be crossed. Stop staging new Auto jobs; report what completed, what remains, and the minimum viable budget or runtime adjustment. |
 
 Never auto-retry `generate_video.js` or `upscaler.js`; each attempt costs real money.
 

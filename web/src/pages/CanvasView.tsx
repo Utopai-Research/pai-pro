@@ -120,8 +120,19 @@ function formatUsd(value: number | null | undefined): string {
   return `$${value.toFixed(value >= 10 ? 0 : 2)}`
 }
 
+/** For prompts sent to the agent: the server enforces the exact cap, so
+ * never round it ("$31" for a $30.75 cap plans past the gate). */
+function formatUsdExact(value: number): string {
+  return `$${value.toFixed(2)}`
+}
+
 function parseBudgetCap(value: string): number | null {
-  const cleaned = value.replace(/[$,\s]/g, '')
+  let cleaned = value.replace(/[$\s]/g, '')
+  // A lone trailing ",dd" is a decimal comma ("12,50" = 12.50); any
+  // other comma is a thousands separator ("1,250" = 1250).
+  cleaned = /^\d+,\d{1,2}$/.test(cleaned)
+    ? cleaned.replace(',', '.')
+    : cleaned.replace(/,/g, '')
   const n = Number(cleaned)
   return Number.isFinite(n) && n > 0 ? Math.round(n * 100) / 100 : null
 }
@@ -129,9 +140,11 @@ function parseBudgetCap(value: string): number | null {
 function inferDurationSeconds(brief: string): number {
   const text = brief.toLowerCase()
   const minute = text.match(/(\d+(?:\.\d+)?)\s*(?:minutes?|mins?|m)\b/)
-  if (minute) return Math.max(15, Math.round(Number(minute[1]) * 60))
+  if (minute) return Math.min(1800, Math.max(15, Math.round(Number(minute[1]) * 60)))
   const second = text.match(/(\d+(?:\.\d+)?)\s*(?:seconds?|secs?|s)\b/)
-  if (second) return Math.max(15, Math.round(Number(second[1])))
+  // Ignore implausibly large "Ns" matches: "a 1990s noir short" names a
+  // decade, not a 33-minute runtime request.
+  if (second && Number(second[1]) <= 600) return Math.max(15, Math.round(Number(second[1])))
   return 60
 }
 
@@ -179,6 +192,13 @@ async function buildAutoEstimate(
     fetchEstimatedCost('tts', { text_chars: 500 }),
     fetchEstimatedCost('video-generation-assets'),
   ])
+
+  // If the viewer's /cost route is unreachable every rate comes back 0 —
+  // throw so the caller sends the honest "estimate unavailable" prompt
+  // instead of a confident-looking near-zero range.
+  if (video720 <= 0 && video480 <= 0 && proImage <= 0 && standardImage <= 0) {
+    throw new Error('cost estimates unavailable')
+  }
 
   const anchorCost =
     characterSheets * proImage +
@@ -236,7 +256,7 @@ function buildAutoPlanningPrompt({
 }): string {
   const budgetLine = budgetCap === null
     ? 'Budget cap: not provided yet. Ask for an explicit cap in the approval summary and suggest a cap from your estimate plus a small cushion.'
-    : `Budget cap: ${formatUsd(budgetCap)} hard cap.`
+    : `Budget cap: ${formatUsdExact(budgetCap)} hard cap.`
   const estimateLine = estimate
     ? `UI rough estimate: requested ${estimate.requestedSeconds}s, planned ${estimate.plannedSeconds}s, ${estimate.shots} clips, ${estimate.resolution}, ${estimate.characterSheets} character sheets, ${estimate.characterVariants} character variants, ${estimate.locationAnchors} location anchors, ${estimate.locationVariants} location variants, ${estimate.voiceAnchors} voice anchors, roughly ${formatUsd(estimate.estimatedLow)}-${formatUsd(estimate.estimatedHigh)}.`
     : 'UI rough estimate unavailable; compute your own from the model registry/project guidance.'
@@ -267,7 +287,7 @@ function buildAutoExecutionPrompt({
   estimate: AutoEstimate | null
 }): string {
   const runId = run.id ?? ''
-  const cap = formatUsd(budgetCap)
+  const cap = formatUsdExact(budgetCap)
   const completionUrl = `${VIEWER_URL}/projects/${encodeURIComponent(projectId)}/auto-runs/${encodeURIComponent(runId)}/complete`
   return [
     'Run Auto is approved. Proceed end-to-end now.',
@@ -634,21 +654,33 @@ function AgentPanel({
 }): JSX.Element {
   const composer = useChatComposer()
   const [autoPhase, setAutoPhase] = useState<AutoModePhase>('idle')
+  const sawActiveRunRef = useRef(false)
 
   const activeServerRun =
     autoRun?.status === 'approved' || autoRun?.status === 'running'
 
+  // Auto UI state is per project; the /p/:projectId route reuses this
+  // component instance across navigations.
   useEffect(() => {
-    if (activeServerRun && autoPhase === 'idle') setAutoPhase('running')
-    if (
-      autoRun !== null &&
-      (autoRun.status === 'completed' ||
-        autoRun.status === 'cancelled' ||
-        autoRun.status === 'blocked')
-    ) {
+    setAutoPhase('idle')
+    sawActiveRunRef.current = false
+  }, [projectId])
+
+  useEffect(() => {
+    if (activeServerRun) {
+      sawActiveRunRef.current = true
+      if (autoPhase === 'idle') setAutoPhase('running')
+      return
+    }
+    // Close the banner only on the active → not-active transition. A
+    // terminal run lingers in meta.auto_run forever, so resetting on
+    // terminal status alone would keep re-closing the panel and make
+    // Auto un-armable after the project's first finished run.
+    if (sawActiveRunRef.current && autoPhase === 'running') {
+      sawActiveRunRef.current = false
       setAutoPhase('idle')
     }
-  }, [activeServerRun, autoRun, autoPhase])
+  }, [activeServerRun, autoPhase])
 
   const armAuto = useCallback(() => {
     setAutoPhase((prev) => (prev === 'idle' ? 'armed' : prev))
@@ -664,6 +696,7 @@ function AgentPanel({
       />
       {autoPhase !== 'idle' ? (
         <AutoModePanel
+          key={projectId ?? 'none'}
           projectId={projectId}
           composerReady={composer !== null}
           phase={autoPhase}
@@ -703,8 +736,12 @@ function AutoModePanel({
   const [brief, setBrief] = useState('')
   const [budget, setBudget] = useState('30')
   const [estimate, setEstimate] = useState<AutoEstimate | null>(null)
+  // The brief the estimate was computed for — an estimate is only the
+  // "approved plan" while the brief it priced is still the brief.
+  const [estimateBrief, setEstimateBrief] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [localRunId, setLocalRunId] = useState<string | null>(null)
+  const cancelRequestedRef = useRef(false)
 
   const budgetCap = parseBudgetCap(budget)
   const canPlan =
@@ -730,9 +767,11 @@ function AutoModePanel({
     try {
       nextEstimate = await buildAutoEstimate(brief, budgetCap)
       setEstimate(nextEstimate)
+      setEstimateBrief(brief.trim())
     } catch {
       nextEstimate = null
       setEstimate(null)
+      setEstimateBrief(null)
     }
     sendToAgent(buildAutoPlanningPrompt({
       brief: brief.trim(),
@@ -749,14 +788,17 @@ function AutoModePanel({
     }
     setError(null)
     setPhase('running')
+    cancelRequestedRef.current = false
+    // An estimate priced for an older brief is not this brief's plan.
+    const freshEstimate = estimateBrief === brief.trim() ? estimate : null
     try {
       const r = await fetch(`${VIEWER_URL}/projects/${encodeURIComponent(projectId)}/auto-runs`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           budget_cap_usd: budgetCap,
-          estimate_usd: estimate?.estimatedHigh ?? null,
-          planned_runtime_seconds: estimate?.plannedSeconds ?? inferDurationSeconds(brief),
+          estimate_usd: freshEstimate?.estimatedHigh ?? null,
+          planned_runtime_seconds: freshEstimate?.plannedSeconds ?? inferDurationSeconds(brief),
           brief: brief.trim(),
         }),
       })
@@ -764,22 +806,38 @@ function AutoModePanel({
       if (!r.ok || body.ok === false || !body.auto_run?.id) {
         throw new Error(body.error || `viewer ${r.status}`)
       }
+      if (cancelRequestedRef.current) {
+        // Cancel was clicked while the POST was in flight: undo the run
+        // we just created instead of dispatching the agent.
+        void fetch(
+          `${VIEWER_URL}/projects/${encodeURIComponent(projectId)}/auto-runs/${encodeURIComponent(body.auto_run.id)}`,
+          { method: 'DELETE' },
+        ).catch(() => undefined)
+        return
+      }
       setLocalRunId(body.auto_run.id)
       sendToAgent(buildAutoExecutionPrompt({
         projectId,
         run: body.auto_run,
         budgetCap,
         brief: brief.trim(),
-        estimate,
+        estimate: freshEstimate,
       }))
     } catch (err) {
+      if (cancelRequestedRef.current) return
       setError(err instanceof Error ? err.message : String(err))
       setPhase('approval_required')
     }
   }
 
   const cancel = async (): Promise<void> => {
-    const runId = autoRun?.id ?? localRunId
+    cancelRequestedRef.current = true
+    // Only DELETE something that can still be active — a terminal run
+    // from an earlier session would just 409.
+    const runId =
+      autoRun !== null && (autoRun.status === 'approved' || autoRun.status === 'running')
+        ? autoRun.id
+        : localRunId
     setPhase('idle')
     setError(null)
     setLocalRunId(null)
@@ -791,7 +849,11 @@ function AutoModePanel({
     }
   }
 
-  const activeBudgetText = budgetCap === null ? 'No cap' : `${formatUsd(budgetCap)} cap`
+  const serverRunActive =
+    autoRun !== null && (autoRun.status === 'approved' || autoRun.status === 'running')
+  const activeBudgetText = serverRunActive
+    ? `${formatUsd(autoRun.spent_usd)} of ${autoRun.budget_cap_usd !== null ? formatUsd(autoRun.budget_cap_usd) : '$--'} cap`
+    : budgetCap === null ? 'No cap' : `${formatUsd(budgetCap)} cap`
   const phaseText =
     phase === 'armed' ? 'Armed'
     : phase === 'planning' ? 'Planning'

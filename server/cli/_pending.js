@@ -348,10 +348,20 @@ export async function reserveAutoBudget({
       ...(body && typeof body === "object" ? body : {}),
     };
   }
+  // A 2xx whose body didn't parse as JSON is not proof of a reservation —
+  // fail closed rather than spend against an unconfirmed ledger entry.
+  if (!body || typeof body !== "object") {
+    return {
+      ok: false,
+      job_id: jobId,
+      klass: "infra",
+      message: "viewer auto budget response was not valid JSON",
+    };
+  }
   return {
     ok: true,
     job_id: jobId,
-    ...(body && typeof body === "object" ? body : {}),
+    ...body,
   };
 }
 

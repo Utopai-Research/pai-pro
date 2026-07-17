@@ -112,6 +112,17 @@ const routeOwnedPending = !!args["existing-job-id"];
 const durationPlanned = Number(args.duration) || 15;
 const plannedModel = defaultVideoModel.id;
 
+if (args["auto-run-id"] !== undefined) {
+  if (args["auto-run-id"] === "") {
+    fail("bad_args", "--auto-run-id must not be empty");
+    process.exit(2);
+  }
+  if (!args.stage && !routeOwnedPending) {
+    fail("bad_args", "--auto-run-id requires --stage so the run's budget is reserved before spending");
+    process.exit(2);
+  }
+}
+
 // Asset preupload through PAI's video-generation-assets costs ~$0.01 per
 // ref. Count canvas source-ids once each across image + video + audio refs.
 function countUniqueRefs() {
@@ -129,7 +140,7 @@ if (args.stage && !routeOwnedPending) {
   const costUsd = +(Number(videoCost ?? 0) + assetCost).toFixed(3);
   const autoRunId = args["auto-run-id"] || null;
   const autoProjectId = autoRunId
-    ? args["project-id"] || (await readActiveProject())
+    ? args["project-id"] || (await readActiveProject().catch(() => null))
     : null;
   if (autoRunId) {
     const reserved = await reserveAutoBudget({

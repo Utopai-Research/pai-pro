@@ -362,6 +362,76 @@ test("POST /projects/:id/auto-runs creates scoped run without enabling global by
   const meta = await readMeta();
   assert.equal(meta.auto_run.id, body.auto_run.id);
   assert.equal(meta.dangerously_skip_draft_gate, undefined);
+
+  // Terminate so later tests can create fresh runs (single run slot).
+  await fetch(`${baseUrl}/projects/${TEST_PROJECT_ID}/auto-runs/${body.auto_run.id}`, {
+    method: "DELETE",
+  });
+});
+
+test("creating a second auto run while one is active returns 409", async () => {
+  const first = await fetch(`${baseUrl}/projects/${TEST_PROJECT_ID}/auto-runs`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ budget_cap_usd: 2, brief: "run A" }),
+  });
+  assert.equal(first.status, 201);
+  const runA = (await first.json()).auto_run;
+
+  const second = await fetch(`${baseUrl}/projects/${TEST_PROJECT_ID}/auto-runs`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ budget_cap_usd: 2, brief: "run B" }),
+  });
+  assert.equal(second.status, 409);
+  const blocked = await second.json();
+  assert.equal(blocked.ok, false);
+  assert.equal(blocked.klass, "conflict");
+
+  const meta = await readMeta();
+  assert.equal(meta.auto_run.id, runA.id, "active run must not be replaced");
+
+  const cancel = await fetch(`${baseUrl}/projects/${TEST_PROJECT_ID}/auto-runs/${runA.id}`, {
+    method: "DELETE",
+  });
+  assert.equal(cancel.status, 200);
+
+  const third = await fetch(`${baseUrl}/projects/${TEST_PROJECT_ID}/auto-runs`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ budget_cap_usd: 2, brief: "run C" }),
+  });
+  assert.equal(third.status, 201, "terminal run can be replaced");
+  const runC = (await third.json()).auto_run;
+  await fetch(`${baseUrl}/projects/${TEST_PROJECT_ID}/auto-runs/${runC.id}`, {
+    method: "DELETE",
+  });
+});
+
+test("reserve rejects null, missing, and negative cost_usd", async () => {
+  const create = await fetch(`${baseUrl}/projects/${TEST_PROJECT_ID}/auto-runs`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ budget_cap_usd: 2, brief: "cost validation" }),
+  });
+  const runId = (await create.json()).auto_run.id;
+
+  for (const costUsd of [null, undefined, -0.0004, "0.45", true]) {
+    const r = await fetch(`${baseUrl}/projects/${TEST_PROJECT_ID}/auto-runs/${runId}/reserve`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ job_id: "pending_auto_bad_cost", cost_usd: costUsd }),
+    });
+    assert.equal(r.status, 400, `cost_usd ${String(costUsd)} must be rejected`);
+    assert.equal((await r.json()).klass, "bad_args");
+  }
+
+  const meta = await readMeta();
+  assert.equal(meta.auto_run.jobs.length, 0, "no $0 reservations recorded");
+
+  await fetch(`${baseUrl}/projects/${TEST_PROJECT_ID}/auto-runs/${runId}`, {
+    method: "DELETE",
+  });
 });
 
 test("auto run reservations accumulate and reject jobs over cap", async () => {
@@ -422,6 +492,10 @@ test("auto run reservations accumulate and reject jobs over cap", async () => {
   const meta = await readMeta();
   assert.equal(meta.auto_run.spent_usd, 0.45);
   assert.equal(meta.auto_run.jobs.length, 1);
+
+  await fetch(`${baseUrl}/projects/${TEST_PROJECT_ID}/auto-runs/${runId}`, {
+    method: "DELETE",
+  });
 });
 
 test("auto run completion is terminal", async () => {
