@@ -39,6 +39,7 @@ import {
   removePendingSync,
 } from "./_pending.js";
 import { VIDEO_LIMITS } from "./_limits.js";
+import { checkPromptRefsWired } from "./_ref_guard.js";
 
 const rawArgv = process.argv.slice(2);
 const defaultVideoModel = getDefault("video");
@@ -104,6 +105,19 @@ if (!args.prompt) {
 
 if (audSrcIds.length > VIDEO_LIMITS.max_audio_refs) {
   fail("bad_args", `reference cap exceeded: audio_refs ${audSrcIds.length} > ${VIDEO_LIMITS.max_audio_refs}`);
+  process.exit(2);
+}
+
+// Reject prompts that name @ImageN/@VideoN/@AudioN without wiring the matching
+// flag — runs before staging + any paid call. See _ref_guard.js.
+const refGuardMsg = checkPromptRefsWired({
+  prompt: args.prompt,
+  refSourceCount: refSourcesArg.length,
+  audioRefCount: audSrcIds.length,
+  tier: "video",
+});
+if (refGuardMsg) {
+  fail("bad_args", refGuardMsg);
   process.exit(2);
 }
 

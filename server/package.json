@@ -3,7 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Media-generation CLIs (scripts/) + viewer server (local_viewer.js) for pai-pro. Includes a node-pty bridge for the in-browser terminal.",
+  "description": "Media-generation CLIs (cli/) + viewer server (local_viewer.js) for pai-pro. Includes a node-pty bridge for the in-browser terminal.",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "viewer": "node --watch local_viewer.js",
     "test": "node --test __tests__/*.test.js",

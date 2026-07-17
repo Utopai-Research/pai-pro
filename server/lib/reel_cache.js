@@ -22,9 +22,11 @@ import { projectDir } from "./paths.js";
 const REEL_CACHE_LRU = 3;                 // keep the 3 most recent build ids per project
 const REEL_PREBUILD_DEBOUNCE_MS = 500;
 
-// projectId -> { timer, lastTriggerBuildId }
+// projectId -> { timer }
 const _reelPrebuildTimers = new Map();
-// projectId -> Promise (in-flight build, prevents duplicate concurrent builds)
+// `${projectId}:${buildId}` -> Promise (in-flight build). Keyed by build id too,
+// so a request for build B that lands mid-build of A gets its own build (and
+// streams B's bytes) instead of being handed A's in-flight promise.
 const _reelBuildsInFlight = new Map();
 
 export function reelCacheDir(id) {
@@ -69,7 +71,8 @@ async function pruneReelCache(id, keepBuildId) {
 // concurrent calls so a /preview.mp4 request that arrives during a
 // background build just awaits the same Promise.
 export async function ensureReelMaster({ projects, id, buildId }) {
-  const inflight = _reelBuildsInFlight.get(id);
+  const key = `${id}:${buildId}`;
+  const inflight = _reelBuildsInFlight.get(key);
   if (inflight) return inflight;
   const p = projects.get(id);
   if (!p?.canvasState) {
@@ -78,24 +81,31 @@ export async function ensureReelMaster({ projects, id, buildId }) {
     throw err;
   }
   const outPath = reelCachePath(id, buildId);
-  // Already cached? Touch mtime to keep it warm in the LRU and return.
-  try {
-    await fsp.access(outPath);
-    const now = new Date();
-    await fsp.utimes(outPath, now, now).catch(() => {});
-    return outPath;
-  } catch { /* not cached; build it */ }
-
+  // Register the in-flight promise SYNCHRONOUSLY — before the first await —
+  // so concurrent cold-cache callers collapse onto this single build. The
+  // cached-file check has to live INSIDE the promise: when it sat before the
+  // registration, its `await fsp.access` yielded the event loop, letting two
+  // requests both miss the cache and each spawn an ffmpeg writing the same
+  // path. buildReelMaster now renames atomically so that race no longer
+  // corrupts the master, but collapsing it also avoids the wasted duplicate
+  // encodes.
   const buildPromise = (async () => {
     try {
+      // Already cached? Touch mtime to keep it warm in the LRU and reuse.
+      try {
+        await fsp.access(outPath);
+        const now = new Date();
+        await fsp.utimes(outPath, now, now).catch(() => {});
+        return outPath;
+      } catch { /* not cached; build it */ }
       await buildReelMaster(p.canvasState, projectDir(id), outPath, id);
       pruneReelCache(id, buildId).catch(() => {});
       return outPath;
     } finally {
-      _reelBuildsInFlight.delete(id);
+      _reelBuildsInFlight.delete(key);
     }
   })();
-  _reelBuildsInFlight.set(id, buildPromise);
+  _reelBuildsInFlight.set(key, buildPromise);
   return buildPromise;
 }
 
@@ -108,7 +118,7 @@ export function kickReelPrebuild({ projects, id }) {
   if (!buildId) return;
   // If a build for this exact composition already exists or is in
   // flight, skip — nothing to do.
-  if (_reelBuildsInFlight.has(id)) return;
+  if (_reelBuildsInFlight.has(`${id}:${buildId}`)) return;
   fsp.access(reelCachePath(id, buildId)).then(
     () => { /* already cached */ },
     () => {
@@ -122,7 +132,7 @@ export function kickReelPrebuild({ projects, id }) {
           }
         });
       }, REEL_PREBUILD_DEBOUNCE_MS);
-      _reelPrebuildTimers.set(id, { timer, lastTriggerBuildId: buildId });
+      _reelPrebuildTimers.set(id, { timer });
     },
   );
 }

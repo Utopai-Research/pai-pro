@@ -104,9 +104,9 @@ Ask only after render path is picked and a multi-clip plan exists. Skip for one 
   - label: `Parallel`
     description: `Render all clips independently.`
   - label: `Sequential`
-    description: `Each clip continues from the previous one.`
+    description: `Each clip continues from the previous one; boundaries default to a hard cut to a new angle (avoids the same-shot seam) — keep a boundary same-shot only for an unbroken oner.`
 
-Signals: continuous scene/action/state -> sequential; separate scenes/time jumps/wardrobe changes/montage -> parallel; continuous clusters separated by hard cuts -> hybrid. Do not chain video refs across location, time, wardrobe/state, dream/reality, or montage breaks.
+Signals: continuous scene/state -> sequential (hard-cut handoffs between clips); a single unbroken action the viewer must read as ONE motion -> one ≤15s clip, else sequential with a same-shot handoff; separate scenes/time jumps/wardrobe changes/montage -> parallel; continuous clusters separated by hard cuts -> hybrid. Do not chain video refs across location, time, wardrobe/state, dream/reality, or montage breaks.
 
 ## After media results
 

@@ -10,7 +10,7 @@
  * pending-generation list so the canvas has one placeholder surface.
  */
 import { useEffect, useMemo, useState } from 'react'
-import { getSocket, VIEWER_URL } from '@/lib/socket'
+import { getSocket, subscribeProject, VIEWER_URL } from '@/lib/socket'
 import { mergeWorkflow, synthesizeAssetUrls } from '@/lib/workflowMerge'
 import type {
   GenerationResult,
@@ -213,10 +213,11 @@ export function useWorkflow(projectId: string | null): UseWorkflowResult {
     socket.on('title', onTitle)
     socket.on('pai-assets-snapshot', onAssetStatusSnapshot)
     socket.on('pai-assets', onAssetStatusUpdate)
-    socket.emit('subscribe', { projectId })
+    const releaseSubscription = subscribeProject(projectId)
 
     return () => {
       cancelled = true
+      releaseSubscription()
       socket.off('canvas-state', onCanvasState)
       socket.off('canvas-positions', onCanvasPositions)
       socket.off('pending-generations', onPendingGenerations)

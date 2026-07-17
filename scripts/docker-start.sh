@@ -57,6 +57,21 @@ pull_latest() {
         exit 1
     fi
 
+    # A start command must never eat local work: skip the pull for dev
+    # checkouts (dirty tree, branch without an upstream) or on request.
+    if [ "${PAI_NO_PULL:-0}" = "1" ]; then
+        echo "Skipping git pull (PAI_NO_PULL=1)."
+        return
+    fi
+    if ! git diff --quiet || ! git diff --cached --quiet; then
+        echo "Skipping git pull: local changes present (commit/stash them, or set PAI_NO_PULL=1 to silence this)."
+        return
+    fi
+    if ! git rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' >/dev/null 2>&1; then
+        echo "Skipping git pull: current branch has no upstream configured."
+        return
+    fi
+
     echo "Pulling latest repo state..."
     git pull --ff-only
 }

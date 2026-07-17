@@ -1,9 +1,10 @@
 // AJV schemas for workflow.json + mutator op payloads.
 //
-// Source of truth: web/src/types/canvas.ts. When that file changes, mirror
-// the change here and re-run the schema round-trip test
-// (server/__tests__/canvas_mutator.test.js → "real workflow.json files
-// validate against doc schema").
+// The renderer-side mirror of these shapes lives at web/src/types/canvas.ts —
+// when either side changes, update both, then run the contract tests:
+// server/__tests__/workflow_contract.test.js (type-map consistency + every
+// local projects/*/workflow.json validates) and canvas_mutator.test.js →
+// "sample workflow fixture validates against doc schema".
 //
 // Strict mode is OFF for `data.metadata` sub-objects — the metadata bags
 // are intentionally open-shape and grow over time. Strict elsewhere.
@@ -379,7 +380,6 @@ for (const [name, schema] of Object.entries(opSchemas)) {
 
 const validateEnvelope = ajv.getSchema("#envelope");
 const validateWorkflow = ajv.getSchema("#workflow");
-const validateNode = ajv.getSchema("#canvasNode");
 
 function formatErrors(errors) {
   if (!errors) return "unknown validation error";
@@ -392,7 +392,6 @@ export {
   ajv,
   validateEnvelope,
   validateWorkflow,
-  validateNode,
   opValidators,
   formatErrors,
 };

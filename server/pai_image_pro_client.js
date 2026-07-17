@@ -158,7 +158,12 @@ export async function generateImagePro({
       logTag: "pai-image-pro",
     });
   } catch (e) {
-    if (looksContentFiltered(e?.message)) {
+    // Content-filter rejections surface as upstream 4xx (klass bad_args)
+    // with policy wording in the message. Never re-tag other klasses —
+    // e.g. an infra 402 ("insufficient balance" mentioning a policy) or
+    // a transient 5xx must keep their classification so the agent
+    // retries/escalates instead of pointlessly rewording the prompt.
+    if (e?.klass === "bad_args" && looksContentFiltered(e?.message)) {
       throw err("content_filtered", `image-generation-pro content filter: ${e.message}`);
     }
     throw e;

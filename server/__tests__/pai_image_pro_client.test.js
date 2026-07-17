@@ -175,6 +175,22 @@ test("generateImagePro classifies policy-shaped HTTP failures as content_filtere
   );
 });
 
+test("generateImagePro keeps non-bad_args klasses even with policy wording", async (t) => {
+  // A 402 classifies as infra ("insufficient balance") — policy wording in
+  // the upstream message must NOT re-tag it content_filtered, or the agent
+  // rewords the prompt instead of surfacing the billing problem.
+  await withPaiServer(t, ({ res }) => {
+    res.statusCode = 402;
+    res.setHeader("content-type", "application/json");
+    res.end(JSON.stringify({ detail: "insufficient balance under current usage policy" }));
+  });
+
+  await assert.rejects(
+    generateImagePro({ prompt: "x", size: "1024x1024" }),
+    (e) => e.klass === "infra" && /insufficient balance/.test(e.message),
+  );
+});
+
 test("generateImagePro treats missing media URL as transient", async (t) => {
   await withPaiServer(t, ({ res }) => {
     res.setHeader("content-type", "application/json");

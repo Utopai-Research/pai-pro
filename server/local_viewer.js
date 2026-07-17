@@ -66,7 +66,7 @@ const IS_PROD = process.env.NODE_ENV === "production";
 // Docker layer to defend behind, and the upload / pty:spawn surfaces
 // are unauthenticated. Override via VIEWER_BIND.
 const BIND = process.env.VIEWER_BIND ?? (IS_PROD ? "0.0.0.0" : "127.0.0.1");
-import { readActive, writeActive } from "./lib/writers.js";
+import { pendingSidecarWrites, readActive, writeActive } from "./lib/writers.js";
 import { registerCanvasRoutes } from "./routes/canvas.js";
 import { registerPendingRoutes } from "./routes/pending.js";
 import { registerProjectsRoutes } from "./routes/projects.js";
@@ -102,7 +102,12 @@ const app = express();
 // is applied to Socket.IO below.
 const corsOptions = IS_PROD ? null : { origin: WEB_ORIGIN, credentials: true };
 if (corsOptions) app.use(cors(corsOptions));
-app.use(express.json());
+// Inline note/script bodies ride through here inside the /mutate envelope and
+// can reach the 2MB TEXT_INLINE_LIMIT (lib/upload_payload.js). Express's 100kb
+// default would 413 them on create and on every later data PATCH. 4mb = 2x that
+// ceiling (absorbs JSON-string escaping + the envelope wrapper) and stays far
+// under the 100MB multipart cap in routes/uploads.js.
+app.use(express.json({ limit: "4mb" }));
 
 // Production: serve the prebuilt web bundle from web/dist BEFORE the API
 // routes. express.static passes through to next() when a path doesn't
@@ -209,6 +214,10 @@ async function shutdown(signal) {
   try { io.emit("viewer-shutdown"); } catch { /* noop */ }
   const drains = Array.from(projects.values())
     .map((p) => p.mutationQueue?.onIdle?.() ?? Promise.resolve());
+  // Sidecar writes (meta.json / canvas_positions.json) queue outside the
+  // mutation queues — await their tails too or a SIGTERM mid-drag can
+  // drop the last positions write.
+  drains.push(pendingSidecarWrites());
   await Promise.race([
     Promise.all(drains),
     new Promise((r) => setTimeout(r, 10_000)),         // hard cap 10s

@@ -36,6 +36,14 @@ test("Docker launcher builds the current checkout and recreates the container", 
   assert.match(script, /docker compose up -d --force-recreate --remove-orphans/);
 });
 
+test("Docker launcher never pulls over local work", async () => {
+  const script = await readFile(join(REPO_ROOT, "scripts", "docker-start.sh"), "utf8");
+  // Escape hatch + dev-checkout guards: PAI_NO_PULL=1, dirty tree, no upstream.
+  assert.match(script, /PAI_NO_PULL:-0/);
+  assert.match(script, /git diff --quiet \|\| ! git diff --cached --quiet/);
+  assert.match(script, /git rev-parse --abbrev-ref --symbolic-full-name '@\{upstream\}'/);
+});
+
 test("docker compose passes default agent and isolates Docker Codex state", async () => {
   const compose = await readFile(join(REPO_ROOT, "docker-compose.yml"), "utf8");
   assert.match(compose, /PAI_DEFAULT_AGENT_ID:\s+"\$\{PAI_DEFAULT_AGENT_ID:-\}"/);

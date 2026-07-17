@@ -71,12 +71,14 @@ docs/reports/
 docs/roadmaps/
 docs/plans/*
 !docs/plans/.gitkeep
+docs/research/
 
 # Local-only tech debt audits.
 TECH_DEBT_AUDIT.md
 
 # Design bundles + scratch work
 tmp/
+.results/
 
 # test/ — local-only smoke tests, scratch outputs, .env with keys
 test/
@@ -90,3 +92,6 @@ server/__tests__/_smoke/
 # Stale symlink from early smoke testing (points into projects/, already ignored).
 # No trailing slash — git treats symlinks as files, not directories.
 wiki
+
+# Local media library — downloaded reusable drama assets (per-drama subfolders). Not tracked.
+assets/

@@ -4,18 +4,29 @@ For extending an existing canvas clip (Pattern 4). Owns continuity prefix and de
 
 ## Sub-intent decision tree
 
-- **Forward extension (default)** — continue the action from the source clip's final frame.
+- **Forward extension (default)** — the next beat after the source clip; the boundary defaults to a hard cut to a new angle (see Slot-by-slot construction).
 - **Backward extension (prequel beat)** — generate the moment that *led into* the source. Prompt-only — no API param. Phrase as *"leading into @Video1 from a moment N seconds earlier"*.
 - **Multi-clip chain (≥2 linked clips)** — triggers the sequencing rules below.
 - **Script-driven chain** — render shot notes as dependent links when Sequential/Hybrid or dependency check requires continuity. Unrelated scenes can render independently. Shot note body is creative source; dialogue/VO stays verbatim.
 
 ## Slot-by-slot construction
 
-Prefix every extension prompt with the continuity anchor:
+**First, check total length.** If the whole sequence fits within the 15s single-render convention, do NOT chain two clips — render it as ONE multi-shot clip (Pattern 7 / [`video-multi-shot.md`](video-multi-shot.md)) with the cuts inside one render. No two-clip handoff means no boundary to morph. Chain (below) only when the total exceeds 15s.
+
+**Default boundary between chained clips = HARD CUT.** Open clip 2 on a NEW camera angle of the same scene and character. Prefix:
 
 ```
-Continue from @Video1 — start AFTER its final frame; do not include any frames from @Video1 in the new clip. Maintain visual continuity (same location, lighting, camera position).
+Hard cut from @Video1: open on a NEW camera angle of the same scene and character. Do NOT match or continue @Video1's final frame; begin cleanly on the new shot. Keep world continuity (location, lighting, wardrobe) and identity via the character image ref — not by matching the previous frame.
 ```
+
+**Why hard cut is the default (stated once here; other files refer back):** a same-shot continuation forces the model to reconstruct @Video1's exact final frame and roll forward on the same lens. It can't reproduce that frame pixel-perfectly, so the first ~0.3s morphs/warps — the seam. A hard cut owes nothing to the previous frame: nothing to match, no seam, even under heavy motion. Tradeoff — the cut discards the frame that was anchoring identity, so the **character image ref is mandatory** (see Adjacent roles). Note: seam-clean ≠ reads-as-continuous, which is why a true oner stays same-shot (exception ii below).
+
+**Same-shot continuation (continue on the SAME camera) is the exception** — use it only when one holds, each judged from intent you control, not from guessing how clip 1 will render:
+- **(i) authored held beat** — you deliberately wrote clip 1 to END on a pause/settle/freeze, and clip 2 opens from that held pose;
+- **(ii) story-required oner** — script/user wants one unbroken motion (a continuous push-in, a strike read as ONE move) that an edit cut would break; prefer one ≤15s clip, same-shot chain only if >15s;
+- **(iii) explicit user request** for a continuous / same-shot / single-take handoff — honor it directly; warn once that a mid-motion same-shot may seam, then proceed.
+
+Same-shot prefix (legacy): *"Continue from @Video1 — start AFTER its final frame; no frames from @Video1. Maintain visual continuity (same location, lighting, camera position)."*
 
 Then write what happens next. For script-driven links, copy dialogue/VO exactly. Final audio: *"Use @Audio1 for timing, cadence, and voice. Keep the words unchanged."* Voice sample: bind to speaker as timbre anchor and add once/no-echo/no-repeat guard.
 
@@ -23,21 +34,21 @@ Then write what happens next. For script-driven links, copy dialogue/VO exactly.
 
 **Anti-pattern: frame repeats.** The new clip must start after @Video1's final frame and include no frames from @Video1.
 
-✅ "Continue from @Video1 — … . The detective lifts a folder from the desk and steps toward the door."
-❌ "A detective in a dim office at night, wearing a trench coat, opens a folder on his desk and looks up." → re-describes; loses the frame anchor.
+✅ "Hard cut from @Video1 — new low angle of the same office. The detective (the character in @Image1) lifts a folder from the desk and steps toward the door."
+❌ "A detective in a dim office at night, wearing a trench coat, opens a folder on his desk and looks up." → re-describes the world from scratch; leans on neither the source clip nor the char ref.
 
 ## Adjacent roles
 
 Pattern-specific notes (the role vocabulary itself is in SKILL.md):
 
-- **Character image ref:** locks identity across links — the source video may drift, the explicit ref reinforces.
+- **Character image ref:** **mandatory under the hard-cut default** — the cut discards the previous frame that anchored identity, so identity rides entirely on this ref. For high-motion / high-emotion beats (where identity drifts most — e.g. a shout scored 26/40 in testing), anchor with a strong 4-panel character sheet: see image-compose's [`character-sheet.md`](../../image-compose/references/character-sheet.md).
 - **Spoken audio:** include exact dialogue/VO. Bind each line to the intended character and use `@Audio1` as final read or timbre anchor per `SKILL.md`.
 - **Camera-move source:** rare — switch camera grammar mid-chain.
 
 ## What to lock vs. what to change
 
-- **Lock at the handoff:** location, lighting, character pose, framing.
-- **Change in the new clip:** the action, the camera focus, the time-of-frame.
+- **Hard cut (default):** lock location, lighting, wardrobe, and identity (via the char ref); CHANGE the camera angle/framing and the action. Do not try to match the previous camera or pose.
+- **Same-shot (exception):** lock location, lighting, character pose, framing; change only the action and time-of-frame.
 
 ## Why serialize
 
@@ -85,13 +96,14 @@ Scene A ends with a traveler stepping off a train onto a platform. Scene B opens
 
 **Good (serial):**
 - Step 1: stage `node "$PAI_REPO_ROOT/server/cli/generate_video.js" --prompt "<scene A prompt>" --ref-source-id <traveler.id>` and wait for the user to fire it.
-- Step 2: after A lands, resolve `video_A.id`, then stage `node "$PAI_REPO_ROOT/server/cli/generate_video.js" --prompt "<scene B prompt>" --ref-source-id <traveler.id> --ref-source-id <attendant.id> --ref-source-id <video_A.id>`. Prefix: *"Continue from @Video1 — maintain visual continuity with the final frame (platform at dusk, traveler mid-stride stepping off the train). The character in @Image1 is the traveler; the character in @Image2 is the attendant watching from the booth. …"*.
+- Step 2: after A lands, resolve `video_A.id`, then stage `node "$PAI_REPO_ROOT/server/cli/generate_video.js" --prompt "<scene B prompt>" --ref-source-id <traveler.id> --ref-source-id <attendant.id> --ref-source-id <video_A.id>`. Prefix (hard-cut handoff to a new subject's angle): *"Hard cut from @Video1: cut to the station attendant's angle on the same platform at dusk. The character in @Image1 is the traveler (just off the train); the character in @Image2 is the attendant noticing the new arrival from the booth. Keep location/lighting continuity via the refs, not by matching @Video1's final frame. …"*.
 
 ## Troubleshooting
 
-- **Mismatched cut on the screen** — was the source video id actually passed as `--ref-source-id`? Prompt text alone does not pin the frame.
+- **A clean angle change at the boundary is the intended hard-cut default** (see Slot-by-slot construction), not a defect. What needs fixing is a morph/warp/settle at a *same-shot* boundary — switch that boundary to a hard cut.
+- **Mismatched cut on the screen** (same-shot links) — was the source video id actually passed as `--ref-source-id`? Prompt text alone does not pin the frame.
 - **Echo / stutter at the start of the new clip** — frames from the reference appeared in the new render. The prompt missed the *"start after @Video1's final frame; no frames from @Video1"* direction. Re-render with the no-frame-repeat phrasing in the prefix.
-- **Identity drifts between links** — character image ref needed in addition to the source video ref.
+- **Identity drifts between links** — under the hard-cut default the cut discards the frame that anchored identity, so the character image ref is mandatory; for high-motion / high-emotion beats use a 4-panel character sheet (see Adjacent roles).
 - **Duration cap exceeded** — sum of audio or video reference durations ≥15s. Trim the ref list before retry.
 
 ## Fallback branch

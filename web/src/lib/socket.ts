@@ -18,14 +18,46 @@ const VIEWER =
 
 let socket: Socket | null = null
 
+// Rooms are joined per server-side connection, so a reconnect (viewer
+// restart, transport drop) lands on a fresh server socket with no rooms —
+// without re-emitting `subscribe` the tab silently stops receiving project
+// events. Track live subscriptions here and replay them on every connect.
+const subscriptionRefs = new Map<string, number>()
+
 export function getSocket(): Socket {
   if (!socket) {
     socket = io(VIEWER, {
       transports: ['websocket', 'polling'],
       withCredentials: true,
     })
+    socket.on('connect', () => {
+      for (const projectId of subscriptionRefs.keys()) {
+        socket?.emit('subscribe', { projectId })
+      }
+    })
   }
   return socket
+}
+
+/**
+ * Join a project's Socket.IO room, resilient to reconnects. The initial
+ * `subscribe` is sent on connect (or immediately if already connected);
+ * later reconnects replay it automatically. Returns a release fn —
+ * subscriptions are refcounted so overlapping subscribers to the same
+ * project don't cancel each other.
+ */
+export function subscribeProject(projectId: string): () => void {
+  const s = getSocket()
+  subscriptionRefs.set(projectId, (subscriptionRefs.get(projectId) ?? 0) + 1)
+  if (s.connected) s.emit('subscribe', { projectId })
+  let released = false
+  return () => {
+    if (released) return
+    released = true
+    const count = subscriptionRefs.get(projectId) ?? 0
+    if (count <= 1) subscriptionRefs.delete(projectId)
+    else subscriptionRefs.set(projectId, count - 1)
+  }
 }
 
 export const VIEWER_URL = VIEWER

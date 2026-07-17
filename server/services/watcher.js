@@ -169,7 +169,7 @@ export async function watchProjects({ projects, io, broadcasters }) {
   watcher.on("change", onFile);
   watcher.on("unlink", (abs) => {
     const id = projectIdFromPath(abs);
-    if (!id) return;
+    if (!id || !isValidId(id)) return;
     const rel = path.relative(projectDir(id), abs);
 
     if (rel === "workflow.json") {

@@ -12,7 +12,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { mkdtemp, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readdir, readFile, rm, writeFile, rename } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
@@ -22,16 +22,19 @@ const CLI_DIR = join(__dirname, "..", "cli");
 
 async function writeTerminalResult(cwd, staged, result = {}) {
   await mkdir(join(cwd, ".results"), { recursive: true });
-  await writeFile(
-    join(cwd, ".results", `${staged.job_id}.json`),
-    JSON.stringify({
-      ok: true,
-      job_id: staged.job_id,
-      model: staged.model,
-      cost_usd: staged.cost_usd,
-      ...result,
-    }) + "\n",
-  );
+  const target = join(cwd, ".results", `${staged.job_id}.json`);
+  const body = JSON.stringify({
+    ok: true,
+    job_id: staged.job_id,
+    model: staged.model,
+    cost_usd: staged.cost_usd,
+    ...result,
+  }) + "\n";
+  // Atomic write (tmp + rename) — see note in generate_url_removal.test.js:
+  // the staged CLI polls this sidecar with JSON.parse, so a bare writeFile's
+  // truncate-to-0 window makes a poll parse "" -> terminal ok:false -> exit 1.
+  await writeFile(`${target}.tmp`, body);
+  await rename(`${target}.tmp`, target);
 }
 
 function parseJsonLines(stdout) {

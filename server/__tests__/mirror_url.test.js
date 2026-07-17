@@ -359,6 +359,23 @@ test("mirror_url.js with 404 → bad_args", async (t) => {
   assert.match(reply.message, /404/);
 });
 
+test("mirror_url.js with 502 → transient (remote unhealthy, not the URL's fault)", async (t) => {
+  const { root, projectDir, projectId } = await setupProject();
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const remote = await makeRemoteServer({ bytes: Buffer.alloc(0), status: 502 });
+  t.after(() => new Promise((r) => remote.server.close(r)));
+
+  const { code, stdout } = await runCli({
+    script: "mirror_url.js",
+    args: ["--url", remote.url, "--project-id", projectId],
+    cwd: projectDir,
+  });
+  assert.strictEqual(code, 1);
+  const reply = parseReply(stdout);
+  assert.strictEqual(reply.klass, "transient");
+  assert.match(reply.message, /502/);
+});
+
 test("mirror_url.js with text/html mime → bad_args (media-only)", async (t) => {
   const { root, projectDir, projectId } = await setupProject();
   t.after(() => rm(root, { recursive: true, force: true }));

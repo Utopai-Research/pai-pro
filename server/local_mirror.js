@@ -298,6 +298,10 @@ function makeBadArgs(message) {
  * @returns {Promise<{ tunnelUrl: string, assetId: string | null }[]>}
  */
 export async function buildProviderRefs({ sourceIds = [], projectId } = {}) {
+  // No refs → nothing to resolve. Return before touching the active-project
+  // file so ref-less runs work on checkouts that have no .active_project
+  // (fresh clones, CI).
+  if (sourceIds.length === 0) return [];
   const proj = projectId || await readActiveProject();
   const out = [];
   for (let i = 0; i < sourceIds.length; i++) {

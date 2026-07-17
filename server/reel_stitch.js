@@ -5,7 +5,7 @@
 // sources.
 
 import { spawn } from "child_process";
-import { mkdtemp, rm, writeFile, stat, mkdir, copyFile, access } from "fs/promises";
+import { mkdtemp, rm, writeFile, stat, mkdir, copyFile, access, rename, unlink } from "fs/promises";
 import { tmpdir } from "os";
 import path from "path";
 import crypto from "crypto";
@@ -24,6 +24,21 @@ export function selectReel(state) {
     )
     .sort((a, b) => a.data.shot_id - b.data.shot_id);
 }
+
+// Browser-safe H.264 for every re-encode path. Without an explicit -level,
+// libx264 can write a level (up to 6.2) into the SPS that Chrome / macOS
+// VideoToolbox silently refuse to decode (>~5.1): the <video> stalls at
+// readyState 0 with NO error event (curl/ffprobe still pass). Pin pix_fmt +
+// a <=5.1 level so the re-encoded master always plays in the browser.
+// Matches pai-pro-desktop (commit 537cc92) and pai-next clean_video.py.
+const H264_WEB_SAFE = [
+  "-c:v", "libx264",
+  "-pix_fmt", "yuv420p",
+  "-profile:v", "high",
+  "-level:v", "5.1",
+  "-preset", "veryfast",
+  "-c:a", "aac",
+];
 
 function runFfmpeg(args) {
   return new Promise((resolve, reject) => {
@@ -90,8 +105,14 @@ export async function stitchReel(state, projectDir, slug = "local") {
       // Fallback: re-encode. Handles mismatched codecs/resolutions/fps.
       console.warn(`[stitch ${slug}] copy-mode failed, re-encoding: ${copyErr.message.slice(0, 200)}`);
       const inputs = files.flatMap((f) => ["-i", f]);
+      // No "?" on the audio pad: the container's ffmpeg (5.1.x) rejects the
+      // optional-stream "?" inside a filtergraph ("Invalid stream specifier:
+      // a:0?"), which made this whole fallback error out there. Reel clips
+      // carry audio (generate_audio defaults on), so a plain [i:a:0] is safe;
+      // a clip with no audio track would need a probe + anullsrc silence pad
+      // (not handled here — see docs handover).
       const filter = files
-        .map((_, i) => `[${i}:v:0][${i}:a:0?]`)
+        .map((_, i) => `[${i}:v:0][${i}:a:0]`)
         .join("") + `concat=n=${files.length}:v=1:a=1[outv][outa]`;
       await runFfmpeg([
         "-y",
@@ -99,6 +120,7 @@ export async function stitchReel(state, projectDir, slug = "local") {
         "-filter_complex", filter,
         "-map", "[outv]",
         "-map", "[outa]",
+        ...H264_WEB_SAFE,
         "-movflags", "+faststart",
         outPath,
       ]);
@@ -176,6 +198,18 @@ export async function buildReelMaster(state, projectDir, outPath, slug = "local"
   await mkdir(path.dirname(outPath), { recursive: true });
   const workDir = await mkdtemp(path.join(tmpdir(), `reel-master-${slug}-`));
   const cleanup = () => rm(workDir, { recursive: true, force: true }).catch(() => {});
+  // ffmpeg writes to a private temp file in the SAME directory as outPath;
+  // we atomically rename it into place only once it's fully written. This
+  // buys two safety properties the old write-straight-to-outPath path lacked:
+  //   1. Readers (the byte-range /reel/preview.mp4 handler) never observe a
+  //      half-written file — including during ffmpeg's two-pass +faststart
+  //      rewrite, which momentarily leaves the moov atom inconsistent.
+  //   2. Concurrent builds for the same composition each write their own
+  //      temp and rename last-wins, so the cached master is always a
+  //      complete, valid MP4. Previously a background prebuild racing a
+  //      preview request interleaved bytes into the shared path, yielding a
+  //      right-sized but corrupt file — an unplayable reel.
+  const tmpOut = `${outPath}.${crypto.randomUUID()}.partial`;
   try {
     const files = [];
     for (const n of reel) files.push(await resolveClipFile(n, projectDir));
@@ -195,7 +229,8 @@ export async function buildReelMaster(state, projectDir, outPath, slug = "local"
         "-i", listPath,
         "-c", "copy",
         "-movflags", "+faststart",
-        outPath,
+        "-f", "mp4",
+        tmpOut,
       ]);
     } catch (copyErr) {
       if (copyErr.message === "ffmpeg not installed on server host") {
@@ -205,8 +240,14 @@ export async function buildReelMaster(state, projectDir, outPath, slug = "local"
       }
       console.warn(`[stitch ${slug}] copy-mode failed, re-encoding: ${copyErr.message.slice(0, 200)}`);
       const inputs = files.flatMap((f) => ["-i", f]);
+      // No "?" on the audio pad: the container's ffmpeg (5.1.x) rejects the
+      // optional-stream "?" inside a filtergraph ("Invalid stream specifier:
+      // a:0?"), which made this whole fallback error out there. Reel clips
+      // carry audio (generate_audio defaults on), so a plain [i:a:0] is safe;
+      // a clip with no audio track would need a probe + anullsrc silence pad
+      // (not handled here — see docs handover).
       const filter = files
-        .map((_, i) => `[${i}:v:0][${i}:a:0?]`)
+        .map((_, i) => `[${i}:v:0][${i}:a:0]`)
         .join("") + `concat=n=${files.length}:v=1:a=1[outv][outa]`;
       await runFfmpeg([
         "-y",
@@ -214,13 +255,19 @@ export async function buildReelMaster(state, projectDir, outPath, slug = "local"
         "-filter_complex", filter,
         "-map", "[outv]",
         "-map", "[outa]",
+        ...H264_WEB_SAFE,
         "-movflags", "+faststart",
-        outPath,
+        "-f", "mp4",
+        tmpOut,
       ]);
     }
 
+    await rename(tmpOut, outPath);
     const info = await stat(outPath);
     return { path: outPath, size: info.size };
+  } catch (e) {
+    await unlink(tmpOut).catch(() => {});
+    throw e;
   } finally {
     await cleanup();
   }
