@@ -163,4 +163,4 @@ Output: one Front-full / Profile-full / Back-full / Closeup-bust sheet, passed d
 
 ## After the CLI returns
 
-For draft-stage JSON, one sentence with the price/status — see the project `PROJECT_AGENT.md` § "Draft gate". For terminal results, follow the project manual's next-step recommendation rule.
+For draft-stage JSON, one sentence with the price/status — see the project `PROJECT_AGENT.md` § "Draft gate". For terminal results, run the alignment check before the next-step recommendation — see the project `PROJECT_AGENT.md` § "Prompt alignment check".

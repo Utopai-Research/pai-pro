@@ -160,7 +160,7 @@ If a budget-aware caller needs savings, lower video resolution before shortening
 
 ## After the CLI returns
 
-For draft-stage JSON, one sentence with the price/status — see the project `PROJECT_AGENT.md` § "Draft gate". For terminal results, follow the project manual's next-step recommendation rule. `--ref-source-id` flags drive provenance edges; they're captured in the draft argv and materialize on the real `video_result` after the user fires.
+For draft-stage JSON, one sentence with the price/status — see the project `PROJECT_AGENT.md` § "Draft gate". For terminal results, run the alignment check (frames via `extract_frames.js`) before the next-step recommendation — see the project `PROJECT_AGENT.md` § "Prompt alignment check". `--ref-source-id` flags drive provenance edges; they're captured in the draft argv and materialize on the real `video_result` after the user fires.
 
 ## Failure hints
 

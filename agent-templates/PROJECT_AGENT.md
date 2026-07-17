@@ -25,7 +25,7 @@ Use the skill when it matches; skills own canonical node grammar, refs, edges, m
 
 ## Keep momentum - recommend the next step
 
-After a terminal media generation result, close with one concrete next step. For story-to-video work, recommend the next missing filmmaking piece; when all planned clips are ready and order is unambiguous, assign Timeline order via `shot_id` before handing off in chat to Timeline inspection. Local reel export is only for explicit user requests. For ad-hoc one-offs, keep the suggestion local to what the user just made.
+After a terminal media generation result, close with one concrete next step. Run the prompt alignment check first (§ "Prompt alignment check") and fold its verdict into the same reply. For story-to-video work, recommend the next missing filmmaking piece; when all planned clips are ready and order is unambiguous, assign Timeline order via `shot_id` before handing off in chat to Timeline inspection. Local reel export is only for explicit user requests. For ad-hoc one-offs, keep the suggestion local to what the user just made.
 
 Read `./workflow.json` when the recommendation depends on missing shots, references, voices, clips, or reel order. Draft-only, failed, and cancelled results do not advance the creative pipeline.
 
@@ -120,6 +120,7 @@ Do not use `node server/cli/...` from a project cwd or hardcode relative repo pa
 | `upscaler.js` | none | Paid 4K video upscaling from an existing canvas source. Uses provider estimate from `upscale-create`. |
 | `mirror_url.js` | none | Mirrors an external image/audio/video URL into a canvas reference node. Flags: `--url`, optional `--kind <image|audio|video>`, `--label`. |
 | `split_image.js` | none | Slices an image into grid tiles. Flags: `--url`, `--cols`, `--rows`, `--source-node-id`; `cols` and `rows` each integer 1-8; `1x1` rejected. |
+| `extract_frames.js` | none | Free local frame sampler for video alignment checks. Flags: `--path <video>`, `--count N` (default 5), `--max-width` (default 1280). Writes JPEGs under `assets/.tmp/frames/` and prints their paths. |
 | `switch_project.js` | none | Lists or activates projects. See § Projects. |
 | `reel_stitch.js` | none | Explicit local ffmpeg export. Orders every `video_result` with numeric `data.shot_id` and writes `reel.mp4` by default. Timeline handles normal inspection and preview. |
 | `list_generation_results.js` | none | Lists durable terminal results from `.results/` sidecars (no polling). Flags: `--job-id <id>` (repeatable), `--recent N` (default 10), `--since <ISO>`, `--failed`. |
@@ -164,6 +165,30 @@ On `{ ok: false, klass, message, limits, sent, ... }`, do not advance the creati
 | `budget_exceeded` | Auto run cap would be crossed. Stop staging new Auto jobs; report what completed, what remains, and the minimum viable budget or runtime adjustment. |
 
 Never auto-retry `generate_video.js` or `upscaler.js`; each attempt costs real money.
+
+### Prompt alignment check
+
+After every terminal `ok: true` from `generate_image.js`, `generate_image_pro.js`, or `generate_video.js` that carries a `local_path`, verify the asset before recommending a next step. Skip when `local_path` is null. Voice, upscale, split, and user-uploaded assets are out of scope — no visual prompt to check.
+
+1. Look at the asset. Image: view the file at `local_path`. Video: run `node "$PAI_REPO_ROOT/server/cli/extract_frames.js" --path <local_path>` and view the returned frames in order.
+2. Judge against the prompt you staged (if it fell out of context, recover via `list_generation_results.js` or the node's `data.prompt`): subjects and counts, identity/wardrobe vs character refs, location/setting, composition/camera, on-screen text spelling, style. Video: also motion and shot progression across the frames. Storyboard mosaics: panel count and per-panel content.
+3. Record the verdict on the result node:
+   ```bash
+   node "$PAI_REPO_ROOT/server/cli/canvas_mutate.js" --op updateNode --payload-json \
+     '{"id":"<node_id>","patch":{"metadata":{"alignment":{"verdict":"pass","issues":[],"checked_at":"<ISO 8601>"}}}}'
+   ```
+   `verdict` is `pass`, `mismatch`, or `unverified`. List concrete `issues` on mismatch.
+4. Report in one line — `alignment: pass` or `alignment: mismatch — <issues>` — then give the normal next-step recommendation.
+
+If the file is unreadable or `extract_frames.js` fails, record `unverified` with the reason and move on. Never block the pipeline or spend money over verification tooling.
+
+On `mismatch`, fix the prompt or refs and restage at most once per original node:
+
+- Draft gate: stage ONE corrected draft, labeled as an alignment retry, price named; the user still fires it.
+- Auto Mode: images may restage once when the reservation still fits the cap; never restage videos — report video mismatches at the end (§ "Failure handling": no auto-retry of paid video).
+- Run immediately: images once, videos never.
+
+When checking a restaged result, add `"retry_of": "<original node_id>"` inside its `alignment` patch. If a node's check already carries `retry_of`, do not restage again — report and let the user decide.
 
 ### Asset, ref, and edge rules
 
