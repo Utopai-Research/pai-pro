@@ -25,6 +25,7 @@ import {
   fireAndWait,
   isBypassEnabled,
   newJobId,
+  reserveAutoBudget,
   waitForReviewResult,
   writePending,
   writeResultSidecar,
@@ -62,6 +63,7 @@ const args = parseArgs({
   stage:           { type: "boolean" },
   "draft-only":    { type: "boolean" },
   "existing-job-id": { type: "string" },
+  "auto-run-id":   { type: "string" },
 });
 
 const refSources = Array.isArray(args["ref-source-id"]) ? args["ref-source-id"] : [];
@@ -116,8 +118,39 @@ if (refGuardMsg) {
 const jobId = args["existing-job-id"] || newJobId();
 const routeOwnedPending = !!args["existing-job-id"];
 
+if (args["auto-run-id"] !== undefined) {
+  if (args["auto-run-id"] === "") {
+    fail("bad_args", "--auto-run-id must not be empty");
+    process.exit(2);
+  }
+  if (!args.stage && !routeOwnedPending) {
+    fail("bad_args", "--auto-run-id requires --stage so the run's budget is reserved before spending");
+    process.exit(2);
+  }
+}
+
 if (args.stage && !routeOwnedPending) {
   const costUsd = getCost(plannedModel, { size: args.size });
+  const autoRunId = args["auto-run-id"] || null;
+  const autoProjectId = autoRunId
+    ? args["project-id"] || (await readActiveProject().catch(() => null))
+    : null;
+  if (autoRunId) {
+    const reserved = await reserveAutoBudget({
+      projectId: autoProjectId,
+      runId: autoRunId,
+      jobId,
+      kind: "image",
+      model: plannedModel,
+      prompt: args.prompt,
+      costUsd,
+    });
+    if (!reserved.ok) {
+      const { ok, klass, message, error, ...extra } = reserved;
+      fail(klass || "budget_exceeded", message || error || "auto budget reservation failed", extra);
+      process.exit(klass === "bad_args" ? 2 : 1);
+    }
+  }
   const replayArgv = rawArgv.filter((a) => a !== "--stage" && a !== "--draft-only");
   const staged = await writePending({
     jobId,
@@ -133,6 +166,7 @@ if (args.stage && !routeOwnedPending) {
     costUsd,
     script: "generate_image_pro.js",
     argv: replayArgv,
+    autoRunId,
   });
   if (!staged) {
     fail("infra", "failed to write draft sidecar");
@@ -141,8 +175,9 @@ if (args.stage && !routeOwnedPending) {
   emitSuccess({ stage: "draft", job_id: jobId, model: plannedModel, cost_usd: costUsd });
   try {
     const bypassEnabled = await isBypassEnabled();
-    if (args["draft-only"] && !bypassEnabled) process.exit(0);
-    const projectId = bypassEnabled
+    const shouldFire = bypassEnabled || !!autoRunId;
+    if (args["draft-only"] && !shouldFire) process.exit(0);
+    const projectId = shouldFire
       ? args["project-id"] || (await readActiveProject())
       : null;
     if (args["draft-only"]) {
@@ -153,7 +188,7 @@ if (args.stage && !routeOwnedPending) {
       }) + "\n");
       process.exit(fired.ok ? 0 : 1);
     }
-    const result = bypassEnabled
+    const result = shouldFire
       ? await fireAndWait({
           projectId,
           jobId,
@@ -185,6 +220,7 @@ await writePending({
   model: plannedModel,
   size: args.size,
   imageSize,
+  autoRunId: args["auto-run-id"] || null,
 });
 
 let exitCode = 0;

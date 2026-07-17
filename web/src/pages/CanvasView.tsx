@@ -31,7 +31,10 @@ import { AssetRail, type AssetRailRevealRequest } from '@/components/AssetRail'
 import { TerminalPanel } from '@/components/TerminalPanel'
 import { TimelinePanel } from '@/components/TimelinePanel'
 import { CanvasFocusProvider } from '@/contexts/CanvasFocusContext'
-import { ChatComposerProvider } from '@/contexts/ChatComposerContext'
+import {
+  ChatComposerProvider,
+  useChatComposer,
+} from '@/contexts/ChatComposerContext'
 import { MediaExpandProvider } from '@/contexts/MediaExpandContext'
 import { useWorkflow } from '@/hooks/useWorkflow'
 import {
@@ -40,9 +43,25 @@ import {
 } from '@/lib/canvas-stub'
 import { getSocket, VIEWER_URL } from '@/lib/socket'
 import { ModelsProvider } from '@/lib/useModels'
-import type { CanvasNode, VideoResultNode } from '@/types/canvas'
+import type { AutoRun, CanvasNode, VideoResultNode } from '@/types/canvas'
 
 type CanvasTab = 'canvas' | 'timeline'
+type AutoModePhase = 'idle' | 'armed' | 'planning' | 'approval_required' | 'running'
+
+interface AutoEstimate {
+  plannedSeconds: number
+  requestedSeconds: number
+  shots: number
+  resolution: '720p' | '480p'
+  estimatedLow: number
+  estimatedHigh: number
+  characterSheets: number
+  characterVariants: number
+  locationAnchors: number
+  locationVariants: number
+  voiceAnchors: number
+  notes: string[]
+}
 
 const LS_RAIL_HIDDEN = 'pai-pro:asset-rail:hidden'
 const LS_ARCHIVE_RAIL_GUIDE_SHOWN = 'pai-pro:archive-rail-guide-shown'
@@ -94,6 +113,203 @@ function isTypingTarget(target: Element | null): boolean {
     tagName === 'TEXTAREA' ||
     (target as HTMLElement | null)?.isContentEditable === true
   )
+}
+
+function formatUsd(value: number | null | undefined): string {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return '$--'
+  return `$${value.toFixed(value >= 10 ? 0 : 2)}`
+}
+
+/** For prompts sent to the agent: the server enforces the exact cap, so
+ * never round it ("$31" for a $30.75 cap plans past the gate). */
+function formatUsdExact(value: number): string {
+  return `$${value.toFixed(2)}`
+}
+
+function parseBudgetCap(value: string): number | null {
+  let cleaned = value.replace(/[$\s]/g, '')
+  // A lone trailing ",dd" is a decimal comma ("12,50" = 12.50); any
+  // other comma is a thousands separator ("1,250" = 1250).
+  cleaned = /^\d+,\d{1,2}$/.test(cleaned)
+    ? cleaned.replace(',', '.')
+    : cleaned.replace(/,/g, '')
+  const n = Number(cleaned)
+  return Number.isFinite(n) && n > 0 ? Math.round(n * 100) / 100 : null
+}
+
+function inferDurationSeconds(brief: string): number {
+  const text = brief.toLowerCase()
+  const minute = text.match(/(\d+(?:\.\d+)?)\s*(?:minutes?|mins?|m)\b/)
+  if (minute) return Math.min(1800, Math.max(15, Math.round(Number(minute[1]) * 60)))
+  const second = text.match(/(\d+(?:\.\d+)?)\s*(?:seconds?|secs?|s)\b/)
+  // Ignore implausibly large "Ns" matches: "a 1990s noir short" names a
+  // decade, not a 33-minute runtime request.
+  if (second && Number(second[1]) <= 600) return Math.max(15, Math.round(Number(second[1])))
+  return 60
+}
+
+async function fetchEstimatedCost(
+  model: string,
+  params: Record<string, string | number> = {},
+): Promise<number> {
+  const r = await fetch(`${VIEWER_URL}/cost`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model, params }),
+  })
+  if (!r.ok) return 0
+  const body = await r.json() as { cost?: unknown }
+  return typeof body.cost === 'number' && Number.isFinite(body.cost)
+    ? body.cost
+    : 0
+}
+
+async function buildAutoEstimate(
+  brief: string,
+  budgetCap: number | null,
+): Promise<AutoEstimate> {
+  const requestedSeconds = inferDurationSeconds(brief)
+  const shots = Math.max(1, Math.ceil(requestedSeconds / 15))
+  const characterSheets = Math.min(4, Math.max(2, Math.ceil(shots / 3)))
+  const locationAnchors = Math.min(6, Math.max(2, Math.ceil(shots / 4)))
+  const voiceAnchors = characterSheets + 1
+  const characterVariants = characterSheets
+  const locationVariants = locationAnchors
+  const expectedRefUploads = Math.max(shots * 2, characterSheets + locationAnchors)
+
+  const [
+    video720,
+    video480,
+    proImage,
+    standardImage,
+    voice,
+    assetUpload,
+  ] = await Promise.all([
+    fetchEstimatedCost('video-generation', { resolution: '720p', duration: requestedSeconds }),
+    fetchEstimatedCost('video-generation', { resolution: '480p', duration: requestedSeconds }),
+    fetchEstimatedCost('image-generation-pro', { size: '2560x1440' }),
+    fetchEstimatedCost('image-generation', { image_size: '2K' }),
+    fetchEstimatedCost('tts', { text_chars: 500 }),
+    fetchEstimatedCost('video-generation-assets'),
+  ])
+
+  // If the viewer's /cost route is unreachable every rate comes back 0 —
+  // throw so the caller sends the honest "estimate unavailable" prompt
+  // instead of a confident-looking near-zero range.
+  if (video720 <= 0 && video480 <= 0 && proImage <= 0 && standardImage <= 0) {
+    throw new Error('cost estimates unavailable')
+  }
+
+  const anchorCost =
+    characterSheets * proImage +
+    (locationAnchors + locationVariants) * standardImage +
+    voiceAnchors * voice +
+    expectedRefUploads * assetUpload
+  let plannedSeconds = requestedSeconds
+  let resolution: AutoEstimate['resolution'] = '720p'
+  const notes: string[] = []
+
+  if (budgetCap !== null && video720 + anchorCost > budgetCap) {
+    resolution = '480p'
+    notes.push('Budget pressure lowers video resolution before changing the anchor plan.')
+    if (video480 + anchorCost > budgetCap) {
+      const perSecond480 = requestedSeconds > 0 ? video480 / requestedSeconds : 0.08
+      const availableForVideo = Math.max(0, budgetCap - anchorCost)
+      plannedSeconds = Math.max(15, Math.floor(availableForVideo / Math.max(perSecond480, 0.01) / 15) * 15)
+      if (plannedSeconds < requestedSeconds) {
+        notes.push('If 480p still exceeds the cap, Auto should shorten runtime instead of removing variants.')
+      }
+    }
+  }
+
+  const chosenVideo =
+    resolution === '720p'
+      ? video720
+      : requestedSeconds > 0
+        ? video480 * (plannedSeconds / requestedSeconds)
+        : video480
+  const total = chosenVideo + anchorCost
+  return {
+    plannedSeconds,
+    requestedSeconds,
+    shots: Math.max(1, Math.ceil(plannedSeconds / 15)),
+    resolution,
+    estimatedLow: Math.max(0.01, total * 0.9),
+    estimatedHigh: Math.max(0.01, total * 1.2),
+    characterSheets,
+    characterVariants,
+    locationAnchors,
+    locationVariants,
+    voiceAnchors,
+    notes,
+  }
+}
+
+function buildAutoPlanningPrompt({
+  brief,
+  budgetCap,
+  estimate,
+}: {
+  brief: string
+  budgetCap: number | null
+  estimate: AutoEstimate | null
+}): string {
+  const budgetLine = budgetCap === null
+    ? 'Budget cap: not provided yet. Ask for an explicit cap in the approval summary and suggest a cap from your estimate plus a small cushion.'
+    : `Budget cap: ${formatUsdExact(budgetCap)} hard cap.`
+  const estimateLine = estimate
+    ? `UI rough estimate: requested ${estimate.requestedSeconds}s, planned ${estimate.plannedSeconds}s, ${estimate.shots} clips, ${estimate.resolution}, ${estimate.characterSheets} character sheets, ${estimate.characterVariants} character variants, ${estimate.locationAnchors} location anchors, ${estimate.locationVariants} location variants, ${estimate.voiceAnchors} voice anchors, roughly ${formatUsd(estimate.estimatedLow)}-${formatUsd(estimate.estimatedHigh)}.`
+    : 'UI rough estimate unavailable; compute your own from the model registry/project guidance.'
+  return [
+    'Auto Mode planning request. Do not start paid image, voice, or video generation yet.',
+    '',
+    `Brief: ${brief}`,
+    budgetLine,
+    estimateLine,
+    '',
+    'Plan the full story-to-video run using story-to-video-workflow and the related script/image/voice/video skills. If the brief is raw, compose a dialogue-forward script. Split shots close to 15s while leaving enough time for dialogue. Keep detailed location anchors and variants, and keep character variants. Default to straight-to-video reference-to-clip, not storyboard. Use hybrid dispatch: sequential inside continuity-dependent clusters, parallel across independent scenes.',
+    '',
+    'Approval summary required before spending: inferred runtime, planned runtime, budget cap, estimated spend/range, resolution choice, script/scenes/shots/clips, character sheets and variants, location anchors and variants, voice anchors including VO, dispatch strategy, and final output as Timeline assignment only. If estimate exceeds cap, lower resolution first, then shorten runtime/clip count; do not remove character or location variants. Wait for the user to click Run Auto before running any generation CLI.',
+  ].join('\n')
+}
+
+function buildAutoExecutionPrompt({
+  projectId,
+  run,
+  budgetCap,
+  brief,
+  estimate,
+}: {
+  projectId: string
+  run: AutoRun
+  budgetCap: number
+  brief: string
+  estimate: AutoEstimate | null
+}): string {
+  const runId = run.id ?? ''
+  const cap = formatUsdExact(budgetCap)
+  const completionUrl = `${VIEWER_URL}/projects/${encodeURIComponent(projectId)}/auto-runs/${encodeURIComponent(runId)}/complete`
+  return [
+    'Run Auto is approved. Proceed end-to-end now.',
+    '',
+    `Project id: ${projectId}`,
+    `Auto run id: ${runId}`,
+    `Budget cap: ${cap} hard cap.`,
+    `Brief: ${brief}`,
+    estimate
+      ? `Approved rough plan: ${estimate.plannedSeconds}s, ${estimate.shots} clips, ${estimate.resolution}, estimated ${formatUsd(estimate.estimatedLow)}-${formatUsd(estimate.estimatedHigh)}.`
+      : 'Use your planning summary as the approved plan.',
+    '',
+    'Important execution rules:',
+    `- Add --auto-run-id ${runId} to every generate_image.js, generate_image_pro.js, generate_voice.js, and generate_video.js command.`,
+    '- Still pass --stage on every media generation CLI. The Auto run id is the scoped approval gate; do not ask the user to enable global Run immediately.',
+    '- If any CLI returns budget_exceeded or conflict for the Auto run, stop staging new jobs and explain what fit and what did not.',
+    '- Keep character variants and detailed location variants. Under budget pressure, use 480p before shortening runtime; only shorten after keeping the anchor plan intact.',
+    '- Use straight-to-video by default, no storyboard unless a shot truly requires it.',
+    '- Use hybrid dispatch: parallel independent clusters, sequential continuity-dependent clusters.',
+    '- After all planned clips land, assign numeric Timeline shot_id order with one updateBatch. Do not run reel_stitch unless the user explicitly asks.',
+    `- When Timeline assignment is done, mark the run completed with: curl -sS -X POST ${JSON.stringify(completionUrl)} -H 'Content-Type: application/json' -d '{"status":"completed"}'`,
+  ].join('\n')
 }
 
 export default function CanvasView(): JSX.Element {
@@ -401,18 +617,13 @@ export default function CanvasView(): JSX.Element {
         </Panel>
         <Separator className="w-1 bg-border hover:bg-primary/40 transition-colors" />
         <Panel defaultSize={35} minSize={20} className="overflow-hidden">
-          <div className="flex h-full w-full flex-col bg-[#0a0a0a]">
-            <AgentHeader agentLabel={bundle?.agent_label ?? null} />
-            <div className="relative flex-1 overflow-hidden">
-              <div className="absolute inset-0">
-                {activated ? (
-                  <TerminalPanel projectId={projectId} agentId={bundle?.agent_id ?? null} />
-                ) : (
-                  <div className="h-full w-full bg-[#0a0a0a]" />
-                )}
-              </div>
-            </div>
-          </div>
+          <AgentPanel
+            projectId={projectId}
+            agentId={bundle?.agent_id ?? null}
+            agentLabel={bundle?.agent_label ?? null}
+            activated={activated}
+            autoRun={bundle?.auto_run ?? null}
+          />
         </Panel>
       </Group>
     </div>
@@ -425,6 +636,301 @@ export default function CanvasView(): JSX.Element {
     </CanvasFocusProvider>
     </ChatComposerProvider>
     </ModelsProvider>
+  )
+}
+
+function AgentPanel({
+  projectId,
+  agentId,
+  agentLabel,
+  activated,
+  autoRun,
+}: {
+  projectId: string | null
+  agentId: string | null
+  agentLabel: string | null
+  activated: boolean
+  autoRun: AutoRun | null
+}): JSX.Element {
+  const composer = useChatComposer()
+  const [autoPhase, setAutoPhase] = useState<AutoModePhase>('idle')
+  const sawActiveRunRef = useRef(false)
+
+  const activeServerRun =
+    autoRun?.status === 'approved' || autoRun?.status === 'running'
+
+  // Auto UI state is per project; the /p/:projectId route reuses this
+  // component instance across navigations.
+  useEffect(() => {
+    setAutoPhase('idle')
+    sawActiveRunRef.current = false
+  }, [projectId])
+
+  useEffect(() => {
+    if (activeServerRun) {
+      sawActiveRunRef.current = true
+      if (autoPhase === 'idle') setAutoPhase('running')
+      return
+    }
+    // Close the banner only on the active → not-active transition. A
+    // terminal run lingers in meta.auto_run forever, so resetting on
+    // terminal status alone would keep re-closing the panel and make
+    // Auto un-armable after the project's first finished run.
+    if (sawActiveRunRef.current && autoPhase === 'running') {
+      sawActiveRunRef.current = false
+      setAutoPhase('idle')
+    }
+  }, [activeServerRun, autoPhase])
+
+  const armAuto = useCallback(() => {
+    setAutoPhase((prev) => (prev === 'idle' ? 'armed' : prev))
+    window.setTimeout(() => composer?.focus(), 0)
+  }, [composer])
+
+  return (
+    <div className="flex h-full w-full flex-col bg-[#0a0a0a]">
+      <AgentHeader
+        agentLabel={agentLabel}
+        autoActive={autoPhase !== 'idle'}
+        onAutoClick={armAuto}
+      />
+      {autoPhase !== 'idle' ? (
+        <AutoModePanel
+          key={projectId ?? 'none'}
+          projectId={projectId}
+          composerReady={composer !== null}
+          phase={autoPhase}
+          setPhase={setAutoPhase}
+          sendToAgent={(text) => composer?.sendToAgent(text)}
+          autoRun={autoRun}
+        />
+      ) : null}
+      <div className="relative flex-1 overflow-hidden">
+        <div className="absolute inset-0">
+          {activated ? (
+            <TerminalPanel projectId={projectId} agentId={agentId} />
+          ) : (
+            <div className="h-full w-full bg-[#0a0a0a]" />
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function AutoModePanel({
+  projectId,
+  composerReady,
+  phase,
+  setPhase,
+  sendToAgent,
+  autoRun,
+}: {
+  projectId: string | null
+  composerReady: boolean
+  phase: AutoModePhase
+  setPhase: (phase: AutoModePhase) => void
+  sendToAgent: (text: string) => void
+  autoRun: AutoRun | null
+}): JSX.Element {
+  const [brief, setBrief] = useState('')
+  const [budget, setBudget] = useState('30')
+  const [estimate, setEstimate] = useState<AutoEstimate | null>(null)
+  // The brief the estimate was computed for — an estimate is only the
+  // "approved plan" while the brief it priced is still the brief.
+  const [estimateBrief, setEstimateBrief] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [localRunId, setLocalRunId] = useState<string | null>(null)
+  const cancelRequestedRef = useRef(false)
+
+  const budgetCap = parseBudgetCap(budget)
+  const canPlan =
+    composerReady &&
+    brief.trim().length > 0 &&
+    phase !== 'planning' &&
+    phase !== 'running'
+  const canRun =
+    composerReady &&
+    projectId !== null &&
+    brief.trim().length > 0 &&
+    budgetCap !== null &&
+    phase === 'approval_required'
+
+  const plan = async (): Promise<void> => {
+    if (!canPlan) {
+      setError(brief.trim() === '' ? 'Describe the video first.' : 'Agent is not ready yet.')
+      return
+    }
+    setError(null)
+    setPhase('planning')
+    let nextEstimate: AutoEstimate | null = null
+    try {
+      nextEstimate = await buildAutoEstimate(brief, budgetCap)
+      setEstimate(nextEstimate)
+      setEstimateBrief(brief.trim())
+    } catch {
+      nextEstimate = null
+      setEstimate(null)
+      setEstimateBrief(null)
+    }
+    sendToAgent(buildAutoPlanningPrompt({
+      brief: brief.trim(),
+      budgetCap,
+      estimate: nextEstimate,
+    }))
+    setPhase('approval_required')
+  }
+
+  const run = async (): Promise<void> => {
+    if (!canRun || budgetCap === null || projectId === null) {
+      setError(budgetCap === null ? 'Enter a budget cap before running Auto.' : 'Agent is not ready yet.')
+      return
+    }
+    setError(null)
+    setPhase('running')
+    cancelRequestedRef.current = false
+    // An estimate priced for an older brief is not this brief's plan.
+    const freshEstimate = estimateBrief === brief.trim() ? estimate : null
+    try {
+      const r = await fetch(`${VIEWER_URL}/projects/${encodeURIComponent(projectId)}/auto-runs`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          budget_cap_usd: budgetCap,
+          estimate_usd: freshEstimate?.estimatedHigh ?? null,
+          planned_runtime_seconds: freshEstimate?.plannedSeconds ?? inferDurationSeconds(brief),
+          brief: brief.trim(),
+        }),
+      })
+      const body = await r.json() as { ok?: boolean; auto_run?: AutoRun; error?: string }
+      if (!r.ok || body.ok === false || !body.auto_run?.id) {
+        throw new Error(body.error || `viewer ${r.status}`)
+      }
+      if (cancelRequestedRef.current) {
+        // Cancel was clicked while the POST was in flight: undo the run
+        // we just created instead of dispatching the agent.
+        void fetch(
+          `${VIEWER_URL}/projects/${encodeURIComponent(projectId)}/auto-runs/${encodeURIComponent(body.auto_run.id)}`,
+          { method: 'DELETE' },
+        ).catch(() => undefined)
+        return
+      }
+      setLocalRunId(body.auto_run.id)
+      sendToAgent(buildAutoExecutionPrompt({
+        projectId,
+        run: body.auto_run,
+        budgetCap,
+        brief: brief.trim(),
+        estimate: freshEstimate,
+      }))
+    } catch (err) {
+      if (cancelRequestedRef.current) return
+      setError(err instanceof Error ? err.message : String(err))
+      setPhase('approval_required')
+    }
+  }
+
+  const cancel = async (): Promise<void> => {
+    cancelRequestedRef.current = true
+    // Only DELETE something that can still be active — a terminal run
+    // from an earlier session would just 409.
+    const runId =
+      autoRun !== null && (autoRun.status === 'approved' || autoRun.status === 'running')
+        ? autoRun.id
+        : localRunId
+    setPhase('idle')
+    setError(null)
+    setLocalRunId(null)
+    if (projectId !== null && runId) {
+      await fetch(
+        `${VIEWER_URL}/projects/${encodeURIComponent(projectId)}/auto-runs/${encodeURIComponent(runId)}`,
+        { method: 'DELETE' },
+      ).catch(() => undefined)
+    }
+  }
+
+  const serverRunActive =
+    autoRun !== null && (autoRun.status === 'approved' || autoRun.status === 'running')
+  const activeBudgetText = serverRunActive
+    ? `${formatUsd(autoRun.spent_usd)} of ${autoRun.budget_cap_usd !== null ? formatUsd(autoRun.budget_cap_usd) : '$--'} cap`
+    : budgetCap === null ? 'No cap' : `${formatUsd(budgetCap)} cap`
+  const phaseText =
+    phase === 'armed' ? 'Armed'
+    : phase === 'planning' ? 'Planning'
+    : phase === 'approval_required' ? 'Approval required'
+    : 'Running'
+
+  return (
+    <div className="border-b border-neutral-800 bg-[#101010] px-3 py-2 text-neutral-100">
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-emerald-200">
+            Auto {phaseText}
+          </span>
+          <span className="truncate text-[11px] text-neutral-400">
+            {activeBudgetText} · own approval gate
+          </span>
+        </div>
+        <button
+          type="button"
+          className="rounded-md px-2 py-1 text-[11px] text-neutral-400 transition-colors hover:bg-neutral-800 hover:text-neutral-100"
+          onClick={() => { void cancel() }}
+        >
+          Cancel
+        </button>
+      </div>
+      <div className="grid gap-2">
+        <textarea
+          value={brief}
+          onChange={(e) => setBrief(e.target.value)}
+          placeholder="One prompt for the whole video..."
+          rows={2}
+          disabled={phase === 'running'}
+          className="min-h-[3.25rem] resize-none rounded-md border border-neutral-700 bg-black/40 px-2.5 py-2 text-xs text-neutral-100 outline-none transition-colors placeholder:text-neutral-600 focus:border-neutral-400 disabled:opacity-60"
+        />
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="flex items-center gap-1.5 text-[11px] text-neutral-400">
+            Budget
+            <input
+              value={budget}
+              onChange={(e) => setBudget(e.target.value)}
+              disabled={phase === 'running'}
+              className="h-7 w-20 rounded-md border border-neutral-700 bg-black/40 px-2 text-xs text-neutral-100 outline-none focus:border-neutral-400 disabled:opacity-60"
+              placeholder="$30"
+            />
+          </label>
+          <button
+            type="button"
+            className="h-7 rounded-md bg-neutral-100 px-3 text-xs font-medium text-neutral-950 transition-colors hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={!canPlan}
+            onClick={() => { void plan() }}
+          >
+            {phase === 'approval_required' ? 'Revise plan' : 'Plan'}
+          </button>
+          <button
+            type="button"
+            className="h-7 rounded-md bg-emerald-600 px-3 text-xs font-medium text-white transition-colors hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={!canRun}
+            onClick={() => { void run() }}
+          >
+            Run Auto
+          </button>
+          {estimate ? (
+            <span className="text-[11px] text-neutral-400">
+              {estimate.plannedSeconds}s · {estimate.shots} clips · {estimate.resolution} · {formatUsd(estimate.estimatedLow)}-{formatUsd(estimate.estimatedHigh)}
+            </span>
+          ) : null}
+        </div>
+        {estimate?.notes.length ? (
+          <div className="text-[11px] leading-4 text-neutral-500">
+            {estimate.notes.join(' ')}
+          </div>
+        ) : null}
+        {error ? (
+          <div className="text-[11px] leading-4 text-red-300">{error}</div>
+        ) : null}
+      </div>
+    </div>
   )
 }
 
@@ -598,19 +1104,46 @@ function CanvasTabs({
   )
 }
 
-function AgentHeader({ agentLabel }: { agentLabel: string | null }): JSX.Element {
+function AgentHeader({
+  agentLabel,
+  autoActive,
+  onAutoClick,
+}: {
+  agentLabel: string | null
+  autoActive: boolean
+  onAutoClick: () => void
+}): JSX.Element {
   return (
-    <div className="flex h-12 shrink-0 items-center justify-center gap-2 border-b border-neutral-800 bg-[#0a0a0a] px-2">
-      <div className="flex items-center rounded-full border border-border bg-card p-0.5">
-        <div className="relative rounded-full bg-foreground px-4 py-1 text-xs font-medium uppercase tracking-wider text-background">
-          Agent
+    <div className="grid h-12 shrink-0 grid-cols-[1fr_auto_1fr] items-center gap-2 border-b border-neutral-800 bg-[#0a0a0a] px-2">
+      <div />
+      <div className="flex min-w-0 items-center justify-center gap-2">
+        <div className="flex items-center rounded-full border border-border bg-card p-0.5">
+          <div className="relative rounded-full bg-foreground px-4 py-1 text-xs font-medium uppercase tracking-wider text-background">
+            Agent
+          </div>
         </div>
+        {agentLabel ? (
+          <span className="text-[11px] font-medium uppercase tracking-wider text-neutral-500">
+            {agentLabel}
+          </span>
+        ) : null}
       </div>
-      {agentLabel ? (
-        <span className="text-[11px] font-medium uppercase tracking-wider text-neutral-500">
-          {agentLabel}
-        </span>
-      ) : null}
+      <div className="flex justify-end">
+        <button
+          type="button"
+          aria-pressed={autoActive}
+          className={
+            'h-7 rounded-full border px-3 text-[11px] font-semibold uppercase tracking-wider transition-colors ' +
+            (autoActive
+              ? 'border-emerald-400/60 bg-emerald-500/15 text-emerald-100'
+              : 'border-neutral-700 bg-neutral-950 text-neutral-400 hover:border-neutral-500 hover:text-neutral-100')
+          }
+          onClick={onAutoClick}
+          title="Plan and run a full video through a scoped Auto approval gate."
+        >
+          Auto
+        </button>
+      </div>
     </div>
   )
 }

@@ -93,6 +93,11 @@ async function readWorkflow() {
   return JSON.parse(raw);
 }
 
+async function readMeta() {
+  const raw = await readFile(join(projectsDir, TEST_PROJECT_ID, "meta.json"), "utf8");
+  return JSON.parse(raw);
+}
+
 async function postMutate(envelope) {
   const r = await fetch(`${baseUrl}/projects/${TEST_PROJECT_ID}/mutate`, {
     method: "POST",
@@ -365,6 +370,212 @@ test("PATCH /projects/:id with empty body rejects with 400", async () => {
     body: JSON.stringify({}),
   });
   assert.equal(r.status, 400);
+});
+
+// --- Auto runs ----------------------------------------------------------
+
+test("POST /projects/:id/auto-runs creates scoped run without enabling global bypass", async () => {
+  const r = await fetch(`${baseUrl}/projects/${TEST_PROJECT_ID}/auto-runs`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      budget_cap_usd: 12.5,
+      estimate_usd: 10,
+      planned_runtime_seconds: 60,
+      brief: "make a one minute noir short",
+    }),
+  });
+  assert.equal(r.status, 201);
+  const body = await r.json();
+  assert.equal(body.ok, true);
+  assert.match(body.auto_run.id, /^auto_/);
+  assert.equal(body.auto_run.status, "approved");
+  assert.equal(body.auto_run.budget_cap_usd, 12.5);
+  assert.equal(body.auto_run.spent_usd, 0);
+
+  const meta = await readMeta();
+  assert.equal(meta.auto_run.id, body.auto_run.id);
+  assert.equal(meta.dangerously_skip_draft_gate, undefined);
+
+  // Terminate so later tests can create fresh runs (single run slot).
+  await fetch(`${baseUrl}/projects/${TEST_PROJECT_ID}/auto-runs/${body.auto_run.id}`, {
+    method: "DELETE",
+  });
+});
+
+test("creating a second auto run while one is active returns 409", async () => {
+  const first = await fetch(`${baseUrl}/projects/${TEST_PROJECT_ID}/auto-runs`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ budget_cap_usd: 2, brief: "run A" }),
+  });
+  assert.equal(first.status, 201);
+  const runA = (await first.json()).auto_run;
+
+  const second = await fetch(`${baseUrl}/projects/${TEST_PROJECT_ID}/auto-runs`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ budget_cap_usd: 2, brief: "run B" }),
+  });
+  assert.equal(second.status, 409);
+  const blocked = await second.json();
+  assert.equal(blocked.ok, false);
+  assert.equal(blocked.klass, "conflict");
+
+  const meta = await readMeta();
+  assert.equal(meta.auto_run.id, runA.id, "active run must not be replaced");
+
+  const cancel = await fetch(`${baseUrl}/projects/${TEST_PROJECT_ID}/auto-runs/${runA.id}`, {
+    method: "DELETE",
+  });
+  assert.equal(cancel.status, 200);
+
+  const third = await fetch(`${baseUrl}/projects/${TEST_PROJECT_ID}/auto-runs`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ budget_cap_usd: 2, brief: "run C" }),
+  });
+  assert.equal(third.status, 201, "terminal run can be replaced");
+  const runC = (await third.json()).auto_run;
+  await fetch(`${baseUrl}/projects/${TEST_PROJECT_ID}/auto-runs/${runC.id}`, {
+    method: "DELETE",
+  });
+});
+
+test("reserve rejects null, missing, and negative cost_usd", async () => {
+  const create = await fetch(`${baseUrl}/projects/${TEST_PROJECT_ID}/auto-runs`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ budget_cap_usd: 2, brief: "cost validation" }),
+  });
+  const runId = (await create.json()).auto_run.id;
+
+  for (const costUsd of [null, undefined, -0.0004, "0.45", true]) {
+    const r = await fetch(`${baseUrl}/projects/${TEST_PROJECT_ID}/auto-runs/${runId}/reserve`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ job_id: "pending_auto_bad_cost", cost_usd: costUsd }),
+    });
+    assert.equal(r.status, 400, `cost_usd ${String(costUsd)} must be rejected`);
+    assert.equal((await r.json()).klass, "bad_args");
+  }
+
+  const meta = await readMeta();
+  assert.equal(meta.auto_run.jobs.length, 0, "no $0 reservations recorded");
+
+  await fetch(`${baseUrl}/projects/${TEST_PROJECT_ID}/auto-runs/${runId}`, {
+    method: "DELETE",
+  });
+});
+
+test("auto run reservations accumulate and reject jobs over cap", async () => {
+  const create = await fetch(`${baseUrl}/projects/${TEST_PROJECT_ID}/auto-runs`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ budget_cap_usd: 1, brief: "tiny budget" }),
+  });
+  const created = await create.json();
+  const runId = created.auto_run.id;
+
+  const reserveOne = await fetch(`${baseUrl}/projects/${TEST_PROJECT_ID}/auto-runs/${runId}/reserve`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      job_id: "pending_auto_1",
+      kind: "image",
+      model: "image-generation",
+      cost_usd: 0.45,
+      prompt: "character sheet",
+    }),
+  });
+  assert.equal(reserveOne.status, 200);
+  const first = await reserveOne.json();
+  assert.equal(first.ok, true);
+  assert.equal(first.auto_run.status, "running");
+  assert.equal(first.auto_run.spent_usd, 0.45);
+
+  const duplicate = await fetch(`${baseUrl}/projects/${TEST_PROJECT_ID}/auto-runs/${runId}/reserve`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      job_id: "pending_auto_1",
+      kind: "image",
+      model: "image-generation",
+      cost_usd: 0.45,
+    }),
+  });
+  assert.equal(duplicate.status, 200);
+  const dup = await duplicate.json();
+  assert.equal(dup.already_reserved, true);
+  assert.equal(dup.auto_run.spent_usd, 0.45);
+
+  const over = await fetch(`${baseUrl}/projects/${TEST_PROJECT_ID}/auto-runs/${runId}/reserve`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      job_id: "pending_auto_2",
+      kind: "video",
+      model: "video-generation",
+      cost_usd: 0.6,
+    }),
+  });
+  assert.equal(over.status, 402);
+  const blocked = await over.json();
+  assert.equal(blocked.klass, "budget_exceeded");
+
+  const meta = await readMeta();
+  assert.equal(meta.auto_run.spent_usd, 0.45);
+  assert.equal(meta.auto_run.jobs.length, 1);
+
+  await fetch(`${baseUrl}/projects/${TEST_PROJECT_ID}/auto-runs/${runId}`, {
+    method: "DELETE",
+  });
+});
+
+test("auto run completion is terminal", async () => {
+  const create = await fetch(`${baseUrl}/projects/${TEST_PROJECT_ID}/auto-runs`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ budget_cap_usd: 3, brief: "status checks" }),
+  });
+  const created = await create.json();
+  const runId = created.auto_run.id;
+
+  const complete = await fetch(`${baseUrl}/projects/${TEST_PROJECT_ID}/auto-runs/${runId}/complete`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ status: "completed" }),
+  });
+  assert.equal(complete.status, 200);
+  assert.equal((await complete.json()).auto_run.status, "completed");
+
+  const invalid = await fetch(`${baseUrl}/projects/${TEST_PROJECT_ID}/auto-runs/${runId}/complete`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ status: "cancelled" }),
+  });
+  assert.equal(invalid.status, 400);
+
+  const cancel = await fetch(`${baseUrl}/projects/${TEST_PROJECT_ID}/auto-runs/${runId}`, {
+    method: "DELETE",
+  });
+  assert.equal(cancel.status, 409);
+});
+
+test("active auto run can be cancelled", async () => {
+  const create = await fetch(`${baseUrl}/projects/${TEST_PROJECT_ID}/auto-runs`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ budget_cap_usd: 3, brief: "cancel checks" }),
+  });
+  const created = await create.json();
+  const runId = created.auto_run.id;
+
+  const cancel = await fetch(`${baseUrl}/projects/${TEST_PROJECT_ID}/auto-runs/${runId}`, {
+    method: "DELETE",
+  });
+  assert.equal(cancel.status, 200);
+  assert.equal((await cancel.json()).auto_run.status, "cancelled");
 });
 
 test("GET /projects rows include cover_url from first non-archived video", async () => {

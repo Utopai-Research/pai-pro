@@ -16,6 +16,7 @@ import fsp from "node:fs/promises";
 import path from "node:path";
 
 import { getCost } from "../model_registry.js";
+import { isActiveAutoRun } from "../lib/auto_runs.js";
 import { PAI_REPO_ROOT, PENDING_STALE_MS, pendingDir, projectDir } from "../lib/paths.js";
 import {
   normalizeResultEntry,
@@ -158,6 +159,7 @@ function pendingContext(entry) {
     "position",
     "reference_source_ids",
     "source_node_id",
+    "auto_run_id",
   ]) {
     if (entry?.[key] !== undefined) out[key] = entry[key];
   }
@@ -198,6 +200,18 @@ export function registerPendingRoutes({ app, projects, broadcasters }) {
       }
       if (!sidecar.script || !ALLOWED_SCRIPTS.has(sidecar.script)) {
         throw Object.assign(new Error(`unknown script: ${sidecar.script}`), { http: 400 });
+      }
+      // Auto drafts were reserved against a specific run; once that run
+      // is cancelled, completed, or replaced, its leftover drafts must
+      // not remain fireable — firing spends real money outside the gate.
+      if (typeof sidecar.auto_run_id === "string" && sidecar.auto_run_id !== "") {
+        const run = projects.get(id)?.meta?.auto_run;
+        if (!run || run.id !== sidecar.auto_run_id || !isActiveAutoRun(run)) {
+          throw Object.assign(
+            new Error(`auto run ${sidecar.auto_run_id} is no longer active`),
+            { http: 409 },
+          );
+        }
       }
       sidecar = markSidecarRunning(sidecar);
       const tmp = target + ".tmp";
@@ -275,6 +289,21 @@ export function registerPendingRoutes({ app, projects, broadcasters }) {
               duration: sidecar.duration,
             });
             if (typeof next === "number" && Number.isFinite(next)) {
+              // An Auto draft's reservation was taken at stage time and
+              // the ledger has no re-reserve; a cost-raising edit would
+              // fire real spend above what the budget gate admitted.
+              if (typeof sidecar.auto_run_id === "string" && sidecar.auto_run_id !== "") {
+                const prevCost =
+                  typeof sidecar.cost_usd === "number" && Number.isFinite(sidecar.cost_usd)
+                    ? sidecar.cost_usd
+                    : 0;
+                if (next > prevCost + 0.0005) {
+                  throw Object.assign(
+                    new Error("cannot raise the cost of a reserved Auto draft; cancel it and stage a new job"),
+                    { http: 409 },
+                  );
+                }
+              }
               sidecar.cost_usd = next;
             }
           }

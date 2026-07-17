@@ -291,6 +291,80 @@ export async function fireDraft({ projectId, jobId } = {}) {
   };
 }
 
+export async function reserveAutoBudget({
+  projectId,
+  runId,
+  jobId,
+  kind,
+  model,
+  prompt,
+  costUsd,
+} = {}) {
+  if (!projectId || !runId || !jobId) {
+    return {
+      ok: false,
+      job_id: jobId || null,
+      klass: "bad_args",
+      message: "reserveAutoBudget requires projectId, runId, and jobId",
+    };
+  }
+  const url = new URL(
+    `/projects/${encodeURIComponent(projectId)}/auto-runs/${encodeURIComponent(runId)}/reserve`,
+    viewerBaseUrl(),
+  );
+  let response;
+  let body = null;
+  try {
+    response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        job_id: jobId,
+        kind,
+        model,
+        prompt,
+        cost_usd: costUsd,
+      }),
+    });
+    try {
+      body = await response.json();
+    } catch {
+      body = null;
+    }
+  } catch (e) {
+    return {
+      ok: false,
+      job_id: jobId,
+      klass: "infra",
+      message: `viewer auto budget request failed: ${e.message}`,
+    };
+  }
+  if (!response.ok || body?.ok === false) {
+    return {
+      ok: false,
+      job_id: jobId,
+      klass: body?.klass || (response.status === 402 ? "budget_exceeded" : "infra"),
+      message: body?.error || `viewer auto budget request returned HTTP ${response.status}`,
+      ...(body && typeof body === "object" ? body : {}),
+    };
+  }
+  // A 2xx whose body didn't parse as JSON is not proof of a reservation —
+  // fail closed rather than spend against an unconfirmed ledger entry.
+  if (!body || typeof body !== "object") {
+    return {
+      ok: false,
+      job_id: jobId,
+      klass: "infra",
+      message: "viewer auto budget response was not valid JSON",
+    };
+  }
+  return {
+    ok: true,
+    job_id: jobId,
+    ...body,
+  };
+}
+
 export async function fireAndWait({ projectId, jobId, kind, timeoutMs } = {}) {
   const fired = await fireDraft({ projectId, jobId });
   if (!fired.ok) return fired;
@@ -320,6 +394,7 @@ async function pendingContextForResult(jobId, cwd) {
       "position",
       "reference_source_ids",
       "source_node_id",
+      "auto_run_id",
     ]) {
       if (parsed[key] !== undefined) out[key] = parsed[key];
     }
@@ -373,6 +448,7 @@ export async function writePending({
   position,
   referenceSourceIds,
   sourceNodeId,
+  autoRunId,
 }) {
   if (!jobId || !kind || !prompt) return false;
   const payload = {
@@ -404,6 +480,9 @@ export async function writePending({
   if (typeof sourceNodeId === "string" && sourceNodeId !== "") {
     payload.source_node_id = sourceNodeId;
   }
+  if (typeof autoRunId === "string" && autoRunId !== "") {
+    payload.auto_run_id = autoRunId;
+  }
   const dir = pendingDir();
   try {
     await fsp.mkdir(dir, { recursive: true });
@@ -416,7 +495,8 @@ export async function writePending({
         || payload.source_node_id === undefined
         || payload.mode === undefined
         || payload.source_resolution === undefined
-        || payload.target_resolution === undefined) {
+        || payload.target_resolution === undefined
+        || payload.auto_run_id === undefined) {
       try {
         const prev = JSON.parse(await fsp.readFile(pendingPath(jobId), "utf8"));
         if (payload.position === undefined && prev?.position &&
@@ -437,6 +517,9 @@ export async function writePending({
         }
         if (payload.target_resolution === undefined && typeof prev?.target_resolution === "string" && prev.target_resolution !== "") {
           payload.target_resolution = prev.target_resolution;
+        }
+        if (payload.auto_run_id === undefined && typeof prev?.auto_run_id === "string" && prev.auto_run_id !== "") {
+          payload.auto_run_id = prev.auto_run_id;
         }
       } catch { /* no prior sidecar, or unreadable — fresh write */ }
     }

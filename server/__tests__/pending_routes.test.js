@@ -302,6 +302,92 @@ test("PATCH on a running entry → 409", async () => {
   assert.equal(r.status, 409);
 });
 
+test("PATCH cannot raise the cost of a reserved Auto draft", async () => {
+  const { jobId } = await seedDraft({
+    overrides: {
+      kind: "video",
+      model: "video-generation",
+      resolution: "480p",
+      duration: 15,
+      cost_usd: 1.2,
+      script: "generate_video.js",
+      argv: ["--prompt", "a test cat", "--resolution", "480p", "--duration", "15"],
+      auto_run_id: "auto_recost_test",
+    },
+  });
+
+  const up = await fetch(`${baseUrl}/projects/${TEST_PROJECT_ID}/pending/${jobId}`, {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ duration: 60 }),
+  });
+  assert.equal(up.status, 409, "cost-raising edit must be rejected");
+  const after = await readSidecar(jobId);
+  assert.equal(after.duration, 15, "rejected patch must not persist");
+  assert.equal(after.cost_usd, 1.2);
+
+  const down = await fetch(`${baseUrl}/projects/${TEST_PROJECT_ID}/pending/${jobId}`, {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ duration: 5 }),
+  });
+  assert.equal(down.status, 200, "cost-lowering edit stays allowed");
+  const lowered = await readSidecar(jobId);
+  assert.equal(lowered.duration, 5);
+  assert.ok(lowered.cost_usd <= 1.2);
+  await rm(sidecarPath(jobId), { force: true });
+});
+
+test("POST /generate refuses Auto drafts whose run is missing or inactive", async () => {
+  // No auto run in meta at all → the leftover draft must not fire.
+  const { jobId: orphan } = await seedDraft({
+    overrides: { auto_run_id: "auto_never_existed" },
+  });
+  const r1 = await fetch(`${baseUrl}/projects/${TEST_PROJECT_ID}/pending/${orphan}/generate`, {
+    method: "POST",
+  });
+  assert.equal(r1.status, 409);
+  assert.equal((await readSidecar(orphan)).stage, "draft", "claim must not stick");
+  await rm(sidecarPath(orphan), { force: true });
+
+  // Cancelled run → its surviving drafts must not fire either.
+  const createA = await fetch(`${baseUrl}/projects/${TEST_PROJECT_ID}/auto-runs`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ budget_cap_usd: 5, brief: "fire gate" }),
+  });
+  assert.equal(createA.status, 201);
+  const runA = (await createA.json()).auto_run.id;
+  const { jobId: stale } = await seedDraft({ overrides: { auto_run_id: runA } });
+  await fetch(`${baseUrl}/projects/${TEST_PROJECT_ID}/auto-runs/${runA}`, { method: "DELETE" });
+  const r2 = await fetch(`${baseUrl}/projects/${TEST_PROJECT_ID}/pending/${stale}/generate`, {
+    method: "POST",
+  });
+  assert.equal(r2.status, 409);
+  await rm(sidecarPath(stale), { force: true });
+
+  // Active run → the gate passes and the CLI spawns (bad argv settles fast).
+  const createB = await fetch(`${baseUrl}/projects/${TEST_PROJECT_ID}/auto-runs`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ budget_cap_usd: 5, brief: "fire gate live" }),
+  });
+  assert.equal(createB.status, 201);
+  const runB = (await createB.json()).auto_run.id;
+  const { jobId: live } = await seedDraft({
+    overrides: { auto_run_id: runB, argv: ["--definitely-unknown-flag"] },
+  });
+  const r3 = await fetch(`${baseUrl}/projects/${TEST_PROJECT_ID}/pending/${live}/generate`, {
+    method: "POST",
+  });
+  assert.equal(r3.status, 202);
+  const result = await waitForResult(live);
+  assert.equal(result.ok, false);
+  assert.equal(result.klass, "bad_args");
+  assert.equal(result.auto_run_id, runB, "result context keeps the run attribution");
+  await fetch(`${baseUrl}/projects/${TEST_PROJECT_ID}/auto-runs/${runB}`, { method: "DELETE" });
+});
+
 test("POST /generate writes durable result sidecar and removes pending", async () => {
   const { jobId } = await seedDraft({
     overrides: { argv: ["--definitely-unknown-flag"] },

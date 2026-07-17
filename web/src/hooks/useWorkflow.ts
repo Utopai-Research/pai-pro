@@ -59,6 +59,7 @@ function failedResultToPending(result: GenerationResult): PendingGeneration | nu
     position: result.position,
     reference_source_ids: result.reference_source_ids,
     source_node_id: result.source_node_id,
+    auto_run_id: result.auto_run_id,
     klass: result.klass,
     message: result.message,
     completed_at: result.completed_at,
@@ -164,6 +165,25 @@ export function useWorkflow(projectId: string | null): UseWorkflowResult {
       const incoming = Array.isArray(msg.state) ? msg.state : []
       setGenerationResults(incoming.length > 0 ? incoming : EMPTY_RESULTS)
     }
+    const onTitle = (msg: {
+      projectId: string
+      title?: string
+      dangerously_skip_draft_gate?: boolean
+      auto_run?: ProjectBundle['auto_run']
+    }) => {
+      if (msg.projectId !== projectId) return
+      setBundle((prev) => {
+        if (prev === null) return prev
+        return {
+          ...prev,
+          ...(typeof msg.title === 'string' ? { title: msg.title } : {}),
+          ...(typeof msg.dangerously_skip_draft_gate === 'boolean'
+            ? { dangerously_skip_draft_gate: msg.dangerously_skip_draft_gate }
+            : {}),
+          ...(msg.auto_run !== undefined ? { auto_run: msg.auto_run } : {}),
+        }
+      })
+    }
     const onAssetStatusSnapshot = (msg: {
       projectId: string
       state: Record<string, AssetStatusEntry>
@@ -190,6 +210,7 @@ export function useWorkflow(projectId: string | null): UseWorkflowResult {
     socket.on('canvas-positions', onCanvasPositions)
     socket.on('pending-generations', onPendingGenerations)
     socket.on('generation-results', onGenerationResults)
+    socket.on('title', onTitle)
     socket.on('pai-assets-snapshot', onAssetStatusSnapshot)
     socket.on('pai-assets', onAssetStatusUpdate)
     const releaseSubscription = subscribeProject(projectId)
@@ -201,6 +222,7 @@ export function useWorkflow(projectId: string | null): UseWorkflowResult {
       socket.off('canvas-positions', onCanvasPositions)
       socket.off('pending-generations', onPendingGenerations)
       socket.off('generation-results', onGenerationResults)
+      socket.off('title', onTitle)
       socket.off('pai-assets-snapshot', onAssetStatusSnapshot)
       socket.off('pai-assets', onAssetStatusUpdate)
     }
