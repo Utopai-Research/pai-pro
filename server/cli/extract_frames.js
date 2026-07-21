@@ -60,7 +60,15 @@ function run(bin, argv, failKlass) {
       }
       reject(e);
     });
-    child.on("close", (code) => {
+    child.on("close", (code, signal) => {
+      if (signal) {
+        // Killed by a signal = the binary itself crashed (e.g. broken
+        // install), never the caller's input — always infra.
+        const e = new Error(`${bin} killed by ${signal}: ${err.slice(-500)}`);
+        e.klass = "infra";
+        reject(e);
+        return;
+      }
       if (code !== 0) {
         const e = new Error(`${bin} exit ${code}: ${err.slice(-500)}`);
         e.klass = failKlass;

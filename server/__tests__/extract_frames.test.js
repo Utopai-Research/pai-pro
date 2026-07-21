@@ -5,7 +5,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { mkdtemp, readdir, rm, stat } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { isAbsolute, join } from "node:path";
@@ -13,13 +13,17 @@ import { isAbsolute, join } from "node:path";
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 const CLI = join(__dirname, "..", "cli", "extract_frames.js");
 
-function runCli(args, cwd) {
+function runCli(args, cwd, env) {
   return new Promise((resolve) => {
     let stdout = "";
     const child = spawn(
       process.execPath,
       [CLI, ...args],
-      { stdio: ["ignore", "pipe", "ignore"], ...(cwd ? { cwd } : {}) },
+      {
+        stdio: ["ignore", "pipe", "ignore"],
+        ...(cwd ? { cwd } : {}),
+        ...(env ? { env: { ...process.env, ...env } } : {}),
+      },
     );
     child.stdout.on("data", (d) => { stdout += d; });
     child.on("exit", (code) => resolve({ code, stdout }));
@@ -31,12 +35,17 @@ function parseReply(stdout) {
   return JSON.parse(lines[lines.length - 1]);
 }
 
-function hasFfmpeg() {
+function hasTool(bin) {
   return new Promise((resolve) => {
-    const child = spawn("ffmpeg", ["-version"], { stdio: "ignore" });
+    const child = spawn(bin, ["-version"], { stdio: "ignore" });
     child.on("error", () => resolve(false));
     child.on("exit", (code) => resolve(code === 0));
   });
+}
+
+// The CLI needs both: ffprobe for duration, ffmpeg for the frame seeks.
+async function hasFfmpeg() {
+  return (await hasTool("ffmpeg")) && (await hasTool("ffprobe"));
 }
 
 function makeClip(dir) {
@@ -100,9 +109,32 @@ test("extract_frames.js rejects bad arguments as bad_args", async (t) => {
   }
 });
 
+test("extract_frames.js classifies a crashing ffprobe as infra", async (t) => {
+  const workDir = await mkdtemp(join(tmpdir(), "extract-frames-crash-"));
+  t.after(() => rm(workDir, { recursive: true, force: true }));
+  // Shim ffprobe with a script that dies by signal, like a binary with a
+  // broken dynamic-library install. The input file just has to exist —
+  // the shim crashes before reading it.
+  const binDir = join(workDir, "bin");
+  await mkdir(binDir);
+  await writeFile(join(binDir, "ffprobe"), "#!/bin/sh\nkill -ABRT $$\n", { mode: 0o755 });
+  await writeFile(join(workDir, "clip.mp4"), "not a real video");
+
+  const { code, stdout } = await runCli(
+    ["--path", "clip.mp4"],
+    workDir,
+    { PATH: `${binDir}:${process.env.PATH}` },
+  );
+  assert.equal(code, 1);
+  const reply = parseReply(stdout);
+  assert.equal(reply.ok, false);
+  assert.equal(reply.klass, "infra");
+  assert.match(reply.message, /ffprobe killed by SIGABRT/);
+});
+
 test("extract_frames.js samples evenly spaced frames from a real clip", async (t) => {
   if (!(await hasFfmpeg())) {
-    t.skip("ffmpeg not installed");
+    t.skip("ffmpeg/ffprobe not installed");
     return;
   }
   const workDir = await mkdtemp(join(tmpdir(), "extract-frames-test-"));
