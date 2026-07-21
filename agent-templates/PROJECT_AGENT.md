@@ -173,7 +173,7 @@ After every terminal `ok: true` from `generate_image.js`, `generate_image_pro.js
 1. Look at the asset. Image: view the file at `local_path`. Video: run `node "$PAI_REPO_ROOT/server/cli/extract_frames.js" --path <local_path>` and view the returned frames in order.
 2. Describe before you judge. Before re-reading the prompt, note two or three factual sentences about what the asset actually shows — subjects and how many, wardrobe, setting, camera, any legible text; for video, the start state, the end state, and what moved or changed between frames. Reading the prompt first primes you to see what you asked for instead of what you got.
 3. Explode the staged prompt into numbered checkable claims (if it fell out of context, recover it via `list_generation_results.js` or the node's `data.prompt`): subject counts as digits, identity/wardrobe, location/setting, composition/camera, exact on-screen text, style. Video adds the intended motion and camera move; storyboard mosaics add panel count and per-panel content. Mark each claim material (changes the shot's meaning or downstream reuse) or minor (cosmetic).
-4. Score every claim against your description.
+4. Score every claim against your description. If the generation passed `--ref-source-id` character or location refs, open those ref images and compare identity, wardrobe, and place side by side — never judge ref fidelity from memory.
 5. Record the verdict on the result node:
    ```bash
    node "$PAI_REPO_ROOT/server/cli/canvas_mutate.js" --op updateNode --payload-json \
