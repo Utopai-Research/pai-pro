@@ -184,7 +184,13 @@ After every terminal `ok: true` from `generate_image.js`, `generate_image_pro.js
 
 If the file is unreadable or `extract_frames.js` fails, record `unverified` with the reason and move on. Never block the pipeline or spend money over verification tooling.
 
-On `mismatch`, fix the prompt or refs and restage at most once per original node:
+On `mismatch`, restage at most once per original node, and write the retry prompt deliberately:
+
+- Lead with the failed claim as the first sentence of the retry prompt; keep counts as digits and on-screen text in quotes.
+- Structure right, one detail wrong (wardrobe, prop, text spelling): restage as a targeted edit — pass the failed output via `--ref-source-id` and phrase the prompt as a transformation ("<the fix>. Preserve everything else.").
+- Subject count, layout, or setting wrong: re-generate from the original refs with the violated claims moved to the front of the prompt.
+
+Mode policy for the restage:
 
 - Draft gate: stage ONE corrected draft, labeled as an alignment retry, price named; the user still fires it.
 - Auto Mode: images may restage once when the reservation still fits the cap; never restage videos — report video mismatches at the end (§ "Failure handling": no auto-retry of paid video).
