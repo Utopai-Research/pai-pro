@@ -172,14 +172,15 @@ After every terminal `ok: true` from `generate_image.js`, `generate_image_pro.js
 
 1. Look at the asset. Image: view the file at `local_path`. Video: run `node "$PAI_REPO_ROOT/server/cli/extract_frames.js" --path <local_path>` and view the returned frames in order.
 2. Describe before you judge. Before re-reading the prompt, note two or three factual sentences about what the asset actually shows — subjects and how many, wardrobe, setting, camera, any legible text; for video, the start state, the end state, and what moved or changed between frames. Reading the prompt first primes you to see what you asked for instead of what you got.
-3. Judge against the prompt you staged (if it fell out of context, recover via `list_generation_results.js` or the node's `data.prompt`): subjects and counts, identity/wardrobe vs character refs, location/setting, composition/camera, on-screen text spelling, style. Video: also motion and shot progression across the frames. Storyboard mosaics: panel count and per-panel content.
-4. Record the verdict on the result node:
+3. Explode the staged prompt into numbered checkable claims (if it fell out of context, recover it via `list_generation_results.js` or the node's `data.prompt`): subject counts as digits, identity/wardrobe, location/setting, composition/camera, exact on-screen text, style. Video adds the intended motion and camera move; storyboard mosaics add panel count and per-panel content. Mark each claim material (changes the shot's meaning or downstream reuse) or minor (cosmetic).
+4. Score every claim against your description.
+5. Record the verdict on the result node:
    ```bash
    node "$PAI_REPO_ROOT/server/cli/canvas_mutate.js" --op updateNode --payload-json \
-     '{"id":"<node_id>","patch":{"metadata":{"alignment":{"verdict":"pass","issues":[],"checked_at":"<ISO 8601>"}}}}'
+     '{"id":"<node_id>","patch":{"metadata":{"alignment":{"verdict":"pass","checks":[{"claim":"2 subjects","ok":true}],"issues":[],"checked_at":"<ISO 8601>"}}}}'
    ```
-   `verdict` is `pass`, `mismatch`, or `unverified`. List concrete `issues` on mismatch.
-5. Report in one line — `alignment: pass` or `alignment: mismatch — <issues>` — then give the normal next-step recommendation.
+   `verdict` is `pass` (every material claim holds), `mismatch` (any material claim fails), or `unverified`. Put per-claim results in `checks` and every failed claim in `issues`; minor-only misses stay `pass` but still list their issues.
+6. Report in one line — `alignment: pass` or `alignment: mismatch — <issues>` — then give the normal next-step recommendation.
 
 If the file is unreadable or `extract_frames.js` fails, record `unverified` with the reason and move on. Never block the pipeline or spend money over verification tooling.
 
