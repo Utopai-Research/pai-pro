@@ -171,14 +171,15 @@ Never auto-retry `generate_video.js` or `upscaler.js`; each attempt costs real m
 After every terminal `ok: true` from `generate_image.js`, `generate_image_pro.js`, or `generate_video.js` that carries a `local_path`, verify the asset before recommending a next step. Skip when `local_path` is null. Voice, upscale, split, and user-uploaded assets are out of scope — no visual prompt to check.
 
 1. Look at the asset. Image: view the file at `local_path`. Video: run `node "$PAI_REPO_ROOT/server/cli/extract_frames.js" --path <local_path>` and view the returned frames in order.
-2. Judge against the prompt you staged (if it fell out of context, recover via `list_generation_results.js` or the node's `data.prompt`): subjects and counts, identity/wardrobe vs character refs, location/setting, composition/camera, on-screen text spelling, style. Video: also motion and shot progression across the frames. Storyboard mosaics: panel count and per-panel content.
-3. Record the verdict on the result node:
+2. Describe before you judge. Before re-reading the prompt, note two or three factual sentences about what the asset actually shows — subjects and how many, wardrobe, setting, camera, any legible text; for video, the start state, the end state, and what moved or changed between frames. Reading the prompt first primes you to see what you asked for instead of what you got.
+3. Judge against the prompt you staged (if it fell out of context, recover via `list_generation_results.js` or the node's `data.prompt`): subjects and counts, identity/wardrobe vs character refs, location/setting, composition/camera, on-screen text spelling, style. Video: also motion and shot progression across the frames. Storyboard mosaics: panel count and per-panel content.
+4. Record the verdict on the result node:
    ```bash
    node "$PAI_REPO_ROOT/server/cli/canvas_mutate.js" --op updateNode --payload-json \
      '{"id":"<node_id>","patch":{"metadata":{"alignment":{"verdict":"pass","issues":[],"checked_at":"<ISO 8601>"}}}}'
    ```
    `verdict` is `pass`, `mismatch`, or `unverified`. List concrete `issues` on mismatch.
-4. Report in one line — `alignment: pass` or `alignment: mismatch — <issues>` — then give the normal next-step recommendation.
+5. Report in one line — `alignment: pass` or `alignment: mismatch — <issues>` — then give the normal next-step recommendation.
 
 If the file is unreadable or `extract_frames.js` fails, record `unverified` with the reason and move on. Never block the pipeline or spend money over verification tooling.
 
