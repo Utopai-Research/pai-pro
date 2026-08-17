@@ -5,6 +5,7 @@ node_modules/
 .env
 .env.*
 !.env.example
+.olauth
 
 # Local project state (per-project runtime data; one folder per project)
 workflow.json
