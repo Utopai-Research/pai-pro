@@ -88,6 +88,10 @@ start_docker() {
         local codex_install_refresh="${CODEX_INSTALL_REFRESH:-$(date -u +%Y%m%d%H%M%S)}"
         build_args+=(--build-arg CODEX_INSTALL_REFRESH="$codex_install_refresh")
     fi
+    if [ -z "$PAI_DEFAULT_AGENT_ID" ] || [ "$PAI_DEFAULT_AGENT_ID" = "claude" ]; then
+        local claude_install_refresh="${CLAUDE_INSTALL_REFRESH:-$(date -u +%Y%m%d%H%M%S)}"
+        build_args+=(--build-arg CLAUDE_INSTALL_REFRESH="$claude_install_refresh")
+    fi
     docker compose build "${build_args[@]}"
 
     echo "Recreating Docker container..."

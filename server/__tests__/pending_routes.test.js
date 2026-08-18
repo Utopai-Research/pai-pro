@@ -109,6 +109,22 @@ async function waitForResult(jobId, timeoutMs = 5000) {
   throw new Error(`result sidecar did not appear for ${jobId}`);
 }
 
+// The finalize path writes the result sidecar before unlinking the pending
+// one, so poll for the unlink instead of asserting ENOENT right away.
+async function waitForSidecarGone(jobId, timeoutMs = 5000) {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    try {
+      await stat(sidecarPath(jobId));
+    } catch (e) {
+      if (e.code === "ENOENT") return;
+      throw e;
+    }
+    await new Promise((r) => setTimeout(r, 50));
+  }
+  throw new Error(`pending sidecar for ${jobId} was not removed within ${timeoutMs}ms`);
+}
+
 async function waitForPendingInBundle(jobId, timeoutMs = 5000) {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
@@ -414,7 +430,7 @@ test("POST /generate writes durable result sidecar and removes pending", async (
   assert.ok(summary, "bundle exposes durable generation result summary");
   assert.equal(summary.status, "failed");
   assert.equal(summary.klass, "bad_args");
-  await assert.rejects(stat(sidecarPath(jobId)), /ENOENT/);
+  await waitForSidecarGone(jobId);
 });
 
 test("POST /generate accepts generate_image_pro.js sidecars", async () => {
@@ -441,7 +457,7 @@ test("POST /generate accepts generate_image_pro.js sidecars", async () => {
   assert.equal(result.kind, "image");
   assert.equal(result.model, "image-generation-pro");
   assert.equal(result.klass, "bad_args");
-  await assert.rejects(stat(sidecarPath(jobId)), /ENOENT/);
+  await waitForSidecarGone(jobId);
 });
 
 test("POST /generate with non-whitelisted script → 400", async () => {
@@ -469,7 +485,7 @@ test("POST /generate claims the draft before spawning", async () => {
   const result = await waitForResult(jobId);
   assert.equal(result.ok, false);
   assert.equal(result.klass, "bad_args");
-  await assert.rejects(stat(sidecarPath(jobId)), /ENOENT/);
+  await waitForSidecarGone(jobId);
 });
 
 test("new-project bypass mode fires through viewer and waits on result sidecar", async () => {
@@ -504,7 +520,7 @@ test("new-project bypass mode fires through viewer and waits on result sidecar",
 
   const result = await waitForResult(reply.job_id);
   assert.deepEqual(result, reply);
-  await assert.rejects(stat(sidecarPath(reply.job_id)), /ENOENT/);
+  await waitForSidecarGone(reply.job_id);
 });
 
 test("new-project bypass mode with --draft-only fires and lets a batch waiter own the result", async () => {
@@ -544,7 +560,7 @@ test("new-project bypass mode with --draft-only fires and lets a batch waiter ow
   const result = await waitForResult(staged.job_id);
   assert.equal(result.ok, false);
   assert.equal(result.klass, "bad_args");
-  await assert.rejects(stat(sidecarPath(staged.job_id)), /ENOENT/);
+  await waitForSidecarGone(staged.job_id);
 });
 
 test("DELETE writes cancelled result, unlinks sidecar, and is idempotent", async () => {

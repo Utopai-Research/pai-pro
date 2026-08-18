@@ -13,7 +13,7 @@ ARG NODE_TAG=22-slim
 # transient CDN replication windows during a new-release publish 404 our
 # build. Bump via
 # `docker compose build --build-arg CLOUDFLARED_VERSION=<x>` to test.
-ARG CLOUDFLARED_VERSION=2026.5.0
+ARG CLOUDFLARED_VERSION=2026.8.2
 ARG CODEX_VERSION=latest
 
 # ─── builder ──────────────────────────────────────────────────────────
@@ -27,14 +27,12 @@ WORKDIR /build
 
 # Server deps (production-only). node-pty is optionalDeps — npm continues
 # if its native build fails, matching host behavior.
-# TODO: switch to `npm ci` once package-lock.json files are committed to
-# the repo for reproducible builds.
 COPY server/package.json server/package-lock.json* ./server/
-RUN cd server && npm install --omit=dev --no-audit --no-fund
+RUN cd server && npm ci --omit=dev --no-audit --no-fund
 
 # Web deps (full — needed for `npm run build`).
 COPY web/package.json web/package-lock.json* ./web/
-RUN cd web && npm install --no-audit --no-fund
+RUN cd web && npm ci --no-audit --no-fund
 
 # Source.
 COPY server/ ./server/
@@ -121,8 +119,11 @@ USER node
 # install script is non-interactive; if it fails the build continues so a
 # Codex-selected deployment can still run. The entrypoint refuses to boot a
 # Claude-selected deployment without the Claude CLI.
-RUN curl -fsSL https://claude.ai/install.sh | bash || \
-    echo "[build] claude CLI install failed — PTY tab will be degraded"
+# CLAUDE_INSTALL_REFRESH lets scripts invalidate only this install layer.
+ARG CLAUDE_INSTALL_REFRESH=manual
+RUN echo "[build] claude install refresh ${CLAUDE_INSTALL_REFRESH}" >/dev/null && \
+    (curl -fsSL https://claude.ai/install.sh | bash || \
+     echo "[build] claude CLI install failed — PTY tab will be degraded")
 
 # Codex CLI — default to npm's latest dist-tag so fresh Docker builds pick
 # up Codex updates. Override CODEX_VERSION to reproduce a specific release.
