@@ -5,16 +5,22 @@
 // model auto-flows its label to canvas card chrome and the expand
 // overlay, no separate UI edit.
 //
-// Every capability routes through the PAI media API raw passthrough; the
-// `provider` field is therefore always `"pai"` and is kept only so
-// routes/system.js + web/lib/useModels.tsx don't need a schema change.
+// Every media capability except music routes through the PAI media API
+// raw passthrough, so its `provider` field is `"pai"`. Music generation
+// has no PAI passthrough (its own client owns endpoints + auth — see
+// minimax_music_client.js), so its entry carries a distinct `provider`.
+// The field was always kept on every entry precisely so this stays a
+// data change, with no schema churn in routes/system.js or
+// web/lib/useModels.tsx.
 //
 // Schema per entry:
 //   id              PAI raw model name (what we pass as `model` on
 //                   POST /api/v1/generate or /submit). Also stamped
 //                   onto canvas node metadata.model.
-//   provider        always "pai" in this codebase.
+//   provider        "pai" for PAI-routed kinds; music carries its own
+//                   provider (its client, not the shared PAI passthrough).
 //   kind            "image" | "image_pro" | "video" | "voice" | "asset"
+//                   | "music"
 //   label           human-readable name (UI-friendly).
 //   cost_approx_usd number, function(params) -> number, or null when
 //                   unknown. Display-only; the actual freeze/charge
@@ -128,6 +134,18 @@ export const MODELS = [
     capabilities: ["voice-design", "tts"],
     default_params: {},
     notes: "Sync TTS via PAI raw passthrough. ~5-15s. $0.01 per 500 input characters.",
+  },
+
+  // ───────────── music ─────────────
+  {
+    id: "music-3.0",
+    provider: "minimax",
+    kind: "music",
+    label: "Music (music-3.0)",
+    cost_approx_usd: null,
+    capabilities: ["text-to-music", "music-generation", "music-cover"],
+    default_params: { output_format: "url" },
+    notes: "Sync music generation via its own client (minimax_music_client.js) — global + CN endpoints, Bearer auth. Not PAI passthrough.",
   },
 
   // ───────────── asset preupload (internal) ─────────────

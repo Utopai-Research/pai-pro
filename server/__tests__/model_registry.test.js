@@ -26,3 +26,13 @@ test("model registry prices image pro by exact size tier", () => {
   assert.equal(getCost("image-generation-pro", { size: "1920x1080" }), null);
   assert.equal(getCost("image-generation-pro", { image_size: "2K" }), null);
 });
+
+test("model registry exposes a music model with its own provider", () => {
+  const music = getDefault("music");
+  assert.equal(music.id, "music-3.0");
+  assert.equal(music.kind, "music");
+  assert.equal(music.provider, "minimax");
+  assert.equal(music.hidden, undefined);
+  assert.equal(getCost("music-3.0"), null);
+  assert.ok(MODELS.some((m) => m.kind === "music"));
+});
