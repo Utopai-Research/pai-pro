@@ -7,11 +7,18 @@
 // Reference: raw-models.md § "image-generation".
 //
 // Refs are URL-only — every entry in `refImageUrls` is sent as a
-// `fileData.fileUri` part. The upstream model fetches each URL
-// server-side. data: URIs are rejected at the boundary; if the caller
-// needs to pass a canvas-local file, they should route through
-// buildProviderRefs() so the tunnel-rewrite step runs first. Inline
-// data has a ~5-ref cap upstream; URL refs are validated to 16.
+// `fileData` part carrying the URL AND its media type. The upstream model
+// fetches each URL server-side. data: URIs are rejected at the boundary; if
+// the caller needs to pass a canvas-local file, they should route through
+// buildProviderRefs() so the tunnel-rewrite step runs first. Inline data has
+// a ~5-ref cap upstream; URL refs are validated to 16.
+//
+// 🔴 `mimeType` is REQUIRED next to `fileUri`. The upstream does not fetch the
+// URL to find out what it is; with the field missing it refuses the entire
+// request — "Unable to submit request because it has an empty mimeType
+// parameter in fileData" — so a generation carrying any reference fails
+// before it starts, at full latency and with a message that reads like a
+// problem with the reference rather than with the request.
 //
 // Safety blocks come back inside the 200 body (not as a 4xx). We detect
 // them by inspecting candidates[0].finishReason and
@@ -33,6 +40,27 @@ const SAFETY_SETTINGS = [
   { category: "HARM_CATEGORY_DANGEROUS_CONTENT",  threshold: "BLOCK_ONLY_HIGH" },
 ];
 
+// The types the upstream image model accepts as a reference, keyed by the
+// extension its URL ends in. That is the only thing knowable about a ref
+// here: this client is handed URLs, not files.
+const EXT_TO_MIME = {
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  webp: "image/webp",
+  gif: "image/gif",
+};
+
+// The ref's media type, or null when its URL does not say. Query strings and
+// fragments are stripped first — a signed URL ends in its signature, not in
+// `.png`.
+function mimeForRefUrl(ref) {
+  const withoutQuery = ref.split(/[?#]/, 1)[0];
+  const lastDot = withoutQuery.lastIndexOf(".");
+  if (lastDot === -1) return null;
+  return EXT_TO_MIME[withoutQuery.slice(lastDot + 1).toLowerCase()] ?? null;
+}
+
 function buildContents(prompt, refImageUrls) {
   const promptStr = String(prompt);
   const refs = Array.isArray(refImageUrls) ? refImageUrls.filter((u) => typeof u === "string" && u) : [];
@@ -46,7 +74,16 @@ function buildContents(prompt, refImageUrls) {
         + "buildProviderRefs() so local files get rewritten to the cloudflared tunnel URL first.",
       );
     }
-    parts.push({ fileData: { fileUri: ref } });
+    const mimeType = mimeForRefUrl(ref);
+    if (mimeType === null) {
+      throw err(
+        "bad_args",
+        `pai_image_client: cannot tell the media type of ref ${ref} from its URL. `
+        + "The upstream model requires a mimeType and will not infer one — use a "
+        + `reference ending in one of: ${Object.keys(EXT_TO_MIME).join(", ")}.`,
+      );
+    }
+    parts.push({ fileData: { fileUri: ref, mimeType } });
   }
   parts.push({ text: promptStr });
   return [{ role: "user", parts }];

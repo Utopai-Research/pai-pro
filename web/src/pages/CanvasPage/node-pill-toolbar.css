@@ -1,0 +1,112 @@
+/* NodePillToolbar — the glow pill, rendered inside a React Flow
+   <NodeToolbar> (portalled into .react-flow__renderer, a .canvas-host
+   descendant, so the canvas tokens resolve; screen-space, so not
+   zoom-scaled). */
+.node-pill-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 48px;
+  padding: 4px;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--bg-2) 80%, transparent);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--line-2);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  white-space: nowrap;
+  cursor: default;
+  pointer-events: auto;
+}
+
+.pill-sep {
+  width: 1px;
+  height: 24px;
+  background: var(--line-2);
+  margin: 0 4px;
+  flex-shrink: 0;
+}
+
+.pill-btn {
+  position: relative;
+  z-index: 0;
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  background: transparent;
+  color: var(--ink-1);
+  border-radius: 999px;
+  cursor: pointer;
+  text-decoration: none;
+  transition:
+    transform var(--dur-tap) var(--ease-hover),
+    color var(--dur-fast) var(--ease-hover);
+}
+.pill-btn:active:not(:disabled) {
+  transform: scale(0.94);
+}
+.pill-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.pill-btn:focus-visible {
+  outline: 2px solid var(--cv-accent);
+  outline-offset: -2px;
+}
+
+/* The conic hover glow. Hidden until hover, never on a disabled button. */
+.pill-glow {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  overflow: hidden;
+  opacity: 0;
+  transition: opacity 400ms cubic-bezier(0.25, 0.8, 0.25, 1);
+  pointer-events: none;
+  z-index: -1;
+}
+.pill-btn:hover:not(:disabled) .pill-glow {
+  opacity: 1;
+}
+.pill-glow-sweep {
+  position: absolute;
+  inset: -100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.pill-glow-sweep > span {
+  width: 100%;
+  height: 100%;
+  display: block;
+  /* conic gradient supplied inline */
+}
+.pill-glow-plate {
+  position: absolute;
+  inset: 1px;
+  border-radius: inherit;
+  display: block;
+  /* radial gradient supplied inline */
+}
+
+/* Delete reddens on hover — icon plus plate tint. The plate background is an
+   inline style, so the hover override needs !important to win. */
+.pill-btn-danger:hover:not(:disabled) {
+  color: oklch(0.72 0.19 25);
+}
+.pill-btn-danger:hover:not(:disabled) .pill-glow-plate {
+  background: radial-gradient(
+    200% 140% at 50% 40.25%,
+    rgb(38, 18, 18) 16%,
+    rgb(118, 58, 54) 85%
+  ) !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pill-btn:active:not(:disabled) {
+    transform: none;
+  }
+  /* The glow is a colour fade with no travel, so it may stay. */
+}

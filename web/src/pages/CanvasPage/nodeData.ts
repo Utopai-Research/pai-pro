@@ -79,17 +79,24 @@ export function downloadHref(url: string): string {
 // matches what the browser actually rendered.
 export const NOTE_BODY_MAX_HEIGHT = 360
 
-// Fixed chrome (head + foot + 1px top/bottom borders) wrapping the body
-// of an image_result / video_result / pending_generation card. The
-// renderer sizes the card by `style={{ width: size.w }}` and the body
-// gets its height from CSS aspect-ratio — so the AABB returned by
-// `sizeForAspect` (body only) is shorter than the rendered card.
-// Placement adds this constant to the body height so the grid pack and
-// spiral search reserve the same footprint the user actually sees.
-// Numbers from nodes-base.css: head 7+7 padding + 10.5px line ≈ 28,
-// foot 6+6 padding + 10px line ≈ 25, 2 × 1px borders → 55px; rounded
-// up to 56 for a hair of slack.
-export const IMAGE_CARD_CHROME_PX = 56
+// Chrome wrapping the body of a COMPLETED image_result / video_result card.
+// Those cards are chromeless (`.node--media` in nodes-base.css): the head and
+// foot rows are gone, the border with them, and the label that replaced them
+// is absolutely positioned above the card (`bottom: 100%`, out of flow) so it
+// reserves no vertical footprint. The rendered card is therefore the body
+// alone, and this constant is only a hair of slack — it was 56 when the card
+// wore head + foot + borders.
+//
+// The renderer sizes the card by `style={{ width: size.w }}` and the body gets
+// its height from CSS aspect-ratio, so placement adds this to the body height
+// to reserve the footprint the user actually sees.
+export const IMAGE_CARD_CHROME_PX = 2
+// Chrome for the pending_generation pad. Pads are DELIBERATELY not chromeless:
+// the head holds the model + specs and the foot holds Cancel / Generate·$, so
+// a pad's AABB is body + ~56 even though the completed card that replaces it
+// is body + 2. Numbers from nodes-base.css: head 7+7 padding + 10.5px line
+// ≈ 28, foot 6+6 padding + 10px line ≈ 25, 2 × 1px borders → 55, rounded up.
+export const PENDING_CARD_CHROME_PX = 56
 // Worst-case card footprint (chrome + max body), used by projection as
 // the first-paint fallback before RF measures. Replaced by the measured
 // height on the next projection pass.

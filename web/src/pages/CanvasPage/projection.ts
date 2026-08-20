@@ -31,13 +31,20 @@ import type {
   Workflow,
 } from '@/types/canvas'
 import type { MediaRef } from './MediaExpandOverlay'
-import { IMAGE_CARD_CHROME_PX, NODE_SIZES, sizeForAspect } from './nodeData'
+import { NODE_SIZES, PENDING_CARD_CHROME_PX, sizeForAspect } from './nodeData'
 import { pickSize } from './placement'
 
 /**
  * Index every asset node's renderable ref (kind + URL) by node id.
  * The URL field is populated on every asset node by `synthesizeAssetUrls`
  * at the useWorkflow seam, so we just read it here.
+ *
+ * `sourceId` is the node this ref's bytes came from. It is carried on the ref
+ * itself so a consumer never has to reconstruct it by zipping the ref list
+ * against some parallel list of ids — the two can differ in length (archived
+ * sources are stripped from React Flow's edges but not from `workflow.edges`),
+ * and index math would then name a different asset's node with no visible
+ * symptom. MediaExpandOverlay's reference preview uses it to jump.
  */
 function buildAssetRefIndex(wfNodes: CanvasNode[]): Map<string, MediaRef> {
   const out = new Map<string, MediaRef>()
@@ -48,11 +55,11 @@ function buildAssetRefIndex(wfNodes: CanvasNode[]): Map<string, MediaRef> {
       audio_url?: unknown
     }
     if (n.type === 'image_result' && typeof d.image_url === 'string' && d.image_url !== '') {
-      out.set(n.id, { kind: 'image', url: d.image_url })
+      out.set(n.id, { kind: 'image', url: d.image_url, sourceId: n.id })
     } else if (n.type === 'video_result' && typeof d.video_url === 'string' && d.video_url !== '') {
-      out.set(n.id, { kind: 'video', url: d.video_url })
+      out.set(n.id, { kind: 'video', url: d.video_url, sourceId: n.id })
     } else if (n.type === 'audio_result' && typeof d.audio_url === 'string' && d.audio_url !== '') {
-      out.set(n.id, { kind: 'audio', url: d.audio_url })
+      out.set(n.id, { kind: 'audio', url: d.audio_url, sourceId: n.id })
     }
   }
   return out
@@ -326,9 +333,10 @@ export function projectWorkflowToCanvas(
 
   const pendingSize = (pg: PendingGeneration): { w: number; h: number } => {
     const s = sizeForAspect(pg.aspect_ratio)
-    // Ghost renders as an image card; add chrome so its AABB matches
-    // what's painted (consistent with pickSize for image_result).
-    if (s.w > 0 && s.h > 0) return { w: s.w, h: s.h + IMAGE_CARD_CHROME_PX }
+    // The pad keeps its head + foot (they hold the specs and the Generate
+    // button), so it reserves more than the chromeless card that replaces it
+    // when the generation lands — hence the pad-specific constant.
+    if (s.w > 0 && s.h > 0) return { w: s.w, h: s.h + PENDING_CARD_CHROME_PX }
     return NODE_SIZES.pending_generation
   }
 

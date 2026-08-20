@@ -14,7 +14,7 @@
   --ink-4: oklch(0.32 0.005 240);
   --state-running: oklch(0.78 0.16 60);
   --state-failed: oklch(0.62 0.18 25);
-  --accent-glow: oklch(0.78 0.16 60 / 0.32);
+  --cv-accent-glow: oklch(0.78 0.16 60 / 0.32);
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
   position: absolute;
@@ -72,7 +72,7 @@
 }
 .save-pill.saving .save-dot {
   background: var(--state-running);
-  box-shadow: 0 0 6px var(--accent-glow);
+  box-shadow: 0 0 6px var(--cv-accent-glow);
   animation: save-pulse-dot 1.4s ease-in-out infinite;
 }
 

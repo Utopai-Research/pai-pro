@@ -22,7 +22,7 @@
   --ink-1: oklch(0.82 0.005 240);
   --ink-2: oklch(0.62 0.005 240);
   --ink-3: oklch(0.45 0.005 240);
-  --accent: oklch(0.78 0.16 60);
+  --cv-accent: oklch(0.78 0.16 60);
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --font-sans: ui-sans-serif, system-ui, -apple-system, sans-serif;
 

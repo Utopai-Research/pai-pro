@@ -32,15 +32,18 @@ test("Docker launcher refreshes the Codex latest install layer", async () => {
   assert.match(script, /build_args\+=\(--build-arg CODEX_INSTALL_REFRESH="\$codex_install_refresh"\)/);
 });
 
-test("Docker image installs Claude CLI with a refreshable install layer", async () => {
+test("Docker image installs Claude CLI via npm with an overridable latest build arg", async () => {
   const dockerfile = await readFile(join(REPO_ROOT, "Dockerfile"), "utf8");
+  assert.match(dockerfile, /ARG CLAUDE_VERSION=latest/);
   assert.match(dockerfile, /ARG CLAUDE_INSTALL_REFRESH=manual/);
-  assert.match(dockerfile, /curl -fsSL https:\/\/claude\.ai\/install\.sh \| bash/);
+  assert.match(dockerfile, /npm install -g "@anthropic-ai\/claude-code@\$\{CLAUDE_VERSION\}"/);
+  assert.match(dockerfile, /claude --version/);
   assert.match(dockerfile, /claude CLI install failed — PTY tab will be degraded/);
 });
 
 test("Docker launcher refreshes the Claude install layer", async () => {
   const script = await readFile(join(REPO_ROOT, "scripts", "docker-start.sh"), "utf8");
+  assert.match(script, /--build-arg CLAUDE_VERSION="\$\{CLAUDE_VERSION:-latest\}"/);
   assert.match(script, /if \[ -z "\$PAI_DEFAULT_AGENT_ID" \] \|\| \[ "\$PAI_DEFAULT_AGENT_ID" = "claude" \]; then/);
   assert.match(script, /CLAUDE_INSTALL_REFRESH:-\$\(date -u \+%Y%m%d%H%M%S\)/);
   assert.match(script, /build_args\+=\(--build-arg CLAUDE_INSTALL_REFRESH="\$claude_install_refresh"\)/);

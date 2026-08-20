@@ -1,5 +1,5 @@
 /**
- * GroupCreateModal — opens when SelectionToolbar's "+ Group" or
+ * GroupCreateModal — opens when the selection pill's Group action or
  * Cmd+G fires. Captures title + hue, calls `onConfirm` with both.
  *
  * Inputs:

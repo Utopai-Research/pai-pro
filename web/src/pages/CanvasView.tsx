@@ -5,7 +5,7 @@
  *   left  → CanvasPage (React Flow surface)
  *   right → Agent terminal (xterm.js + node-pty bridge)
  *
- * ChatComposerProvider wraps both panels so SelectionToolbar's "Refer"
+ * ChatComposerProvider wraps both panels so the selection pill's "Refer"
  * button can type `@<nodeId>` into the terminal without prop-drilling.
  *
  * Resizable via react-resizable-panels — drag the divider.
@@ -27,7 +27,10 @@ import { Group, Panel, Separator } from 'react-resizable-panels'
 import { Link, useParams } from 'react-router-dom'
 import CanvasPage from './CanvasPage'
 import { DraftGateModal } from './CanvasPage/DraftGateModal'
-import { AssetRail, type AssetRailRevealRequest } from '@/components/AssetRail'
+import { UndoToast } from './CanvasPage/UndoToast'
+import { createUndoStack, type UndoStack } from './CanvasPage/undoStack'
+import { AssetBrowser, type AssetRevealRequest } from '@/components/AssetBrowser'
+import { CanvasRail } from '@/components/CanvasRail'
 import { TerminalPanel } from '@/components/TerminalPanel'
 import { TimelinePanel } from '@/components/TimelinePanel'
 import { CanvasFocusProvider } from '@/contexts/CanvasFocusContext'
@@ -38,6 +41,7 @@ import {
 import { MediaExpandProvider } from '@/contexts/MediaExpandContext'
 import { useWorkflow } from '@/hooks/useWorkflow'
 import {
+  mutateCanvas,
   patchCanvasNodeDataBatch,
   type CanvasNodeDataUpdate,
 } from '@/lib/canvas-stub'
@@ -47,6 +51,24 @@ import type { AutoRun, CanvasNode, VideoResultNode } from '@/types/canvas'
 
 type CanvasTab = 'canvas' | 'timeline'
 type AutoModePhase = 'idle' | 'armed' | 'planning' | 'approval_required' | 'running'
+
+/**
+ * One undoable act.
+ *
+ * A UNION, and that is a correctness property rather than a convenience:
+ * cutting a connection is a delete the user will reflexively try to undo, and
+ * this stack is cleared only on project switch — so if a cut were NOT recorded
+ * here, that reflex would silently un-archive some node deleted long before.
+ * An act that is not recorded must not become undoable by proxy.
+ *
+ *   archive  the ids one archive gesture took off the canvas. Undo
+ *            un-archives exactly those; redo re-runs the archive against the
+ *            canvas as it is then, so the reel renumber stays correct.
+ *   edge-cut the connection one ✂ removed. Undo re-adds it; redo cuts again.
+ */
+type UndoEntry =
+  | { kind: 'archive'; ids: string[] }
+  | { kind: 'edge-cut'; from: string; to: string; edgeKind?: string }
 
 interface AutoEstimate {
   plannedSeconds: number
@@ -63,23 +85,8 @@ interface AutoEstimate {
   notes: string[]
 }
 
-const LS_RAIL_HIDDEN = 'pai-pro:asset-rail:hidden'
 const LS_ARCHIVE_RAIL_GUIDE_SHOWN = 'pai-pro:archive-rail-guide-shown'
 
-function readRailHidden(): boolean {
-  try {
-    return window.localStorage.getItem(LS_RAIL_HIDDEN) === '1'
-  } catch {
-    return false
-  }
-}
-function writeRailHidden(hidden: boolean): void {
-  try {
-    window.localStorage.setItem(LS_RAIL_HIDDEN, hidden ? '1' : '0')
-  } catch {
-    /* private mode etc — silent no-op */
-  }
-}
 function readArchiveRailGuideShown(): boolean {
   try {
     return window.localStorage.getItem(LS_ARCHIVE_RAIL_GUIDE_SHOWN) === '1'
@@ -95,7 +102,7 @@ function writeArchiveRailGuideShown(): void {
   }
 }
 
-function archiveKind(node: CanvasNode): AssetRailRevealRequest['kind'] {
+function archiveKind(node: CanvasNode): AssetRevealRequest['kind'] {
   if (node.type === 'image_result') return 'images'
   if (node.type === 'video_result') return 'videos'
   if (node.type === 'audio_result') return 'audios'
@@ -316,49 +323,59 @@ export default function CanvasView(): JSX.Element {
   const { projectId = null } = useParams<{ projectId: string }>()
   const [activated, setActivated] = useState(false)
   const [canvasTab, setCanvasTab] = useState<CanvasTab>('canvas')
-  // Owned at CanvasView so the toggle button in CanvasHeader (always
-  // visible) can flip the same state the rail itself reads.
-  const [railHidden, setRailHidden] = useState<boolean>(readRailHidden)
-  const archiveHistoryRef = useRef<string[][]>([])
+  // Owned here rather than in the browser itself: the rail's door, the `]`
+  // shortcut and the archive guide all flip the same flag. Deliberately not
+  // persisted — the panel covers part of the canvas, so reopening a project
+  // into a panel you closed a week ago would be a trap.
+  const [assetsOpen, setAssetsOpen] = useState(false)
+  // One entry per undoable act, capped so a long-lived tab can't grow the
+  // history without bound. Redo lives on the same stack's branch.
+  const undoStackRef = useRef<UndoStack<UndoEntry>>(createUndoStack(50))
+  // `undoable: false` = a purely informational line ("Restored …", "Redo
+  // isn't available for that"): the toast then renders without its Undo
+  // button, which would otherwise pop an entry unrelated to the message.
+  const [toast, setToast] = useState<{
+    message: string
+    undoable: boolean
+  } | null>(null)
   const archiveRailGuideShownRef = useRef(readArchiveRailGuideShown())
-  const [railRevealRequest, setRailRevealRequest] =
-    useState<AssetRailRevealRequest | null>(null)
-  const toggleRail = useCallback(() => {
-    setRailHidden((prev) => {
-      const next = !prev
-      writeRailHidden(next)
-      return next
-    })
+  const [assetReveal, setAssetReveal] = useState<AssetRevealRequest | null>(null)
+  const toggleAssets = useCallback(() => {
+    setAssetsOpen((prev) => !prev)
   }, [])
 
-  // `[` keyboard toggle (no modifier). Skip when focus is in a text
-  // input — typing `[` into a textarea must not collapse the rail.
+  // `]` keyboard toggle (no modifier), the same key the rail's tooltip names.
+  // Skip when focus is in a text input — typing `]` into a textarea must not
+  // open a panel.
   useEffect(() => {
     const handler = (e: globalThis.KeyboardEvent): void => {
-      if (e.key !== '[') return
+      if (e.key !== ']') return
       if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return
       if (isTypingTarget(document.activeElement)) return
       e.preventDefault()
-      toggleRail()
+      toggleAssets()
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [toggleRail])
+  }, [toggleAssets])
   // Subscribe at the outer layer so the Timeline tab gets workflow
   // updates without remounting CanvasPage's own subscription.
   const { workflow, pendingGenerations, bundle } = useWorkflow(projectId)
 
-  const archiveNodes = useCallback(
-    (ids: string[]): void => {
-      if (projectId === null || workflow === null || ids.length === 0) return
+  // The forward act, recomputed from the canvas AS IT IS NOW every time it
+  // runs — the gesture and a redo of that gesture share this, so a redo
+  // renumbers `shot_id` against the current reel rather than replaying a
+  // stale snapshot. Recording is the caller's job (see archiveNodes).
+  const applyArchive = useCallback(
+    (ids: string[]): string[] => {
+      if (projectId === null || workflow === null || ids.length === 0) return []
       const idSet = new Set(ids)
       const nodesById = new Map(workflow.nodes.map((node) => [node.id, node]))
       const targets = ids
         .map((id) => nodesById.get(id))
         .filter((node): node is CanvasNode => node !== undefined)
-      if (targets.length === 0) return
+      if (targets.length === 0) return []
 
-      archiveHistoryRef.current.push(targets.map((node) => node.id))
       const archivedAt = new Date().toISOString()
       const updates: CanvasNodeDataUpdate[] = targets.map((node) => ({
         nodeId: node.id,
@@ -392,16 +409,20 @@ export default function CanvasView(): JSX.Element {
           })
       }
 
+      // Point the browser at what just left the canvas. If it is already open
+      // the card just flashes; if it is closed, only the FIRST archive of a
+      // session opens it — that one time teaches where deleted things go, and
+      // after that a panel popping over the canvas on every delete would be an
+      // interruption (the undo toast is the normal feedback).
       const revealTarget = targets[0]
-      const shouldRevealInRail = !railHidden || !archiveRailGuideShownRef.current
-      if (shouldRevealInRail) {
-        if (railHidden && !archiveRailGuideShownRef.current) {
+      const firstEver = !archiveRailGuideShownRef.current
+      if (assetsOpen || firstEver) {
+        if (firstEver) {
           archiveRailGuideShownRef.current = true
           writeArchiveRailGuideShown()
-          setRailHidden(false)
-          writeRailHidden(false)
+          setAssetsOpen(true)
         }
-        setRailRevealRequest({
+        setAssetReveal({
           id: revealTarget.id,
           kind: archiveKind(revealTarget),
         })
@@ -412,48 +433,151 @@ export default function CanvasView(): JSX.Element {
           `[canvas:${projectId}] archive failed: ${err instanceof Error ? err.message : String(err)}`,
         )
       })
+      return targets.map((node) => node.id)
     },
-    [projectId, workflow, railHidden],
+    [projectId, workflow, assetsOpen],
   )
 
-  const restoreLastArchive = useCallback((): boolean => {
+  // The gesture: apply, then record so Cmd+Z can reverse it. Entries enter
+  // the stack ONLY here — nothing subscribes to canvas broadcasts, so an
+  // agent's or a CLI's archive can never end up in the user's undo.
+  const archiveNodes = useCallback(
+    (ids: string[]): void => {
+      const archived = applyArchive(ids)
+      if (archived.length === 0) return
+      undoStackRef.current.push({ kind: 'archive', ids: archived })
+      setToast({
+        message:
+          archived.length === 1
+            ? `Archived ${archived[0]}`
+            : `Archived ${archived.length} nodes`,
+        undoable: true,
+      })
+    },
+    [applyArchive],
+  )
+
+  const unarchive = useCallback(
+    (ids: string[]): void => {
+      if (projectId === null || ids.length === 0) return
+      void patchCanvasNodeDataBatch(
+        projectId,
+        ids.map((id) => ({
+          nodeId: id,
+          data: { archived: null, archived_at: null },
+        })),
+      ).catch((err) => {
+        console.warn(
+          `[canvas:${projectId}] restore failed: ${err instanceof Error ? err.message : String(err)}`,
+        )
+      })
+    },
+    [projectId],
+  )
+
+  // The ✂ on a hovered edge. Recorded on the same stack as an archive so
+  // Cmd+Z reverses the cut the user just made, not some older act.
+  const cutEdge = useCallback(
+    async (from: string, to: string, kind?: string): Promise<void> => {
+      if (projectId === null) return
+      await mutateCanvas(projectId, 'deleteEdge', {
+        from,
+        to,
+        ...(kind !== undefined ? { kind } : {}),
+      })
+      undoStackRef.current.push({ kind: 'edge-cut', from, to, edgeKind: kind })
+      setToast({ message: `Cut link ${from} → ${to}`, undoable: true })
+    },
+    [projectId],
+  )
+
+  const undoLastAct = useCallback((): boolean => {
     if (projectId === null) return false
-    const ids = archiveHistoryRef.current.pop()
-    if (ids === undefined || ids.length === 0) return false
-    void patchCanvasNodeDataBatch(
-      projectId,
-      ids.map((id) => ({
-        nodeId: id,
-        data: { archived: null, archived_at: null },
-      })),
-    ).catch((err) => {
-      console.warn(
-        `[canvas:${projectId}] restore failed: ${err instanceof Error ? err.message : String(err)}`,
-      )
+    const entry = undoStackRef.current.popUndo()
+    if (entry === null) return false
+    if (entry.kind === 'edge-cut') {
+      void mutateCanvas(projectId, 'addEdge', {
+        edge: {
+          from: entry.from,
+          to: entry.to,
+          ...(entry.edgeKind !== undefined ? { kind: entry.edgeKind } : {}),
+        },
+      }).catch((err) => {
+        console.warn(
+          `[canvas:${projectId}] could not restore ${entry.from} -> ${entry.to}: ${err instanceof Error ? err.message : String(err)}`,
+        )
+      })
+      setToast({ message: `Restored link ${entry.from} → ${entry.to}`, undoable: false })
+      return true
+    }
+    unarchive(entry.ids)
+    setToast({
+      message:
+        entry.ids.length === 1
+          ? `Restored ${entry.ids[0]}`
+          : `Restored ${entry.ids.length} nodes`,
+      undoable: false,
     })
     return true
-  }, [projectId])
+  }, [projectId, unarchive])
+
+  const redoLastAct = useCallback((): boolean => {
+    if (projectId === null) return false
+    const entry = undoStackRef.current.popRedo()
+    if (entry === null) return false
+    if (entry.kind === 'edge-cut') {
+      void mutateCanvas(projectId, 'deleteEdge', {
+        from: entry.from,
+        to: entry.to,
+        ...(entry.edgeKind !== undefined ? { kind: entry.edgeKind } : {}),
+      }).catch((err) => {
+        console.warn(
+          `[canvas:${projectId}] could not re-cut ${entry.from} -> ${entry.to}: ${err instanceof Error ? err.message : String(err)}`,
+        )
+      })
+      setToast({ message: `Cut link ${entry.from} → ${entry.to}`, undoable: true })
+      return true
+    }
+    // Recompute the forward act against the canvas as it is now. A node the
+    // user deleted for good in between simply isn't there to re-archive.
+    const archived = applyArchive(entry.ids)
+    setToast(
+      archived.length > 0
+        ? {
+            message:
+              archived.length === 1
+                ? `Archived ${archived[0]}`
+                : `Archived ${archived.length} nodes`,
+            undoable: true,
+          }
+        : { message: "Redo isn't available for that", undoable: false },
+    )
+    return true
+  }, [projectId, applyArchive])
 
   useEffect(() => {
-    archiveHistoryRef.current = []
-    setRailRevealRequest(null)
+    undoStackRef.current.clear()
+    setToast(null)
+    setAssetReveal(null)
+    setAssetsOpen(false)
   }, [projectId])
 
   useEffect(() => {
     const handler = (e: globalThis.KeyboardEvent): void => {
-      const isCmdZ =
-        (e.metaKey || e.ctrlKey) &&
-        e.key.toLowerCase() === 'z' &&
-        !e.shiftKey &&
-        !e.altKey
-      if (!isCmdZ) return
+      if (!(e.metaKey || e.ctrlKey) || e.altKey) return
+      const key = e.key.toLowerCase()
+      // Cmd+Shift+Z and Cmd+Y both redo — the two conventions users arrive
+      // with. Plain Cmd+Z undoes.
+      const isRedo = (key === 'z' && e.shiftKey) || (key === 'y' && !e.shiftKey)
+      const isUndo = key === 'z' && !e.shiftKey
+      if (!isUndo && !isRedo) return
       if (isTypingTarget(document.activeElement)) return
-      if (!restoreLastArchive()) return
+      if (!(isRedo ? redoLastAct() : undoLastAct())) return
       e.preventDefault()
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [restoreLastArchive])
+  }, [undoLastAct, redoLastAct])
 
   // Project title tracked locally so we can show optimistic edits +
   // listen for the server's `title` broadcasts (which fire on meta
@@ -575,14 +699,31 @@ export default function CanvasView(): JSX.Element {
               </div>
             ) : null}
             <div className="relative flex flex-1 overflow-hidden">
-              <AssetRail
-                projectId={projectId}
-                workflow={workflow}
-                hidden={railHidden}
-                onToggleHidden={toggleRail}
-                revealRequest={railRevealRequest}
-              />
               <div className="relative h-full flex-1 overflow-hidden">
+                {/* Both float OVER the canvas and outside CanvasPage's host
+                    ref, so neither can swallow a drop meant for the canvas.
+                    Canvas tab only: the Timeline has its own left edge. */}
+                {canvasTab === 'canvas' ? (
+                  <>
+                    <CanvasRail
+                      onUndo={() => {
+                        undoLastAct()
+                      }}
+                      onRedo={() => {
+                        redoLastAct()
+                      }}
+                      assetsOpen={assetsOpen}
+                      onToggleAssets={toggleAssets}
+                    />
+                    <AssetBrowser
+                      open={assetsOpen}
+                      onOpenChange={setAssetsOpen}
+                      projectId={projectId}
+                      workflow={workflow}
+                      reveal={assetReveal}
+                    />
+                  </>
+                ) : null}
                 {/*
                   Mount both. CanvasPage holds its own React Flow state +
                   drag handlers, so we keep it mounted and toggle visibility
@@ -594,8 +735,25 @@ export default function CanvasView(): JSX.Element {
                     (canvasTab === 'canvas' ? 'block' : 'hidden')
                   }
                 >
-                  <CanvasPage onArchiveNodes={archiveNodes} />
+                  <CanvasPage
+                    onArchiveNodes={archiveNodes}
+                    onCutEdge={cutEdge}
+                  />
                 </div>
+                {toast !== null && canvasTab === 'canvas' ? (
+                  <UndoToast
+                    key={toast.message}
+                    message={toast.message}
+                    onUndo={
+                      toast.undoable
+                        ? (): void => {
+                            undoLastAct()
+                          }
+                        : undefined
+                    }
+                    onDismiss={(): void => setToast(null)}
+                  />
+                ) : null}
                 <div
                   className={
                     'absolute inset-0 ' +

@@ -15,16 +15,26 @@
  * media (`*-generation`) render draft/running/failed pending pads opened
  * from PendingGenerationNode.
  *
+ * The reference tiles in the collapsed strip answer "what went into this?"
+ * twice over: hovering one enlarges it (RefPreview), and clicking that
+ * enlargement pans the canvas to the card the bytes came from and closes the
+ * overlay — the overlay covers the canvas, so it cannot stay open over the
+ * answer. The expanded panel's REFERENCES grid keeps its open-in-a-new-tab
+ * links; it is already showing the assets at size.
+ *
  * Mention chips inside the prompt (`@Image1`, `@Video1`, `@Audio1`)
  * render as inline thumbnails when their indexed reference is present;
  * unresolved tokens fall back to a tagged-only chip. Token counter is
  * per-kind (separate `@Image*` / `@Video*` / `@Audio*` counters).
  */
 import { useEffect, useState } from 'react'
+import { useReactFlow } from '@xyflow/react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { useChatComposer } from '@/contexts/ChatComposerContext'
 import { useCanvasFocus } from '@/contexts/CanvasFocusContext'
+import { RefPreviewPortal, canPreviewRef, useRefPreviewAnchor } from './RefPreview'
+import { useRefHoverPreview } from './useRefHoverPreview'
 import { MediaExpandChat } from './MediaExpandChat'
 import { buildGenerationFailureAgentPrompt } from './generationFailurePrompt'
 import { downloadHref } from './nodeData'
@@ -41,6 +51,11 @@ export type MediaRefKind = 'image' | 'video' | 'audio'
 export interface MediaRef {
   kind: MediaRefKind
   url: string
+  /** The node these bytes came from — stamped where the ref is built
+   *  (projection.ts), never re-derived by index. Undefined only for a ref
+   *  built before that stamp existed; the preview then has nowhere to jump
+   *  and simply doesn't. */
+  sourceId?: string
 }
 
 export interface MediaMetadata {
@@ -366,6 +381,7 @@ export function MediaExpandOverlay({
             text={kind === 'audio-generation' ? text ?? '' : null}
             refs={refs}
             refsByKind={refsByKind}
+            onJumpToSource={onClose}
             expanded={topExpanded}
             onToggle={() => setTopExpanded((v) => !v)}
             nodeType={nodeType === 'note' ? undefined : nodeType}
@@ -534,6 +550,65 @@ export function MediaExpandOverlay({
 
 /* ── Top strip: compact prompt + refs, click-to-expand details panel ── */
 
+/**
+ * One reference thumbnail in the collapsed strip, with its enlarged preview.
+ *
+ * The 28px tile stays inert on purpose: it sits inside the strip's own
+ * click-to-expand button, so clicking it toggles the details panel like a
+ * click anywhere else on that bar. The preview is what carries the jump —
+ * which is also why the preview has to be reachable with the cursor across the
+ * gap above the tile (see useRefHoverPreview).
+ */
+function RefTile({
+  refItem,
+  onJumped,
+}: {
+  refItem: MediaRef
+  onJumped: () => void
+}): JSX.Element {
+  const canvasFocus = useCanvasFocus()
+  const { getNode } = useReactFlow()
+  const hover = useRefHoverPreview()
+  const canPreview = canPreviewRef(refItem.kind, refItem.url)
+  const { wrapRef, anchor } = useRefPreviewAnchor(hover.isHover, canPreview)
+
+  return (
+    <span
+      ref={wrapRef}
+      className={'me-top-ref me-top-ref-' + refItem.kind}
+      onMouseEnter={hover.onMouseEnter}
+      onMouseLeave={hover.onMouseLeave}
+    >
+      {refItem.kind === 'image' ? (
+        <img src={refItem.url} alt="" />
+      ) : refItem.kind === 'video' ? (
+        // biome-ignore lint/a11y/useMediaCaption: thumbnail
+        <video src={refItem.url} muted playsInline preload="metadata" />
+      ) : (
+        <span className="me-top-ref-glyph">🔊</span>
+      )}
+      <RefPreviewPortal
+        kind={refItem.kind}
+        url={refItem.url}
+        sourceId={refItem.sourceId}
+        anchor={anchor}
+        hover={hover}
+        onJump={() => {
+          const target = refItem.sourceId
+          // A source that was archived or deleted is still a reference — the
+          // bytes are on this card either way — but it is NOT on the canvas,
+          // so there is nowhere to land. Closing the overlay onto an unmoved
+          // canvas would read as the jump having gone wrong; staying put says
+          // the source isn't there.
+          if (target === undefined || getNode(target) === undefined) return
+          canvasFocus?.(target)
+          onJumped()
+        }}
+      />
+    </span>
+  )
+}
+
 interface TopStripProps {
   prompt: string | null
   /** Audio drafts: the spoken line, editable when onSaveText present.
@@ -541,6 +616,10 @@ interface TopStripProps {
   text?: string | null
   refs: MediaRef[]
   refsByKind: Record<MediaRefKind, MediaRef[]>
+  /** Jumping to a reference's source closes the overlay — it covers the
+   *  canvas, so landing on the source card behind it would show nothing.
+   *  See RefTile. */
+  onJumpToSource: () => void
   expanded: boolean
   onToggle: () => void
   nodeType?: 'image_result' | 'video_result' | 'audio_result'
@@ -570,7 +649,7 @@ function joinDetail(parts: Array<string | undefined | null>): string | null {
   return values.length > 0 ? values.join(' · ') : null
 }
 
-function TopStrip({ prompt, text, refs, refsByKind, expanded, onToggle, nodeType, metadata, duration, cost, failure, onSavePrompt, onSaveText, forceExpanded = false }: TopStripProps): JSX.Element {
+function TopStrip({ prompt, text, refs, refsByKind, onJumpToSource, expanded, onToggle, nodeType, metadata, duration, cost, failure, onSavePrompt, onSaveText, forceExpanded = false }: TopStripProps): JSX.Element {
   const modelChip =
     nodeType === 'video_result' ? 'video'
     : nodeType === 'audio_result' ? 'voice'
@@ -603,16 +682,7 @@ function TopStrip({ prompt, text, refs, refsByKind, expanded, onToggle, nodeType
         {refs.length > 0 ? (
           <span className="me-top-refs" aria-label={`${refs.length} reference${refs.length === 1 ? '' : 's'}`}>
             {refs.slice(0, 6).map((r, i) => (
-              <span className={'me-top-ref me-top-ref-' + r.kind} key={i}>
-                {r.kind === 'image' ? (
-                  <img src={r.url} alt="" />
-                ) : r.kind === 'video' ? (
-                  // biome-ignore lint/a11y/useMediaCaption: thumbnail
-                  <video src={r.url} muted playsInline preload="metadata" />
-                ) : (
-                  <span className="me-top-ref-glyph">🔊</span>
-                )}
-              </span>
+              <RefTile key={i} refItem={r} onJumped={onJumpToSource} />
             ))}
             {refs.length > 6 ? <span className="me-top-ref-more">+{refs.length - 6}</span> : null}
           </span>

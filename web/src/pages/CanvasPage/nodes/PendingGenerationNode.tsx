@@ -14,6 +14,7 @@ import type { NodeProps } from '@xyflow/react'
 import { Handle, Position } from '@xyflow/react'
 import { useChatComposer } from '@/contexts/ChatComposerContext'
 import { useFireConfirm } from '../FireConfirmProvider'
+import { failureDisplayCopy } from '../failureDisplayCopy'
 import { buildGenerationFailureAgentPrompt } from '../generationFailurePrompt'
 import { parseAspectRatio, sizeForAspect, type NodeState } from '../nodeData'
 import { useNodeActions } from '../NodeActionsContext'
@@ -57,7 +58,12 @@ export function PendingGenerationNode({ id, data, selected }: NodeProps): JSX.El
   const prompt = d.prompt ?? ''
   const text = d.text ?? ''
   const isAudio = kind === 'audio'
-  const failureMessage = d.message ?? d.klass ?? 'Generation failed'
+  const rawFailureMessage = d.message ?? d.klass ?? 'Generation failed'
+  // Known upstream shapes distill to the human sentence buried in their JSON.
+  // This strip is one ellipsized line, so a raw `PAI 400: {"candidates":[…`
+  // shows nothing but punctuation. The raw text stays on `title` and in the
+  // expand overlay, where there is room for it.
+  const failureMessage = failureDisplayCopy(rawFailureMessage)
   // For voice, the body content is the spoken text (the deliverable);
   // the voice design `prompt` is metadata shown only in the overlay.
   // For image/video, it's the prompt verbatim.
@@ -285,7 +291,7 @@ export function PendingGenerationNode({ id, data, selected }: NodeProps): JSX.El
           </button>
         ) : null}
         {isFailed ? (
-          <div className="pending-failure-reason" title={failureMessage}>
+          <div className="pending-failure-reason" title={rawFailureMessage}>
             {failureMessage}
           </div>
         ) : null}

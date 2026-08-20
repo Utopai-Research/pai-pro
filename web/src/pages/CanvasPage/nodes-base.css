@@ -12,7 +12,7 @@
      to pai-next/frontend-v4's palette: hue 260 base, solid OKLCH lines
      (was alpha-on-white), 10px node radius. Accent hue is variable so
      future tints flip in one line. */
-  --accent-h: 60;
+  --cv-accent-h: 60;
   --bg-0: oklch(0.14 0.005 260);
   --bg-1: oklch(0.17 0.005 260);
   --bg-2: oklch(0.20 0.006 260);
@@ -23,11 +23,11 @@
   --ink-4: oklch(0.40 0.010 260);
   --line-1: oklch(0.26 0.006 260);
   --line-2: oklch(0.32 0.008 260);
-  --accent: oklch(0.78 0.16 var(--accent-h));
-  --accent-dim: oklch(0.78 0.16 var(--accent-h) / 0.45);
-  --accent-faint: oklch(0.78 0.16 var(--accent-h) / 0.18);
-  --accent-glow: oklch(0.78 0.16 var(--accent-h) / 0.32);
-  --state-running: oklch(0.78 0.16 var(--accent-h));
+  --cv-accent: oklch(0.78 0.16 var(--cv-accent-h));
+  --cv-accent-dim: oklch(0.78 0.16 var(--cv-accent-h) / 0.45);
+  --cv-accent-faint: oklch(0.78 0.16 var(--cv-accent-h) / 0.18);
+  --cv-accent-glow: oklch(0.78 0.16 var(--cv-accent-h) / 0.32);
+  --state-running: oklch(0.78 0.16 var(--cv-accent-h));
   --state-complete: oklch(0.65 0.12 150);
   --state-failed: oklch(0.62 0.18 25);
   --radius-md: 10px;
@@ -78,7 +78,7 @@
 }
 /* `.is-group-selected`: member nodes of a selected group_frame share
    the selection outline without flipping the RF `selected` flag (which
-   would pop the per-node SelectionToolbar on top of the frame's own
+   would pop the per-node selection pill on top of the frame's own
    action buttons). See useIsInSelectedFrame in nodes/_shared.tsx. */
 .node.selected,
 .node.is-group-selected {
@@ -134,7 +134,7 @@
 }
 .node[data-state='running'] .node-head .state-chip .dot {
   background: var(--state-running);
-  box-shadow: 0 0 6px var(--accent-glow);
+  box-shadow: 0 0 6px var(--cv-accent-glow);
   animation: node-pulse-dot 1.4s ease-in-out infinite;
 }
 .node[data-state='running'] .node-head .state-chip {
@@ -170,10 +170,190 @@
 }
 
 .node[data-state='running'] {
-  box-shadow: 0 0 0 1px var(--accent-dim), 0 0 calc(22px * var(--glow-intensity)) var(--accent-faint);
+  box-shadow: 0 0 0 1px var(--cv-accent-dim), 0 0 calc(22px * var(--glow-intensity)) var(--cv-accent-faint);
 }
 
-/* ─────────────────────── shared foot row (image_result / video_result / note) ─────────────────────── */
+/* ───────────────── chromeless media card (image_result / video_result) ─────────────────
+   The card IS the picture: no head, no foot, no border, transparent card
+   background. Elevation, rounding and the selection ring move onto
+   `.node-body` (the media itself). `overflow: visible` — the base `.node` is
+   hidden — is what lets the counter-scaled label sit above the card; it is
+   also what stops anything hung off the card's sides from being clipped.
+   `data-state` / `data-subtype` stay on the root, so every rule that selects
+   `.node[data-state=…]` keeps working: this is a variant of `.node`, not a
+   wrapper around it.
+
+   Notes, audio pills and pending pads deliberately keep their boxed chrome —
+   a pad's head and foot hold the model specs and the Generate button, and a
+   note has no media to become. */
+.node--media {
+  overflow: visible;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+}
+.node--media .node-body {
+  overflow: hidden;
+  border-radius: 12px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.18), 0 8px 20px rgba(0, 0, 0, 0.3);
+  transition: box-shadow 220ms ease;
+}
+/* Selection: a 2px white rim on the media, replacing the boxed card's white
+   border. `box-shadow` is a SINGLE property, so the elevation has to be
+   re-stated alongside the rim rather than added to it. Covers
+   `.is-group-selected` (members of a selected group_frame) the same way the
+   base rule does. */
+.node--media.selected,
+.node--media.is-group-selected {
+  border-color: transparent;
+  box-shadow: none;
+}
+.node--media.selected .node-body,
+.node--media.is-group-selected .node-body {
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.18), 0 8px 20px rgba(0, 0, 0, 0.3),
+    0 0 0 2px #ffffff, 0 0 8px rgba(255, 255, 255, 0.3);
+}
+
+/* ── the label row that replaced the head and the foot ──
+   Absolutely positioned (`bottom: 100%`) so it adds NO measured height: the
+   box React Flow measures stays exactly the media height, which is what keeps
+   placement stable — see IMAGE_CARD_CHROME_PX in nodeData.ts. The inner
+   `.node-label-scale` carries an inline `transform: scale(1/zoom)` (set by
+   CounterScaledLabel) so text, chip and popup all render at native px on
+   screen at any zoom. The row is click-through; only the name and the chip
+   re-enable pointer events. */
+.node--media .node-label {
+  position: absolute;
+  bottom: 100%;
+  left: 4px;
+  padding-bottom: 8px;
+  /* Load-bearing: an abspos box shrink-to-fits to its containing block, which
+     would cap the row's LAYOUT width at "card width − 4" flow px and truncate
+     the name early at zoom > 1. With max-content the only constraint is the
+     inline maxWidth CounterScaledLabel derives from the card width and the
+     zoom (labelGeometry.ts), which is what pins the row's on-screen right edge
+     to the card's. Height stays out of flow either way. */
+  width: max-content;
+  /* Without an explicit z-index the row (earlier in the DOM) paints UNDER
+     `.node-body` — both are z-auto positioned siblings, so DOM order wins and
+     anything the row hangs downward (the asset-status popup, the "Copied @id"
+     bubble) is covered by the media. 6 for the same reason as `.node-head`:
+     above the body's overlay buttons at z-index 5. The row stays
+     `pointer-events: none`, so lifting it blocks no card interaction. */
+  z-index: 6;
+  pointer-events: none;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: color-mix(in oklab, var(--ink-0) 60%, transparent);
+}
+.node--media .node-label-scale {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  line-height: 16px;
+}
+.node--media .node-label-text {
+  /* The only shrinkable item in the row, so it absorbs the truncation when
+     the name is longer than the card is wide. */
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.node--media .node-label-meta {
+  flex-shrink: 0;
+  font-size: 10px;
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+/* The name is a copy affordance: hover reveals the `@id` reference key, click
+   copies it. It re-enables pointer events (the row is click-through) and
+   carries `nodrag` so React Flow's drag skips it — the click must never select
+   or drag the card. The wrapper exists because the popup needs an anchor
+   without the text span's `overflow: hidden` clip. */
+.node--media .node-label-ref {
+  display: inline-flex;
+  min-width: 0;
+  position: relative;
+  pointer-events: auto;
+}
+/* Override the shared `.node .nodrag` text affordance — this is a click
+   target, not selectable text. */
+.node--media .node-label-ref.nodrag {
+  cursor: pointer;
+  user-select: none;
+}
+.node--media .node-label-ref:hover .node-label-text {
+  color: var(--ink-0);
+}
+/* Hover popup — same vocabulary as the asset-status popup, anchored under the
+   name. First line is the full (untruncated) name, second the reference key;
+   `pre-line` honours the \n between them. */
+.node--media .node-label-ref[data-tip]::after {
+  content: attr(data-tip);
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  width: max-content;
+  max-width: 260px;
+  z-index: 20;
+  display: block;
+  padding: 7px 10px;
+  background: oklch(0.18 0.01 240 / 0.96);
+  color: var(--ink-0);
+  border: 1px solid var(--line-2);
+  border-radius: 6px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.4;
+  letter-spacing: 0;
+  white-space: pre-line;
+  text-align: left;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(-2px);
+  transition: opacity 120ms ease-out, transform 120ms ease-out;
+}
+.node--media .node-label-ref[data-tip]:hover::after {
+  opacity: 1;
+  transform: translateY(0);
+}
+/* Post-click confirmation — takes the popup's slot (CounterScaledLabel drops
+   `data-tip` while it shows) and stays up regardless of hover. */
+.node--media .node-label-copied {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  width: max-content;
+  z-index: 20;
+  padding: 5px 8px;
+  background: oklch(0.18 0.01 240 / 0.96);
+  color: var(--ink-0);
+  border: 1px solid var(--line-2);
+  border-radius: 6px;
+  font-size: 10px;
+  line-height: 1.2;
+  pointer-events: none;
+}
+
+/* Popup re-anchor: the asset-status chip no longer sits in a `.node-head`, so
+   anchor its hover popup to the chip itself. It rides inside the
+   counter-scaled row, so it stays native px on screen at any zoom. Scoped to
+   `.node-label` — the note / pending-pad head popup rule above is untouched. */
+.node-label .asset-status-chip {
+  position: relative;
+}
+.node-label .asset-status-chip[data-tip]::after {
+  top: calc(100% + 6px);
+  left: auto;
+  right: 0;
+  width: max-content;
+  max-width: 240px;
+}
+
+/* ─────────────────────── shared foot row (note / pending pads) ─────────────────────── */
 
 .node .node-foot {
   display: flex;
@@ -407,7 +587,7 @@
   background: linear-gradient(
     90deg,
     transparent 0%,
-    color-mix(in oklch, var(--accent) 18%, transparent) 50%,
+    color-mix(in oklch, var(--cv-accent) 18%, transparent) 50%,
     transparent 100%
   );
   transform: translateX(-100%);
@@ -643,11 +823,11 @@
   transition: background 120ms ease, color 120ms ease, box-shadow 120ms ease;
 }
 .node.audio_result .audio-play:hover {
-  background: var(--accent);
+  background: var(--cv-accent);
 }
 .node.audio_result .audio-play.playing {
-  background: var(--accent);
-  box-shadow: 0 0 0 2px var(--accent-faint);
+  background: var(--cv-accent);
+  box-shadow: 0 0 0 2px var(--cv-accent-faint);
 }
 .node.audio_result .audio-content {
   flex: 1 1 auto;
@@ -696,7 +876,7 @@
   position: absolute;
   inset: 0 auto 0 0;
   height: 100%;
-  background: var(--accent);
+  background: var(--cv-accent);
   border-radius: 999px;
   transition: width 80ms linear;
 }

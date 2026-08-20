@@ -15,6 +15,7 @@ ARG NODE_TAG=22-slim
 # `docker compose build --build-arg CLOUDFLARED_VERSION=<x>` to test.
 ARG CLOUDFLARED_VERSION=2026.8.2
 ARG CODEX_VERSION=latest
+ARG CLAUDE_VERSION=latest
 
 # ─── builder ──────────────────────────────────────────────────────────
 FROM node:${NODE_TAG} AS builder
@@ -44,12 +45,13 @@ RUN cd web && npm run build
 # ─── runtime ──────────────────────────────────────────────────────────
 FROM node:${NODE_TAG} AS runtime
 ARG CODEX_VERSION
+ARG CLAUDE_VERSION
 
 # Runtime system binaries.
 #   ffmpeg          reel stitching (reel_stitch.js)
 #   poppler-utils   pdftotext for script-compose skill
 #   tini            PID 1, signal forwarding
-#   curl            healthcheck + cloudflared/claude install
+#   curl            healthcheck + cloudflared install
 #   bubblewrap      Codex sandboxing on Linux
 #   ca-certificates HTTPS to providers
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -113,16 +115,18 @@ EXPOSE 7488
 
 USER node
 
-# Claude Code CLI — install AS the node user so it lands in
-# /home/node/.local/bin (visible on PATH above). Running as root would
-# put it in /root/.local/, which the node user can't traverse. The
-# install script is non-interactive; if it fails the build continues so a
-# Codex-selected deployment can still run. The entrypoint refuses to boot a
-# Claude-selected deployment without the Claude CLI.
+# Claude Code CLI — default to npm's latest dist-tag so fresh Docker builds
+# pick up Claude updates. Override CLAUDE_VERSION to reproduce a specific
+# release. Install as node into /home/node/.local/bin, which is on PATH.
+# If the install fails the build continues so a Codex-selected deployment
+# can still run; the entrypoint refuses to boot a Claude-selected
+# deployment without the Claude CLI.
 # CLAUDE_INSTALL_REFRESH lets scripts invalidate only this install layer.
 ARG CLAUDE_INSTALL_REFRESH=manual
 RUN echo "[build] claude install refresh ${CLAUDE_INSTALL_REFRESH}" >/dev/null && \
-    (curl -fsSL https://claude.ai/install.sh | bash || \
+    npm config set prefix /home/node/.local && \
+    (npm install -g "@anthropic-ai/claude-code@${CLAUDE_VERSION}" --no-audit --no-fund && \
+     claude --version || \
      echo "[build] claude CLI install failed — PTY tab will be degraded")
 
 # Codex CLI — default to npm's latest dist-tag so fresh Docker builds pick

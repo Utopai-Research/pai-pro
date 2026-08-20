@@ -134,7 +134,12 @@ export function GroupFrameNode({ id, data, selected }: NodeProps): JSX.Element {
 
   const onResizeEnd: OnResizeEnd = useCallback(
     (_e, params) => {
-      void persist({ width: params.width, height: params.height })
+      void persist({
+        x: params.x,
+        y: params.y,
+        width: params.width,
+        height: params.height,
+      })
     },
     [persist],
   )

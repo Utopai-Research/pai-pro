@@ -169,6 +169,30 @@ export function getModelsByKind(kind) {
   return MODELS.filter((m) => m.kind === kind);
 }
 
+/**
+ * What staging a job will book, references included.
+ *
+ * A video's price is not only the model's: every reference is pre-uploaded to
+ * the provider through `video-generation-assets` at ~$0.01 each, and
+ * generate_video.js adds that to the draft's `cost_usd`. A caller that quotes
+ * `getCost` alone therefore shows a number lower than the one it is about to
+ * spend — small in dollars, but it is the number the user is being asked to
+ * approve, so it has to be the same one.
+ *
+ * This lives here so the CLI and the /cost route share the arithmetic rather
+ * than each carrying a copy. `refCount` is ignored for kinds that have no
+ * preupload step: image references travel inside the request.
+ */
+export function stagedCostUsd(modelOrId, params = {}, refCount = 0) {
+  const m = typeof modelOrId === "string" ? getModel(modelOrId) : modelOrId;
+  const base = getCost(m, params);
+  if (base === null) return null;
+  const refs = Number.isFinite(refCount) ? Math.max(0, Math.trunc(refCount)) : 0;
+  if (refs === 0 || m?.kind !== "video") return base;
+  const perRef = getCost("video-generation-assets") ?? 0.01;
+  return +(base + refs * perRef).toFixed(3);
+}
+
 export function getCost(modelOrId, params = {}) {
   const m = typeof modelOrId === "string" ? getModel(modelOrId) : modelOrId;
   if (!m) return null;

@@ -94,3 +94,73 @@
 .scrollbar-subtle::-webkit-scrollbar-corner {
   background: transparent;
 }
+
+/* ── Motion vocabulary ─────────────────────────────────────────────────
+   Semantic tokens — pick by meaning, not by copying the nearest literal:
+     --dur-tap   press / selection confirmation
+     --dur-fast  hover, chip reveal
+     --dur-base  overlay enter (exits run shorter)
+   --ease-enter is a decelerating arrival; --ease-exit is its mirror so a
+   reversible transition retraces its own path.
+   components/ui/button.tsx consumes --dur-tap + --ease-hover. */
+:root {
+  --dur-tap: 100ms;
+  --dur-fast: 140ms;
+  --dur-base: 200ms;
+  --ease-enter: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-exit: cubic-bezier(0.64, 0, 0.78, 1);
+  --ease-hover: ease-out;
+  --scrim: oklch(0 0 0 / 0.55);
+}
+
+/* ── Overlay presence ──────────────────────────────────────────────────
+   One enter/exit pair shared by hand-rolled overlays. Uses the standalone
+   `scale`/`translate` properties so centered cards keep their
+   -translate-x-1/2 transforms. Drive with usePresence(): while it reports
+   `closing`, put `presence-closing` on the wrapper and keep the tree
+   mounted until `mounted` flips false. */
+@keyframes presence-scrim-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes presence-scrim-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+@keyframes presence-surface-in {
+  from { opacity: 0; scale: 0.96; }
+  to { opacity: 1; scale: 1; }
+}
+@keyframes presence-surface-out {
+  from { opacity: 1; scale: 1; }
+  to { opacity: 0; scale: 0.96; }
+}
+.presence-scrim {
+  animation: presence-scrim-in var(--dur-base) var(--ease-enter) both;
+}
+.presence-surface {
+  animation: presence-surface-in var(--dur-base) var(--ease-enter) both;
+}
+.presence-closing .presence-scrim {
+  animation: presence-scrim-out 160ms var(--ease-exit) both;
+}
+.presence-closing .presence-surface {
+  animation: presence-surface-out 160ms var(--ease-exit) both;
+}
+
+/* Transient pills (undo toast, save status): rise + fade in, mirrored fall
+   + fade before unmount. */
+@keyframes pill-in {
+  from { opacity: 0; translate: 0 4px; }
+  to { opacity: 1; translate: 0 0; }
+}
+@keyframes pill-out {
+  from { opacity: 1; translate: 0 0; }
+  to { opacity: 0; translate: 0 4px; }
+}
+.pill-presence {
+  animation: pill-in var(--dur-fast) var(--ease-enter) both;
+}
+.pill-presence.pill-closing {
+  animation: pill-out var(--dur-fast) var(--ease-exit) both;
+}

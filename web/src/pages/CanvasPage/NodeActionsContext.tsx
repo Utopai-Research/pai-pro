@@ -54,6 +54,13 @@ export interface NodeActionsContextValue {
   onFireDraft?: (jobId: string) => Promise<void>
   /** Cancel a draft and resolve its result sidecar. Idempotent server-side. */
   onDiscardDraft?: (jobId: string) => Promise<void>
+  /**
+   * Cut one connection — the ✂ that appears on a hovered edge. Goes through
+   * the mutator's `deleteEdge` op AND records the cut for undo: an act that
+   * is not recorded must not be undoable by proxy, or Cmd+Z after a cut would
+   * reverse an unrelated archive instead.
+   */
+  onDeleteEdge?: (from: string, to: string, kind?: string) => Promise<void>
   /** Hide a settled failed generation card. */
   onDismissFailedGeneration?: (jobId: string) => void
   /** Only Codex exposes manual failed-result prompts; Claude receives BashOutput. */

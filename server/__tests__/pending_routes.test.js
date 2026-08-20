@@ -287,6 +287,35 @@ test("PATCH image_size recomputes cost and rewrites argv", async () => {
   assert.ok(after.cost_usd > 0);
 });
 
+test("PATCH re-prices a voice draft when its line gets longer", async () => {
+  // Voice is billed by input length, so the text IS the cost driver — a field
+  // that reads like a prompt edit but is not one. Leaving it out of the costed
+  // set let a $0.01 draft grow into a $0.03 job while still showing $0.01.
+  const { jobId } = await seedDraft({
+    overrides: {
+      kind: "audio",
+      model: "tts",
+      text: "x".repeat(400),
+      cost_usd: 0.01,
+      script: "generate_voice.js",
+      argv: ["--prompt", "a test line", "--text", "x".repeat(400)],
+    },
+  });
+  const longer = "x".repeat(1200);
+  const r = await fetch(`${baseUrl}/projects/${TEST_PROJECT_ID}/pending/${jobId}`, {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ text: longer }),
+  });
+  assert.equal(r.status, 200);
+  const after = await readSidecar(jobId);
+  assert.equal(after.text, longer);
+  // 1200 characters buys three 500-character blocks at $0.01 each.
+  assert.equal(after.cost_usd, 0.03);
+  const idx = after.argv.indexOf("--text");
+  assert.equal(after.argv[idx + 1], longer);
+});
+
 test("PATCH image_size is not editable for image pro drafts", async () => {
   const { jobId } = await seedDraft({
     overrides: {
@@ -694,4 +723,32 @@ test("5x concurrent position PATCHes serialize cleanly under the project lock", 
   assert.equal(after.stage, "draft");
   assert.equal(after.prompt, "a test cat");
   assert.ok(Array.isArray(after.argv));
+});
+
+test("PATCH re-pricing keeps a video draft's reference surcharge", async () => {
+  // Every video reference is pre-uploaded at ~$0.01, and generate_video.js
+  // books that on top of the model price. Re-pricing on the model alone would
+  // hand back a cheaper number than the job will actually spend — the one
+  // thing the draft gate exists to prevent.
+  const { jobId } = await seedDraft({
+    overrides: {
+      kind: "video",
+      model: "video-generation",
+      resolution: "720p",
+      duration: 5,
+      cost_usd: 1.02,
+      reference_source_ids: ["image_1", "image_2"],
+      script: "generate_video.js",
+      argv: ["--prompt", "a test cat", "--resolution", "720p", "--duration", "5"],
+    },
+  });
+  const r = await fetch(`${baseUrl}/projects/${TEST_PROJECT_ID}/pending/${jobId}`, {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ resolution: "480p" }),
+  });
+  assert.equal(r.status, 200);
+  const after = await readSidecar(jobId);
+  // 5s x $0.08 = $0.40 for the clip, plus 2 x $0.01 of preupload.
+  assert.equal(after.cost_usd, 0.42);
 });

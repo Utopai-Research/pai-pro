@@ -15,7 +15,7 @@ import { spawn } from "node:child_process";
 import fsp from "node:fs/promises";
 import path from "node:path";
 
-import { getCost } from "../model_registry.js";
+import { getCost, stagedCostUsd } from "../model_registry.js";
 import { isActiveAutoRun } from "../lib/auto_runs.js";
 import { PAI_REPO_ROOT, PENDING_STALE_MS, pendingDir, projectDir } from "../lib/paths.js";
 import {
@@ -34,8 +34,7 @@ const ALLOWED_SCRIPTS = new Set([
 ]);
 
 // Patch-key → CLI flag. Only these fields can be edited via PATCH;
-// anything else in the body is ignored. image_size / resolution /
-// duration are the cost drivers — patching one of them re-runs getCost.
+// anything else in the body is ignored.
 const PATCH_FLAGS = {
   prompt:        "--prompt",
   aspect_ratio:  "--aspect-ratio",
@@ -44,6 +43,12 @@ const PATCH_FLAGS = {
   duration:      "--duration",
   text:          "--text",
 };
+
+// Which of those keys move the price. `text` is here because voice is billed
+// by input length ($0.01 per 500 characters), so editing the line a draft will
+// speak is a cost edit even though it reads like a prompt edit — `prompt`
+// itself is free to change, since no model prices by it.
+const COSTED_PATCH_KEYS = new Set(["image_size", "resolution", "duration", "text"]);
 
 const IMAGE_PRO_DISPLAY_ONLY_PATCH_KEYS = new Set(["aspect_ratio", "image_size"]);
 const RUNNING_TIMEOUT_MS = {
@@ -273,9 +278,7 @@ export function registerPendingRoutes({ app, projects, broadcasters }) {
             if (patch[key] === undefined) continue;
             if (!isPatchKeyEditableForEntry(key, sidecar)) continue;
             sidecar[key] = patch[key];
-            if (key === "image_size" || key === "resolution" || key === "duration") {
-              costedChanged = true;
-            }
+            if (COSTED_PATCH_KEYS.has(key)) costedChanged = true;
             const value = String(patch[key]);
             const idx = argv.indexOf(flag);
             if (idx >= 0 && idx + 1 < argv.length) argv[idx + 1] = value;
@@ -283,11 +286,20 @@ export function registerPendingRoutes({ app, projects, broadcasters }) {
           }
           sidecar.argv = argv;
           if (costedChanged && typeof sidecar.model === "string") {
-            const next = getCost(sidecar.model, {
+            // References count toward the price a video draft books —
+            // generate_video.js pre-uploads each one — so re-pricing on the
+            // model alone would quote less than the job will spend. The
+            // number on the Generate button is the one being approved, so it
+            // has to be the one that will be charged.
+            const refs = Array.isArray(sidecar.reference_source_ids)
+              ? new Set(sidecar.reference_source_ids).size
+              : 0;
+            const next = stagedCostUsd(sidecar.model, {
               image_size: sidecar.image_size,
               resolution: sidecar.resolution,
               duration: sidecar.duration,
-            });
+              text: sidecar.text,
+            }, refs);
             if (typeof next === "number" && Number.isFinite(next)) {
               // An Auto draft's reservation was taken at stage time and
               // the ledger has no re-reserve; a cost-raising edit would

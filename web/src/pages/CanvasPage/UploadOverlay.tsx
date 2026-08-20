@@ -7,7 +7,7 @@
  * ReactFlow renderer. Listens on the *window* for dragenter/dragleave/
  * dragover/drop and paste — that way drops anywhere over the canvas
  * area work without depending on whether the cursor is over a node,
- * the background, or a panel like the SelectionToolbar.
+ * the background, or a panel like the selection pill.
  *
  * Server-side, the upload endpoint creates the node + writes its drop
  * position. We don't render an optimistic ghost — the round trip is

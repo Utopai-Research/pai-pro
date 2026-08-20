@@ -60,7 +60,7 @@ export function ChatComposerProvider({ children }: { children: ReactNode }): JSX
 
 /**
  * Consumer hook for siblings that want to call into the composer
- * (e.g. SelectionToolbar or timeline Refer buttons). Returns null when no
+ * (e.g. the canvas selection pill or timeline Refer buttons). Returns null when no
  * composer is mounted — callers should treat null as "Refer is a
  * no-op right now" rather than crashing.
  */

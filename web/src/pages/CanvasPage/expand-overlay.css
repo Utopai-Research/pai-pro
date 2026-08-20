@@ -61,7 +61,7 @@
 .media-expand-close:hover {
   background: oklch(0.18 0.008 240);
   color: var(--ink-0);
-  border-color: var(--accent);
+  border-color: var(--cv-accent);
 }
 
 /* Archived-state bar — replaces the chat composer when the overlay
@@ -108,7 +108,7 @@
 }
 .media-expand-archived-cta:hover {
   background: oklch(0.20 0.008 240);
-  border-color: var(--accent);
+  border-color: var(--cv-accent);
 }
 
 /* ── Draft / failed overlays ────────────────────────────────────────
@@ -366,8 +366,8 @@
 }
 .me-top-bar:focus-visible {
   outline: none;
-  border-color: var(--accent);
-  box-shadow: 0 0 0 2px color-mix(in oklch, var(--accent) 30%, transparent);
+  border-color: var(--cv-accent);
+  box-shadow: 0 0 0 2px color-mix(in oklch, var(--cv-accent) 30%, transparent);
 }
 
 .me-top-label {
@@ -429,6 +429,128 @@
   color: var(--ink-3);
   padding: 0 4px;
   letter-spacing: 0.04em;
+}
+
+/* ── the enlarged reference preview ───────────────────────────────────────
+   Rendered by RefPreview.tsx into a <body> portal, so none of the rules
+   above reach it and it carries `canvas-host` for its tokens. `position:
+   fixed` because the anchor is a viewport rect measured off the tile.
+
+   z-index sits above the overlay (30) and below the fire-confirm modal
+   (200), which is documented as always winning the visual layer. */
+.me-ref-preview {
+  position: fixed;
+  z-index: 120;
+  padding: 0;
+  border: 1px solid var(--line-2);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--bg-1);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55);
+  cursor: pointer;
+  /* inline-block, not block: the frame is sized BY its content, and a block
+     button would stretch to the containing block instead. */
+  display: inline-block;
+  line-height: 0;
+  /* A floor so a still-loading or pathologically thin asset is still a
+     visible, hoverable target — the cursor has to be able to land on it. */
+  min-width: 96px;
+  min-height: 72px;
+}
+/* Which way it hangs is decided in JS off the tile's viewport rect: the
+   overlay's own reference tiles sit ~110px from the top of the window, so
+   "always above" would put the preview off-screen entirely. The gap between
+   tile and preview is the same either way — it is the distance the cursor has
+   to cross, and useRefHoverPreview's grace period is what makes crossing it
+   possible. */
+.me-ref-preview-above {
+  transform: translate(-50%, calc(-100% - var(--me-ref-preview-gap, 8px)));
+}
+.me-ref-preview-below {
+  transform: translate(-50%, var(--me-ref-preview-gap, 8px));
+}
+.me-ref-preview:hover {
+  border-color: var(--cv-accent);
+}
+.me-ref-preview img,
+.me-ref-preview video {
+  display: block;
+  /* Natural size, bounded. `auto` on both axes is what preserves the ratio;
+     the max-* pair keeps a 4K reference from covering the canvas. */
+  width: auto;
+  height: auto;
+  max-width: 320px;
+  max-height: 240px;
+  object-fit: contain;
+}
+
+/* An audio reference has no picture, so its enlarged view is a different
+   SHAPE rather than a bigger image: the line it speaks, how far in it is,
+   how long it is, and where it came from. Fixed width because the content
+   is text — the ratio rule above is about pictures. */
+.me-ref-preview-audio {
+  /* The min-* pair above is for a still-loading picture; text sizes itself. */
+  min-width: 0;
+  min-height: 0;
+}
+.me-ref-audio {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  width: 268px;
+  padding: 10px 11px;
+  /* A <button> inherits NEITHER font NOR text-align from the page — it takes
+     the UA's own control font and centres its text. Both have to be said out
+     loud here because this preview holds text rather than an image. */
+  font: inherit;
+  text-align: left;
+  line-height: normal; /* the button sets 0 for the image case */
+  color: var(--ink-2);
+}
+.me-ref-audio-line {
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--ink-0);
+  /* Two lines, then ellipsis: enough to recognise a take, not so much that a
+     monologue turns the preview into a document. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  padding-bottom: 7px;
+  border-bottom: 1px solid var(--line-1);
+}
+.me-ref-audio-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+}
+.me-ref-audio-rail {
+  position: relative;
+  flex: 1;
+  height: 3px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+}
+.me-ref-audio-rail-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: var(--cv-accent);
+  border-radius: 2px;
+}
+.me-ref-audio-clock {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--ink-3);
+  flex-shrink: 0;
+}
+.me-ref-audio-meta {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: var(--ink-3);
 }
 
 .me-top-label-details {
@@ -549,7 +671,7 @@
   color: var(--ink-1);
   outline: none;
 }
-.me-prompt-textarea:focus { border-color: var(--accent); }
+.me-prompt-textarea:focus { border-color: var(--cv-accent); }
 
 .me-failure-box {
   display: flex;
@@ -826,7 +948,7 @@
   background: linear-gradient(
     90deg,
     transparent 0%,
-    color-mix(in oklch, var(--accent) 14%, transparent) 50%,
+    color-mix(in oklch, var(--cv-accent) 14%, transparent) 50%,
     transparent 100%
   );
   transform: translateX(-100%);
@@ -860,9 +982,9 @@
   background: #131620;
 }
 .me-chat.me-chat-drag {
-  border-color: var(--accent);
+  border-color: var(--cv-accent);
   border-style: dashed;
-  background: color-mix(in oklch, var(--accent) 8%, #111318);
+  background: color-mix(in oklch, var(--cv-accent) 8%, #111318);
 }
 
 .me-chat-row {
@@ -934,7 +1056,7 @@
     color 120ms ease;
 }
 .me-chat-chip-restore:hover {
-  border-color: var(--accent);
+  border-color: var(--cv-accent);
   color: var(--ink-1);
 }
 
@@ -1006,8 +1128,8 @@
   right: 16px;
   bottom: calc(100% + 6px);
   padding: 4px 10px;
-  background: color-mix(in oklch, var(--accent) 22%, #1a1c22);
-  border: 1px solid color-mix(in oklch, var(--accent) 40%, transparent);
+  background: color-mix(in oklch, var(--cv-accent) 22%, #1a1c22);
+  border: 1px solid color-mix(in oklch, var(--cv-accent) 40%, transparent);
   border-radius: 999px;
   font-family: var(--font-mono);
   font-size: 10.5px;
@@ -1032,7 +1154,7 @@
   inset: 0;
   display: grid;
   place-items: center;
-  background: color-mix(in oklch, var(--accent) 14%, rgba(17, 19, 24, 0.94));
+  background: color-mix(in oklch, var(--cv-accent) 14%, rgba(17, 19, 24, 0.94));
   border-radius: 10px;
   font-family: var(--font-mono);
   font-size: 11px;

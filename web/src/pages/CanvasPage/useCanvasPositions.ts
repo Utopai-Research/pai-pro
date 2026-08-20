@@ -47,7 +47,7 @@ import {
   type CanvasGroupFrame,
 } from '@/lib/canvas-stub'
 import type { CanvasNode, PendingGeneration, Workflow } from '@/types/canvas'
-import { IMAGE_CARD_CHROME_PX, sizeForAspect } from './nodeData'
+import { PENDING_CARD_CHROME_PX, sizeForAspect } from './nodeData'
 import { gridPackBatch } from './batchPlace'
 import {
   PLACEMENT_PADDING,
@@ -251,10 +251,10 @@ export function useCanvasPositions({
     const sizeForRFNode = (n: RFNode): { w: number; h: number } => {
       if (n.type === 'pending_generation') {
         const ar = (n.data as { aspect_ratio?: string }).aspect_ratio
-        // Match pickSize/image_result: default to 16:9 + add chrome so
-        // the ghost AABB matches its rendered footprint.
+        // Default to 16:9 like pickSize, but add the PAD's chrome: a pad still
+        // wears head + foot, unlike the chromeless card it turns into.
         const body = sizeForAspect(ar ?? '16:9')
-        return { w: body.w, h: body.h + IMAGE_CARD_CHROME_PX }
+        return { w: body.w, h: body.h + PENDING_CARD_CHROME_PX }
       }
       return pickSize(
         n.id,
@@ -344,14 +344,34 @@ export function useCanvasPositions({
       }
       const old = prevById.get(n.id)
       if (old !== undefined) {
-        // Existing node: keep the local position. Spread only when
-        // position values disagree to preserve projection's stable
-        // RF Node ref (otherwise the WeakMap cache rebuilds for no
-        // reason).
-        if (old.position.x === n.position.x && old.position.y === n.position.y) {
-          return n
+        // Two guards, one rule: whatever the local node is holding live,
+        // projection must not overwrite. They cover different live state.
+        //
+        // Mid-resize (NodeResizer flags `resizing` through dimension
+        // changes): the local node carries the live width/height/
+        // position. Rebuilding from projection would snap the frame
+        // back to the stale sidecar geometry.
+        if (old.resizing === true) return old
+        // Existing node: keep the local position AND the local selection.
+        //
+        // 🔴 `selected` is React Flow's, not projection's: it lives on the
+        // objects applyNodeChanges hands back, and a projected node never
+        // carries it. Dropping it here deselects every card on the canvas the
+        // moment anything re-projects — the agent adding a node takes your
+        // selection, and the pill toolbar over it, with no warning.
+        //
+        // Spread only when something actually disagrees, to preserve
+        // projection's stable RF Node ref (otherwise the WeakMap cache
+        // rebuilds for no reason).
+        const movedLocally =
+          old.position.x !== n.position.x || old.position.y !== n.position.y
+        const wasSelected = old.selected === true
+        if (!movedLocally && !wasSelected) return n
+        return {
+          ...n,
+          ...(movedLocally ? { position: old.position } : {}),
+          ...(wasSelected ? { selected: true } : {}),
         }
-        return { ...n, position: old.position }
       }
 
       // Handoff: a real result lands fresh and matches its prior pending
@@ -478,9 +498,18 @@ export function useCanvasPositions({
     // Capture RF's `dimensions` changes so the placement primitives
     // pack note cards against the real rendered height. Dirty-checked
     // so a stable measurement doesn't kick off a no-op re-projection.
+    // Group frames are excluded: placement/Tidy never consume their
+    // height (they're filtered out of every AABB set), and NodeResizer
+    // emits a dimensions change per mousemove — capturing those would
+    // re-run the merge effect mid-resize and clobber the live geometry
+    // with stale sidecar values.
+    const frameIds = new Set(
+      rfNodesRef.current.filter((n) => n.type === 'group_frame').map((n) => n.id),
+    )
     const deltas: Array<[string, number]> = []
     for (const c of changes) {
       if (c.type !== 'dimensions') continue
+      if (frameIds.has(c.id)) continue
       const h = c.dimensions?.height
       if (typeof h === 'number' && h > 0) deltas.push([c.id, h])
     }

@@ -92,25 +92,56 @@ test("generateImage sends the raw image-generation payload and decodes the inlin
   assert.ok(payload.safetySettings.every((s) => s.threshold === "BLOCK_ONLY_HIGH"));
 });
 
-test("generateImage sends URL refs as fileData parts before the prompt text", async (t) => {
+// 🔴 Every fileData part carries `mimeType` beside `fileUri`. Without it the
+// upstream refuses the whole request ("empty mimeType parameter in fileData"),
+// so this assertion is the one standing between a reference and a generation
+// that cannot start. An earlier version of this test pinned the shape without
+// the field, which is how the omission survived.
+test("generateImage sends URL refs as typed fileData parts before the prompt text", async (t) => {
   const calls = installPaiFetch(t, () => jsonResponse(inlineImageBody({ mimeType: "image/jpeg" })));
 
   const result = await generateImage({
     prompt: "match the reference style",
-    refImageUrls: ["https://example.com/a.png", "", 42, "https://example.com/b.png"],
+    refImageUrls: [
+      "https://example.com/a.png",
+      "",
+      42,
+      "https://example.com/b.JPG",
+      "https://example.com/c.webp?sig=abc#frag",
+    ],
   });
 
   assert.equal(result.mime, "image/jpeg");
   const parts = calls[0].body.payload.contents[0].parts;
   // Non-string / empty entries are silently dropped; refs precede the text.
+  // The extension decides the type, case-insensitively, and a query string or
+  // fragment on a signed URL does not hide it.
   assert.deepEqual(parts, [
-    { fileData: { fileUri: "https://example.com/a.png" } },
-    { fileData: { fileUri: "https://example.com/b.png" } },
+    { fileData: { fileUri: "https://example.com/a.png", mimeType: "image/png" } },
+    { fileData: { fileUri: "https://example.com/b.JPG", mimeType: "image/jpeg" } },
+    { fileData: { fileUri: "https://example.com/c.webp?sig=abc#frag", mimeType: "image/webp" } },
     { text: "match the reference style" },
   ]);
   // aspectRatio / imageSize omitted → imageConfig stays empty. The JSDoc
   // defaults ("16:9" / "2K") are applied by the CLI, not here.
   assert.deepEqual(calls[0].body.payload.generationConfig.imageConfig, {});
+});
+
+// A type we cannot name is not one to guess: the upstream decodes by the
+// declared mimeType, so a wrong guess is a corrupt reference rather than an
+// error, and an omitted one fails the whole request.
+test("generateImage refuses a ref whose URL does not say what it is", async (t) => {
+  const calls = installPaiFetch(t, () => jsonResponse(inlineImageBody()));
+
+  await assert.rejects(
+    generateImage({ prompt: "hi", refImageUrls: ["https://example.com/asset/1234"] }),
+    /cannot tell the media type/,
+  );
+  await assert.rejects(
+    generateImage({ prompt: "hi", refImageUrls: ["https://example.com/clip.mp4"] }),
+    /cannot tell the media type/,
+  );
+  assert.equal(calls.length, 0, "no provider call for a ref we cannot type");
 });
 
 test("generateImage validates prompt and rejects data: URI refs before the provider call", async (t) => {

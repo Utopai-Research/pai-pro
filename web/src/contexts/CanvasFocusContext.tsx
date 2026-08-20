@@ -20,7 +20,10 @@ import {
   type ReactNode,
 } from 'react'
 
-export type CanvasFocusFn = (nodeId: string) => void
+/** One id centers that node; several frame all of them at once (the asset
+ *  browser's "used in N" jump — the answer to that question is a set, and
+ *  showing it one node at a time would lose the shape of it). */
+export type CanvasFocusFn = (nodeId: string | string[]) => void
 
 interface CanvasFocusContextValue {
   focus: CanvasFocusFn | null

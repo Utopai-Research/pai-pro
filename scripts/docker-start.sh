@@ -83,7 +83,7 @@ start_docker() {
     export COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-pai-pro}"
 
     echo "Building Docker image from ${PAI_REPO_ROOT}..."
-    local build_args=(--pull --build-arg CODEX_VERSION="${CODEX_VERSION:-latest}")
+    local build_args=(--pull --build-arg CODEX_VERSION="${CODEX_VERSION:-latest}" --build-arg CLAUDE_VERSION="${CLAUDE_VERSION:-latest}")
     if [ "$PAI_DEFAULT_AGENT_ID" = "codex" ]; then
         local codex_install_refresh="${CODEX_INSTALL_REFRESH:-$(date -u +%Y%m%d%H%M%S)}"
         build_args+=(--build-arg CODEX_INSTALL_REFRESH="$codex_install_refresh")

@@ -8,7 +8,8 @@ import {
   type NodeState,
 } from '../nodeData'
 import { useNodeActions } from '../NodeActionsContext'
-import { NodeHead, useIsInSelectedFrame } from './_shared'
+import { CounterScaledLabel, useIsInSelectedFrame } from './_shared'
+import { chipDisplayLabel } from './chipLabel'
 import type { MediaRef } from '../MediaExpandOverlay'
 
 // `derived_refs` is added by projection.ts — refs to source nodes that
@@ -65,12 +66,20 @@ export function VideoResultNode({ id, data, selected }: NodeProps): JSX.Element 
 
   return (
     <div
-      className={`node video_result${selected ? ' selected' : ''}${isGroupSelected ? ' is-group-selected' : ''}`}
+      className={`node video_result node--media${selected ? ' selected' : ''}${isGroupSelected ? ' is-group-selected' : ''}`}
       data-state={state}
       style={{ width: size.w }}
     >
       <Handle type="target" position={target} />
-      <NodeHead label={`@${id}`} state={state} assetStatusUrl={url} />
+      {/* Name + specs ride above the card, counter-scaled, in place of the
+          head and foot rows the chromeless card gave up. */}
+      <CounterScaledLabel
+        label={chipDisplayLabel(d.label, id)}
+        meta={meta}
+        assetStatusUrl={url}
+        refId={id}
+        nodeW={size.w}
+      />
       <div
         className="node-body"
         onDoubleClick={canExpand ? expandVideo : undefined}
@@ -143,10 +152,6 @@ export function VideoResultNode({ id, data, selected }: NodeProps): JSX.Element 
             ⤢
           </button>
         ) : null}
-      </div>
-      <div className="node-foot nodrag">
-        <span>{label}</span>
-        {meta !== '' ? <span>{meta}</span> : null}
       </div>
       <Handle type="source" position={source} />
     </div>

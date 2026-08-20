@@ -195,3 +195,45 @@
 .canvas-host .react-flow__attribution {
   display: none;
 }
+
+/* ── Edge cut (✂) ──────────────────────────────────────────────────────
+   The button that appears on a hovered edge after a dwell. See
+   edgeHover.ts for why hover is a geometric hit test and not a grab path. */
+.canvas-host .edge-cut-layer {
+  position: absolute;
+  pointer-events: all;
+  /* The transform lives HERE, composed from three custom properties that
+     HighlightEdge writes imperatively — React never owns this property. The
+     x/y pair changes every frame as the button rides the pointer along the
+     line, and a per-frame coordinate through React state would re-render an
+     edge on every pointermove.
+
+     `--ecz` counter-scales: this element sits inside React Flow's transformed
+     viewport, so without it the button shrinks with the zoom. */
+  transform: translate(-50%, -50%)
+    translate(var(--ecx, 0px), var(--ecy, 0px))
+    scale(var(--ecz, 1));
+}
+
+.canvas-host .edge-cut-btn {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid oklch(1 0 0 / 0.15);
+  border-radius: 999px;
+  background: var(--bg-2);
+  color: oklch(1 0 0 / 0.8);
+  cursor: pointer;
+  box-shadow: 0 2px 8px oklch(0 0 0 / 0.45);
+  transition:
+    background var(--dur-fast) var(--ease-hover),
+    color var(--dur-fast) var(--ease-hover),
+    border-color var(--dur-fast) var(--ease-hover);
+}
+.canvas-host .edge-cut-btn:hover {
+  background: oklch(0.32 0.09 25);
+  border-color: oklch(0.55 0.15 25);
+  color: oklch(0.95 0.02 25);
+}

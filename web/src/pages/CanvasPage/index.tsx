@@ -7,7 +7,8 @@
  * Layered features:
  *   - useCanvasPositions: subscribe + persist + drag handlers.
  *   - SaveStatusPill: 3-state UI indicator + beforeunload guard.
- *   - SelectionToolbar: floating pill with "+ Group" + "📎 Refer".
+ *   - NodePillToolbar: floating glow pill over the selection (download,
+ *     expand, refer, group, archive).
  *   - GroupCreateModal: title + hue picker.
  *   - Cmd+G keyboard shortcut.
  *   - Dev-bridge `window.__pai_pro_dev`.
@@ -35,7 +36,7 @@ import {
   setCanvasNodePosition,
   type CanvasGroupFrame,
 } from '@/lib/canvas-stub'
-import { DRAG_MIME } from '@/components/AssetRail/AssetRow'
+import { DRAG_MIME } from '@/components/AssetBrowser/dnd'
 import { useCanvasFocusRegistration } from '@/contexts/CanvasFocusContext'
 import { useChatComposer } from '@/contexts/ChatComposerContext'
 import { useMediaExpandRegistration } from '@/contexts/MediaExpandContext'
@@ -50,13 +51,31 @@ import {
   type NodeActionsContextValue,
 } from './NodeActionsContext'
 import { MediaExpandOverlay, type MediaPayload } from './MediaExpandOverlay'
+import {
+  HOVER_THRESHOLD_PX,
+  clearHoveredEdge,
+  pickEdgeAt,
+  pointerOverBlockingNode,
+  publishHoverPoint,
+  reportHoveredEdge,
+  suppressHoveredEdge,
+} from './edgeHover'
+import {
+  NODE_CLIP_MIME,
+  buildClipPayload,
+  hasTextSelection,
+  isEditableTarget,
+  planPaste,
+  pastePositions,
+  readClipPayload,
+} from './copyPaste'
 import { collectDerivedRefs } from './projection'
 import type { CanvasNode, Workflow } from '@/types/canvas'
 import { nodeTypes } from './nodes'
 import type { Viewport } from './placement'
 import { CanvasSaveStatusProvider } from './saveStatusContext'
 import { SaveStatusPill } from './SaveStatusPill'
-import { SelectionToolbar } from './SelectionToolbar'
+import { NodePillToolbar } from './NodePillToolbar'
 import { UploadOverlay } from './UploadOverlay'
 import { useCanvasPositions } from './useCanvasPositions'
 import { ZoomBar } from './ZoomBar'
@@ -147,17 +166,21 @@ function buildExpandPayload(node: CanvasNode, workflow: Workflow | null): MediaP
 
 interface CanvasPageProps {
   onArchiveNodes: (ids: string[]) => void
+  /** Cut one connection. Owned by CanvasView because the cut has to be
+   *  recorded on the same undo stack an archive uses. */
+  onCutEdge: (from: string, to: string, kind?: string) => Promise<void>
 }
 
 export default function CanvasPage({
   onArchiveNodes,
+  onCutEdge,
 }: CanvasPageProps): JSX.Element | null {
   const { projectId = null } = useParams<{ projectId: string }>()
   return (
     <ProjectProvider projectId={projectId}>
       <CanvasSaveStatusProvider>
         <ReactFlowProvider>
-          <CanvasPageInner onArchiveNodes={onArchiveNodes} />
+          <CanvasPageInner onArchiveNodes={onArchiveNodes} onCutEdge={onCutEdge} />
         </ReactFlowProvider>
       </CanvasSaveStatusProvider>
     </ProjectProvider>
@@ -166,6 +189,7 @@ export default function CanvasPage({
 
 function CanvasPageInner({
   onArchiveNodes,
+  onCutEdge,
 }: CanvasPageProps): JSX.Element | null {
   const { projectId = null } = useParams<{ projectId: string }>()
   const {
@@ -295,6 +319,9 @@ function CanvasPageInner({
       onSaveNote: async (nodeId, patchData) => {
         await mutateCanvas(projectId, 'updateNode', { id: nodeId, patch: patchData })
       },
+      // Owned by CanvasView so the cut lands on the same undo stack as an
+      // archive — an act recorded nowhere must not be undoable by proxy.
+      onDeleteEdge: onCutEdge,
       onPatchDraft: async (jobId, patchData) => {
         await patchPendingDraft(projectId, jobId, patchData)
       },
@@ -457,6 +484,109 @@ function CanvasPageInner({
     return () => window.removeEventListener('keydown', handler)
   }, [rfNodes, openCreateModal])
 
+  // ── Copy / paste (⌘C / ⌘V) ────────────────────────────────────────
+  //
+  // All the semantics live in copyPaste.ts (pure, unit-tested); this effect
+  // is only the DOM plumbing. A copy is a second node pointing at the SAME
+  // local_path — no bytes move, and the mutator's asset rename never runs
+  // because the payload carries no tmp_path.
+
+  const pasteCountRef = useRef(0)
+  const pointerFlowRef = useRef<{ x: number; y: number } | null>(null)
+  const pointerRafRef = useRef<number | null>(null)
+  useEffect(
+    () => () => {
+      if (pointerRafRef.current !== null) {
+        cancelAnimationFrame(pointerRafRef.current)
+      }
+      clearHoveredEdge()
+    },
+    [],
+  )
+
+  useEffect(() => {
+    const onCopy = (e: ClipboardEvent): void => {
+      if (isEditableTarget(e.target)) return
+      if (hasTextSelection(window.getSelection())) return
+      if (projectId === null || workflow === null) return
+      const clip = buildClipPayload({
+        projectId,
+        selection: rfNodes
+          .filter((n) => n.selected === true)
+          .map((n) => ({
+            id: n.id,
+            position: n.position,
+            size:
+              typeof n.width === 'number' && typeof n.height === 'number'
+                ? { w: n.width, h: n.height }
+                : null,
+          })),
+        workflowNodes: workflow.nodes,
+        workflowEdges: workflow.edges,
+      })
+      if (clip === null) return
+      e.preventDefault()
+      e.clipboardData?.setData(NODE_CLIP_MIME, JSON.stringify(clip))
+      // Plain-text twin so pasting into the agent terminal says something
+      // useful instead of nothing.
+      e.clipboardData?.setData(
+        'text/plain',
+        clip.nodes.map((_, i) => `#${i + 1}`).join(' '),
+      )
+      pasteCountRef.current = 0
+    }
+
+    const onPaste = (e: ClipboardEvent): void => {
+      if (isEditableTarget(e.target)) return
+      if (projectId === null) return
+      const raw = e.clipboardData?.getData(NODE_CLIP_MIME) ?? ''
+      const clip = readClipPayload(raw)
+      // Not our shape — leave it to UploadOverlay's file-paste handler.
+      if (clip === null) return
+      e.preventDefault()
+      const plan = planPaste(clip, projectId)
+      if (plan.kind === 'foreign') {
+        console.warn(
+          `[canvas:${projectId}] paste ignored: the clip came from another project, whose asset files do not resolve here`,
+        )
+        return
+      }
+      pasteCountRef.current += 1
+      const anchor = pointerFlowRef.current
+      void (async () => {
+        try {
+          const reply = (await mutateCanvas(projectId, 'addBatch', plan.addBatch)) as {
+            assigned?: { node_ids?: string[] }
+          }
+          const nodeIds = reply.assigned?.node_ids ?? []
+          if (nodeIds.length === 0) return
+          const placements = pastePositions({
+            nodeIds,
+            clip,
+            anchor,
+            pasteCount: pasteCountRef.current,
+          })
+          await applyCanvasLayout(projectId, {
+            positions: Object.fromEntries(
+              placements.map((p) => [p.id, p.position]),
+            ),
+          })
+        } catch (err) {
+          console.warn(
+            `[canvas:${projectId}] paste failed: ${err instanceof Error ? err.message : String(err)}`,
+          )
+        }
+      })()
+    }
+
+    window.addEventListener('copy', onCopy)
+    window.addEventListener('paste', onPaste)
+    return () => {
+      window.removeEventListener('copy', onCopy)
+      window.removeEventListener('paste', onPaste)
+    }
+  }, [projectId, workflow, rfNodes])
+
   // ── Archive (Del) ─────────────────────────────────────────────────
   //
   // Archive state and Cmd+Z restore live in CanvasView so Canvas and
@@ -553,23 +683,50 @@ function CanvasPageInner({
   // AssetRow calls it when the user clicks a live row.
 
   const focusNode = useCallback(
-    (nodeId: string): void => {
-      const node = rf.getNode(nodeId)
-      if (node === undefined) return
-      const w =
-        (node as RFNode & { width?: number; measured?: { width?: number } }).width ??
-        (node as RFNode & { width?: number; measured?: { width?: number } }).measured?.width ??
-        DEFAULT_NODE_WIDTH
-      const h =
-        (node as RFNode & { height?: number; measured?: { height?: number } }).height ??
-        (node as RFNode & { height?: number; measured?: { height?: number } }).measured?.height ??
-        DEFAULT_NODE_HEIGHT
-      const cx = node.position.x + w / 2
-      const cy = node.position.y + h / 2
-      // Preserve the user's current zoom, but clamp so a deeply-zoomed
-      // canvas doesn't fly past the node. 0.5–1.2 fits a typical node.
+    (nodeId: string | string[]): void => {
+      const ids = Array.isArray(nodeId) ? nodeId : [nodeId]
+      // Union box of everything that is actually on the canvas right now.
+      // Ids that aren't (archived, or gone) are skipped rather than pulling
+      // the view towards a node nobody can see.
+      let minX = Number.POSITIVE_INFINITY
+      let minY = Number.POSITIVE_INFINITY
+      let maxX = Number.NEGATIVE_INFINITY
+      let maxY = Number.NEGATIVE_INFINITY
+      for (const id of ids) {
+        const node = rf.getNode(id)
+        if (node === undefined) continue
+        const w =
+          (node as RFNode & { width?: number; measured?: { width?: number } }).width ??
+          (node as RFNode & { width?: number; measured?: { width?: number } }).measured?.width ??
+          DEFAULT_NODE_WIDTH
+        const h =
+          (node as RFNode & { height?: number; measured?: { height?: number } }).height ??
+          (node as RFNode & { height?: number; measured?: { height?: number } }).measured?.height ??
+          DEFAULT_NODE_HEIGHT
+        minX = Math.min(minX, node.position.x)
+        minY = Math.min(minY, node.position.y)
+        maxX = Math.max(maxX, node.position.x + w)
+        maxY = Math.max(maxY, node.position.y + h)
+      }
+      if (!Number.isFinite(minX)) return
+      const cx = (minX + maxX) / 2
+      const cy = (minY + maxY) / 2
       const currentZoom = rf.getZoom()
-      const zoom = Math.max(0.5, Math.min(1.2, currentZoom))
+      // One node: preserve the user's zoom, clamped so a deeply-zoomed canvas
+      // doesn't fly past it. A set: zoom out far enough that the whole union
+      // box fits, with a margin, and never zoom IN past the current level —
+      // "show me these" must not become a surprise close-up.
+      let zoom = Math.max(0.5, Math.min(1.2, currentZoom))
+      if (ids.length > 1) {
+        const pane = canvasHostRef.current?.getBoundingClientRect()
+        if (pane !== undefined && pane.width > 0 && pane.height > 0) {
+          const fit = Math.min(
+            (pane.width * 0.8) / Math.max(1, maxX - minX),
+            (pane.height * 0.8) / Math.max(1, maxY - minY),
+          )
+          zoom = Math.max(0.15, Math.min(currentZoom, fit))
+        }
+      }
       rf.setCenter(cx, cy, { zoom, duration: 400 })
     },
     [rf],
@@ -785,6 +942,43 @@ function CanvasPageInner({
     <div
       ref={canvasHostRef}
       className="canvas-host"
+      // Two consumers, one listener, no React state on the hot path:
+      //   · paste centres the pasted set on the pointer;
+      //   · the edge hit test asks which curve is nearest.
+      // Throttled to a frame — a raw pointermove fires far more often than
+      // anything here can use.
+      onPointerMove={(e) => {
+        const { clientX, clientY } = e
+        if (pointerRafRef.current !== null) return
+        pointerRafRef.current = requestAnimationFrame(() => {
+          pointerRafRef.current = null
+          const flow = rf.screenToFlowPosition({ x: clientX, y: clientY })
+          pointerFlowRef.current = flow
+          publishHoverPoint(flow.x, flow.y)
+          // A pointer inside a card is on the card, not on the canvas — no
+          // scissors may appear there. Decided on node TYPE, not DOM
+          // ancestry: a group frame is a node too, and its rectangle covers
+          // most of a tidied canvas.
+          if (pointerOverBlockingNode(rf.getNodes(), flow.x, flow.y)) {
+            reportHoveredEdge(null)
+            return
+          }
+          // The band is in SCREEN px, so it converts to flow units by the
+          // zoom — the feel is then the same at every zoom level.
+          const threshold = HOVER_THRESHOLD_PX / (rf.getZoom() || 1)
+          reportHoveredEdge(pickEdgeAt(flow.x, flow.y, threshold))
+        })
+      }}
+      // A press latches this edge's ✂ off until the pointer leaves its band and
+      // comes back — the button sits UNDER the pointer, so without this it
+      // re-arms mid press-and-drag and keeps eating input meant for the canvas.
+      // …but never when the press IS the button: unmounting it on pointerdown
+      // means the click never reaches it and the cut can never happen at all.
+      onPointerDown={(e) => {
+        if ((e.target as Element | null)?.closest?.('.edge-cut-layer') != null) return
+        suppressHoveredEdge()
+      }}
+      onPointerLeave={clearHoveredEdge}
       style={{
         position: 'absolute',
         inset: 0,
@@ -846,7 +1040,12 @@ function CanvasPageInner({
               nodeBorderRadius={2}
             />
             <ZoomBar onTidy={onTidy} />
-            <SelectionToolbar onGroup={openCreateModal} onArchive={onArchiveNodes} />
+            <NodePillToolbar
+              onGroup={openCreateModal}
+              onArchive={onArchiveNodes}
+              onExpand={expandMediaById}
+              projectId={projectId}
+            />
           </ReactFlow>
           {/* Inside NodeActionsProvider so the overlay's useNodeActions() resolves.
               Inside FireConfirmProvider so the overlay's Generate button can

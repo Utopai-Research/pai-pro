@@ -8,6 +8,12 @@
  * desc; archived group sorts by `archived_at` desc (most-recently
  * archived on top, like an OS Trash). Empty kinds reuse a stable
  * array identity so React.memo on the row doesn't churn.
+ *
+ * USAGE INDEX. Every generation already writes a `derived` edge (source →
+ * generated) and until now nothing read them. `used_in` reverses that graph,
+ * which is what turns a listing into a navigation surface: "this character is
+ * in 7 shots — show me". Only LIVE targets count; an asset whose every
+ * consumer was archived reads as unused, which is true.
  */
 import { useMemo } from 'react'
 import type { CanvasNode, Workflow } from '@/types/canvas'
@@ -33,7 +39,14 @@ export interface AssetItem {
    * node was archived before this field existed. Drives the
    * "most-recently archived first" ordering of the archived group. */
   archived_at: string | null
+  /** Ids of the LIVE nodes derived from this one (outbound `derived`
+   * edges). Empty when nothing was built from it. */
+  used_in: string[]
 }
+
+/** Shared identity for "nothing derived from this" so memoized cards don't
+ *  churn on a fresh empty array every projection. */
+const NO_USAGE: string[] = []
 
 export interface AssetGroups {
   images: AssetItem[]
@@ -57,7 +70,7 @@ function excerpt(s: string | undefined): string {
   return trimmed.slice(0, EXCERPT_MAX).trimEnd() + '…'
 }
 
-function toItem(node: CanvasNode): AssetItem | null {
+function toItem(node: CanvasNode, usage: Map<string, string[]>): AssetItem | null {
   if (node.type === 'image_result') {
     return {
       id: node.id,
@@ -72,6 +85,7 @@ function toItem(node: CanvasNode): AssetItem | null {
       archived: node.data.archived === true,
       generated_at: node.data.metadata?.generated_at ?? null,
       archived_at: node.data.archived_at ?? null,
+      used_in: usage.get(node.id) ?? NO_USAGE,
     }
   }
   if (node.type === 'video_result') {
@@ -87,6 +101,7 @@ function toItem(node: CanvasNode): AssetItem | null {
       archived: node.data.archived === true,
       generated_at: node.data.metadata?.generated_at ?? null,
       archived_at: node.data.archived_at ?? null,
+      used_in: usage.get(node.id) ?? NO_USAGE,
     }
   }
   if (node.type === 'audio_result') {
@@ -103,6 +118,7 @@ function toItem(node: CanvasNode): AssetItem | null {
       archived: node.data.archived === true,
       generated_at: node.data.metadata?.generated_at ?? null,
       archived_at: node.data.archived_at ?? null,
+      used_in: usage.get(node.id) ?? NO_USAGE,
     }
   }
   if (node.type === 'note') {
@@ -120,9 +136,27 @@ function toItem(node: CanvasNode): AssetItem | null {
       generated_at:
         node.data.metadata?.timestamp ?? node.data.metadata?.generated_at ?? null,
       archived_at: node.data.archived_at ?? null,
+      used_in: usage.get(node.id) ?? NO_USAGE,
     }
   }
   return null
+}
+
+/** source id → ids of the LIVE nodes derived from it. Edges pointing at an
+ *  archived or missing node are dropped: "7 uses" has to mean 7 places the
+ *  canvas can actually fly to. */
+function buildUsageIndex(workflow: Workflow): Map<string, string[]> {
+  const live = new Set(
+    workflow.nodes.filter((n) => n.data.archived !== true).map((n) => n.id),
+  )
+  const index = new Map<string, string[]>()
+  for (const edge of workflow.edges) {
+    if (!live.has(edge.to)) continue
+    const list = index.get(edge.from)
+    if (list === undefined) index.set(edge.from, [edge.to])
+    else if (!list.includes(edge.to)) list.push(edge.to)
+  }
+  return index
 }
 
 function sortAndPartition(items: AssetItem[]): AssetItem[] {
@@ -163,8 +197,9 @@ export function useAssets(workflow: Workflow | null): AssetGroups {
       notes: [],
     }
     if (workflow !== null) {
+      const usage = buildUsageIndex(workflow)
       for (const node of workflow.nodes) {
-        const item = toItem(node)
+        const item = toItem(node, usage)
         if (item === null) continue
         buckets[item.kind].push(item)
       }

@@ -6,7 +6,7 @@
  * reference | split`); the renderer also handles undefined subtype
  * (plain image) by emitting `data-subtype="image"` for the CSS rule
  * set. Only `edit` and `reference` change rendering today: `edit`
- * surfaces `source_id` in the footer; `reference` swaps the footer
+ * surfaces `source_id` in the label row; `reference` swaps the label
  * to `source_filename` and forces `object-fit: contain` so pasted-in
  * shapes don't crop. Character voice playback lives on the linked
  * audio_result node, not here — the character card stays a pure image.
@@ -22,7 +22,8 @@ import {
   type NodeState,
 } from '../nodeData'
 import { useNodeActions } from '../NodeActionsContext'
-import { ImageWithFade, NodeHead, useIsInSelectedFrame } from './_shared'
+import { CounterScaledLabel, ImageWithFade, useIsInSelectedFrame } from './_shared'
+import { chipDisplayLabel } from './chipLabel'
 import type { MediaRef } from '../MediaExpandOverlay'
 
 // `derived_refs` is added by projection.ts — refs to source nodes that
@@ -61,9 +62,9 @@ export function ImageResultNode({ id, data, selected }: NodeProps): JSX.Element 
   const isReference = subtype === 'reference'
   const imgObjectFit: CSSProperties['objectFit'] = isReference ? 'contain' : 'cover'
 
-  // Edits + references surface lineage in the footer because it's
+  // Edits + references surface lineage in the label row because it's
   // information the bitmap alone can't convey.
-  const footLeft: string =
+  const labelText: string =
     subtype === 'edit' && d.source_id !== undefined && d.source_id !== ''
       ? `edit of ${d.source_id}`
       : subtype === 'reference' && d.source_filename !== undefined && d.source_filename !== ''
@@ -92,13 +93,21 @@ export function ImageResultNode({ id, data, selected }: NodeProps): JSX.Element 
 
   return (
     <div
-      className={`node image_result${selected ? ' selected' : ''}${isGroupSelected ? ' is-group-selected' : ''}`}
+      className={`node image_result node--media${selected ? ' selected' : ''}${isGroupSelected ? ' is-group-selected' : ''}`}
       data-state={state}
       data-subtype={subtype ?? 'image'}
       style={{ width: size.w }}
     >
       <Handle type="target" position={target} />
-      <NodeHead label={`@${id}`} state={state} assetStatusUrl={url} />
+      {/* Name + specs ride above the card, counter-scaled, in place of the
+          head and foot rows the chromeless card gave up. */}
+      <CounterScaledLabel
+        label={chipDisplayLabel(labelText, id)}
+        meta={meta}
+        assetStatusUrl={url}
+        refId={id}
+        nodeW={size.w}
+      />
       <div
         className="node-body"
         onDoubleClick={canExpand ? expandImage : undefined}
@@ -144,10 +153,6 @@ export function ImageResultNode({ id, data, selected }: NodeProps): JSX.Element 
             ⤢
           </button>
         ) : null}
-      </div>
-      <div className="node-foot nodrag">
-        <span>{footLeft}</span>
-        {meta !== '' ? <span>{meta}</span> : null}
       </div>
       <Handle type="source" position={source} />
     </div>

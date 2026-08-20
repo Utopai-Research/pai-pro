@@ -3,7 +3,7 @@
  *
  * Send-only fast-lane into the existing per-project pty session.
  * Composes a message and submits it through ChatComposerContext;
- * SelectionToolbar's "📎 Refer" path still only inserts draft text.
+ * the selection pill's Refer path still only inserts draft text.
  *
  * Default scope chip pins the message to the currently-expanded
  * node (`@image_5` etc). User can × the chip to send unscoped, or

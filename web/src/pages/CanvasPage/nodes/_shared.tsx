@@ -2,6 +2,8 @@
  * Shared chrome used by every node renderer in this directory.
  *
  *   - NodeHead — head row with label, lifecycle state chip, asset status chip
+ *     (notes + pending pads; media cards carry CounterScaledLabel instead)
+ *   - CounterScaledLabel — the chromeless media card's floating label row
  *   - ImageWithFade — <img> with lazy decode + 300ms opacity fade-in
  *   - nodePropsEqual — narrow memo equality (data ref + selected)
  *
@@ -10,11 +12,13 @@
  * renderer `memo()` is what turns those stable refs into skipped renders.
  */
 import '../nodes-base.css'
-import { useEffect, useState, type CSSProperties } from 'react'
+import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import type { NodeProps } from '@xyflow/react'
 import { useStore } from '@xyflow/react'
 import { useAssetStatuses } from '../NodeActionsContext'
 import type { NodeState } from '../nodeData'
+import { chipRefText } from './chipLabel'
+import { labelEffectiveZoom, labelRowMaxWidth } from './labelGeometry'
 
 /**
  * Status chip. Renders nothing when the URL is missing or absent from
@@ -111,6 +115,126 @@ export function NodeHead({ label, state, stateLabel, assetStatusUrl, hideStateCh
             {stateLabel ?? STATE_LABELS[state]}
           </span>
         ) : null}
+      </span>
+    </div>
+  )
+}
+
+/** How long the "Copied @id" confirmation stays up after a click. */
+const COPIED_MS = 2000
+
+/**
+ * CounterScaledLabel — the label row of a chromeless media card.
+ *
+ * Sits ABOVE the card (`.node-label`, absolute `bottom: 100%`), out of flow so
+ * it reserves no measured height: the box React Flow measures stays exactly
+ * the media, which is what keeps placement stable at every zoom. Holds the
+ * card's name on the left and its spec text + asset-status chip on the right.
+ * No lifecycle state dot — a completed media card is always `complete`, so a
+ * dot there would be a constant.
+ *
+ * ⚠️ The zoom subscription MUST live in this leaf, never in the node renderer:
+ * the renderers are `memo(…, nodePropsEqual)` which only lets `data`/`selected`
+ * through, and zoom never flows through node props (it's a CSS transform on
+ * `.react-flow__viewport`). A `useStore` here re-renders ONLY this label on
+ * each zoom tick; the parent card stays skipped. Putting the subscription on
+ * the card would re-render the whole card (including its <video>) ~60Hz while
+ * zooming.
+ *
+ * The whole row is counter-scaled by `transform: scale(1/zoom)` rather than by
+ * bumping font-size: a transform scales the px-sized chip AND its hover popup
+ * uniformly, so everything reads at native px on screen at any zoom.
+ */
+export function CounterScaledLabel({
+  label,
+  meta,
+  assetStatusUrl,
+  refId,
+  nodeW,
+}: {
+  /** What the row shows. Never blank — see chipDisplayLabel. */
+  label: string
+  /** Right-hand spec text (`image · 2K`, `video · 720p · 5s`). */
+  meta?: string
+  /** URL keying the asset-status chip (✓/⏳/✗). Omit for nodes with no media. */
+  assetStatusUrl?: string | null
+  /** Node id behind this row. Present → the name becomes a copy affordance:
+   *  hover shows the `@<id>` reference key, click copies it. That gesture is
+   *  the entry point to the agent's reference grammar, which the head row used
+   *  to carry in plain sight. */
+  refId?: string
+  /** The card's flow-space width. Present → the row's layout width is capped
+   *  so its ON-SCREEN right edge lands on the card's right edge at every zoom
+   *  (labelRowMaxWidth). Absent → the row shrink-wraps. */
+  nodeW?: number
+}): JSX.Element {
+  const zoom = useStore((s) => s.transform[2])
+  const effectiveZoom = labelEffectiveZoom(zoom)
+  const [copied, setCopied] = useState(false)
+  const copiedTimer = useRef<number | undefined>(undefined)
+  useEffect(() => () => window.clearTimeout(copiedTimer.current), [])
+
+  const ref = refId !== undefined ? chipRefText(refId) : null
+  // One popup carries both halves: the full (untruncated) name plus the
+  // reference line. Deliberately not a native `title` — that would stack the
+  // browser tooltip on top of the styled `data-tip` popup the chips use.
+  const tip =
+    ref === null
+      ? undefined
+      : label !== ref
+        ? `${label}\n${ref} · click to copy`
+        : `${ref} · click to copy`
+
+  const copyRef = (e: React.MouseEvent): void => {
+    // The row lives inside the RF node wrapper: without this a click also
+    // selects the node (and `nodrag` on the span keeps mousedown from starting
+    // a node drag).
+    e.stopPropagation()
+    if (ref === null) return
+    navigator.clipboard
+      .writeText(ref)
+      .then(() => {
+        window.clearTimeout(copiedTimer.current)
+        setCopied(true)
+        copiedTimer.current = window.setTimeout(() => setCopied(false), COPIED_MS)
+      })
+      .catch(() => {
+        /* Clipboard denied (non-secure context) — nothing to confirm. */
+      })
+  }
+
+  return (
+    <div className="node-label">
+      {/* The cap belongs on the FLEX CONTAINER, not on the row wrapper around
+          it: an inline-flex box laid out inside a `width: max-content` parent
+          keeps its preferred width and simply overflows the parent's
+          max-width, so the name never ellipsizes. Capping the container itself
+          is what makes the text span give way. */}
+      <span
+        className="node-label-scale"
+        style={{
+          transform: `scale(${1 / effectiveZoom})`,
+          transformOrigin: 'bottom left',
+          maxWidth: nodeW !== undefined ? labelRowMaxWidth(nodeW, zoom) : undefined,
+        }}
+      >
+        {ref !== null ? (
+          <span
+            className="node-label-ref nodrag"
+            data-tip={copied ? undefined : tip}
+            onClick={copyRef}
+            onDoubleClick={(e) => e.stopPropagation()}
+          >
+            <span className="node-label-text">{label}</span>
+            {copied ? <span className="node-label-copied">{`Copied ${ref}`}</span> : null}
+          </span>
+        ) : (
+          <span className="node-label-text">{label}</span>
+        )}
+        {meta !== undefined && meta !== '' ? (
+          <span className="node-label-meta">{meta}</span>
+        ) : null}
+        {assetStatusUrl !== undefined ? <AssetStatusChip url={assetStatusUrl} /> : null}
       </span>
     </div>
   )

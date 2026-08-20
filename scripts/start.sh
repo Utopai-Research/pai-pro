@@ -41,6 +41,32 @@ ensure_tool() {
     fi
 }
 
+# Variables this checkout owns, pinned into every session we start.
+#
+# tmux seeds a new session's environment from the SERVER's, and the server
+# belongs to whoever started it first — which may be another clone of this
+# repo, or another repo entirely. Nothing this script exports reaches a pane
+# unless it is named here: `set -a; . .env` populates our own shell and stops
+# there. A stale port fails loudly on the next boot; a stale PAI_KEY or
+# PAI_API_BASE does not — it spends real money against a stranger's account,
+# or answers with a different backend's error text. So both are pinned.
+#
+# Every name here is safe to arrive empty: PAI_KEY empty makes the CLIs fail
+# with "PAI_KEY not set", PAI_API_BASE empty falls back to the default host,
+# and the rest are always set by the time a session launches. Do not add a
+# variable whose consumer distinguishes empty from unset (PAI_PROJECTS_DIR
+# and friends read `?? default`, which an empty string would defeat).
+TMUX_PINNED_VARS=(
+    PAI_REPO_ROOT
+    PAI_KEY
+    PAI_API_BASE
+    VIEWER_PORT
+    WEB_PORT
+    WEB_ORIGIN
+    VITE_VIEWER_URL
+    PAI_DEFAULT_AGENT_ID
+)
+
 # tmux_ensure_session <session> <command>
 # Start a detached tmux session running `command`. The trailing `; read`
 # keeps the pane open after the inner process exits — useful for postmortem
@@ -51,7 +77,11 @@ tmux_ensure_session() {
     if tmux has-session -t "$session" 2>/dev/null; then
         return 0
     fi
-    tmux new-session -d -s "$session" "$cmd; read"
+    local env_args=() v
+    for v in "${TMUX_PINNED_VARS[@]}"; do
+        env_args+=(-e "$v=${!v-}")
+    done
+    tmux new-session -d -s "$session" "${env_args[@]}" "$cmd; read"
 }
 
 # wait_until <max_seconds> <cmd...>
