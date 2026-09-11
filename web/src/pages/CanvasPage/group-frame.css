@@ -1,6 +1,5 @@
-/* GroupFrameNode visual chrome — V1 canon (verbatim port from
-   pai-v2's `node-group-frame.css`, picked via pick-variation pass A
-   on 2026-05-07).
+/* GroupFrameNode visual chrome — V1 canon, picked via pick-variation
+   pass A on 2026-05-07.
  *
  * Translucent fill at oklch(0.55 0.10 var(--group-hue) / 0.18) with
  * the title rendered as plain text above the frame's top edge. No

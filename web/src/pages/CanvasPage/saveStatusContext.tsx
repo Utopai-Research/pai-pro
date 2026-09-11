@@ -4,8 +4,11 @@
  * ("Save failed"). Consumed by SaveStatusPill (visible UI) and produced
  * by useCanvasPositions's persistDrag wrapper.
  *
- * Ported from pai-v2 _components/canvas-save-status-context.tsx — same
- * shape, same beforeunload guard. Adapted for Vite (no "use client").
+ * The beforeunload guard lives here rather than in the pill. What decides
+ * whether leaving the page loses work is the number of writes still in
+ * flight, and this is the thing that holds that number; the pill only
+ * renders it, and a pill that happened to be unmounted would take the
+ * guard down with it.
  */
 import {
   createContext,

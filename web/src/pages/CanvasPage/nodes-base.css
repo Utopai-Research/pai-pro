@@ -1,16 +1,17 @@
 /* Shared node chrome — head + body + state machine + skeleton.
  *
- * Ported from pai_agentic_canvas/web/src/styles.css:585-902.
- * Tokens scoped to .canvas-host (the existing CanvasPage wrapper)
- * since v3 hasn't shipped a global oklch token sheet yet. When v3
- * tokens land per roadmap A.3, replace these with @import.
+ * The tokens are scoped to .canvas-host, the CanvasPage wrapper, rather
+ * than :root. There is no global token sheet yet, so a :root block here
+ * would quietly become one — every route would inherit canvas colours the
+ * moment anything on the page mounted a node. Scoping keeps the blast
+ * radius at the canvas until there is a real sheet to @import.
  */
 
 .canvas-host {
   /* Tokens used by image_result / video_result / audio_result / note /
-     pending_generation nodes. Inherited by all children. Values realigned
-     to pai-next/frontend-v4's palette: hue 260 base, solid OKLCH lines
-     (was alpha-on-white), 10px node radius. Accent hue is variable so
+     pending_generation nodes. Inherited by all children. Hue 260 base with
+     solid OKLCH lines rather than alpha-on-white, which kept its contrast
+     when nodes overlap, and a 10px node radius. Accent hue is a variable so
      future tints flip in one line. */
   --cv-accent-h: 60;
   --bg-0: oklch(0.14 0.005 260);
@@ -40,9 +41,9 @@
 /* React Flow handles are required as edge endpoints (the projection
  * connects shot → image / shot → clip via edges that need handle
  * targets), but their default rendering as small visible dots above /
- * below each node is visual noise here — pai-next doesn't expose
- * user-drawn edges. Keep the DOM elements for edges to anchor to;
- * hide them visually. */
+ * below each node is visual noise here — this canvas does not expose
+ * user-drawn edges, so a handle is never a thing to aim at. Keep the DOM
+ * elements for edges to anchor to; hide them visually. */
 .node .react-flow__handle {
   width: 1px;
   height: 1px;
@@ -481,8 +482,7 @@
 /* Hover-revealed expand button. The primary affordance is now
    double-click on the media body (paired with cursor: zoom-in), which
    covers the discoverability gap; the button remains as a hover-only
-   secondary trigger for click-oriented users. Ported from
-   styles.css:1611-1637. */
+   secondary trigger for click-oriented users. */
 .media-expand-btn {
   position: absolute;
   top: 8px;
@@ -557,8 +557,7 @@
 /* The agent-fires-generation ghost. Reuses .node.image_result chrome
    with a .pending modifier — dashed border, no elevation, shimmer
    sweep over the body. Cleared from the canvas when the real node
-   (matching prompt) lands. Ported from
-   pai_agentic_canvas/web/src/styles.css:1216-1305. */
+   (matching prompt) lands. */
 .node.pending {
   border-style: dashed;
   border-color: var(--line-2);
@@ -919,9 +918,9 @@
    is assigned to a numeric reel slot. Read-only: assign/clear both
    live in the TimelinePanel, so this element is non-interactive.
    Unassigned clips render no badge.
-   Adapted from pai_agentic_canvas/web/src/styles.css:2280-2307 — the
-   original two-state hover-reveal `#+` / `#N` button was flattened to
-   a single indicator once the timeline took over reel curation. */
+   A flat indicator rather than a hover-reveal button on purpose: the
+   timeline owns reel curation, and a second place to assign a slot
+   would be a second writer for the same field. */
 .shot-badge {
   position: absolute;
   top: 8px;

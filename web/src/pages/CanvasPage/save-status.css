@@ -1,8 +1,8 @@
 /* SaveStatusPill — floating pill at bottom-center of the canvas pane.
  *
- * Ported from pai-v2 _components/save-status.css. Tokens are scoped on
- * the wrap (v3 has no global token sheet yet — same pattern as
- * AgentPanel).
+ * Tokens are scoped on the wrap rather than :root, for the reason the
+ * node chrome scopes its own: there is no global sheet yet, and a :root
+ * block in a component stylesheet becomes one by accident.
  */
 
 .save-pill-wrap {

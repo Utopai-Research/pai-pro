@@ -178,3 +178,67 @@ test("the allow-list only exempts files that still exist", SKIP || {}, async () 
     );
   }
 });
+
+// ── citations into somebody else's tree ────────────────────────────────
+//
+// The three passes above this line all match NAMES, and a name-matcher can
+// only ever find the names somebody remembered to write down. That failed
+// twice in one day: a file was cleaned of one predecessor repo and still
+// carried three comments citing a second one, plus two sibling files citing a
+// third, because neither was on the list. The names were not similar and no
+// amount of care with the list would have surfaced them.
+//
+// What the leaks DO have in common is a shape. A comment that cites a source
+// file together with a line number is pointing at a specific tree. If that
+// path resolves inside this repo it is an ordinary cross-reference and the
+// most useful kind of comment there is. If it does not resolve, the tree being
+// pointed at is not this one — and since everything tracked here is published,
+// the citation hands a reader the other repo's file layout, which is worse
+// than naming it: a name is a word, a path is a map.
+//
+// This is the only rule here that catches a citation carrying no repo name at
+// all — a bare filename and a line range, which reads as harmless and is not.
+//
+// Deliberately NOT illustrated with a real example: this file is exported and
+// the gate scans itself, so an example citation would be a permanent failure.
+const CITED_PATH = /(?<![\w@$.\-/])((?:[A-Za-z0-9_][A-Za-z0-9_.\-]*\/)*[A-Za-z0-9_][A-Za-z0-9_.\-]*\.[a-z]{2,4}):\d+(?:-\d+)?\b/g;
+
+function repoPaths() {
+  return new Set(
+    execFileSync("git", ["ls-files", "-z"], { cwd: REPO_ROOT, encoding: "utf8", maxBuffer: 32 * 1024 * 1024 })
+      .split("\0")
+      .filter(Boolean),
+  );
+}
+
+// A citation resolves if it is a tracked path, or the tail of one: comments
+// routinely shorten a path to the part that identifies it, and requiring the
+// full path from the repo root would flag every one of those.
+function resolvesHere(cited, tracked) {
+  const clean = cited.replace(/^\.\//, "");
+  if (tracked.has(clean)) return true;
+  for (const p of tracked) if (p.endsWith("/" + clean)) return true;
+  return false;
+}
+
+test("no citations into a source tree that is not this one", SKIP || {}, async () => {
+  const tracked = repoPaths();
+  const hits = await scan((line) => {
+    CITED_PATH.lastIndex = 0;
+    for (const m of line.matchAll(CITED_PATH)) {
+      const cited = m[1];
+      if (cited.includes("node_modules/")) continue;
+      if (!resolvesHere(cited, tracked)) return cited;
+    }
+    return null;
+  });
+  assert.deepEqual(
+    hits,
+    [],
+    "Each of these cites a file that does not exist in this repo, so it is\n" +
+      "describing another codebase's layout to everyone who reads ours.\n" +
+      "Say what the code does and why it is shaped that way; drop where it\n" +
+      "came from. If the path is real and just moved, fix the path:\n  " +
+      hits.join("\n  "),
+  );
+});
