@@ -77,9 +77,24 @@ async function makeFakeCodexBin(t) {
   return dir;
 }
 
-test("scripts/setup default installs Claude skill symlinks", async (t) => {
+test("scripts/setup with no flag sets up the default agent, not Claude", async (t) => {
+  // Bare `./scripts/setup` follows whatever a new project would get, so it
+  // moved when the default did. Installing Claude's skill symlinks here would
+  // set up an agent the app is not about to launch.
   const home = await tempHome(t);
-  const result = await runSetup([], { home });
+  const fakeBin = await makeFakeCodexBin(t);
+  const result = await runSetup([], {
+    home,
+    path: `${fakeBin}${delimiter}${process.env.PATH}`,
+  });
+  assert.equal(result.code, 0, result.stderr);
+  assert.match(result.stdout, /codex CLI: codex-cli 9\.9\.9/);
+  assert.equal(await pathExists(join(home, ".claude", "skills")), false);
+});
+
+test("scripts/setup --agent claude installs Claude skill symlinks", async (t) => {
+  const home = await tempHome(t);
+  const result = await runSetup(["--agent", "claude"], { home });
   assert.equal(result.code, 0, result.stderr);
   assert.match(result.stdout, /open a new Claude Code session/);
 
@@ -103,7 +118,7 @@ test("scripts/setup --agent codex validates CLI and does not install Claude syml
 
   assert.equal(result.code, 0, result.stderr);
   assert.match(result.stdout, /codex CLI: codex-cli 9\.9\.9/);
-  assert.match(result.stdout, /PAI_DEFAULT_AGENT_ID=codex \.\/scripts\/start\.sh/);
+  assert.match(result.stdout, /nothing extra is needed to start/);
   assert.equal(await pathExists(join(home, ".claude", "skills")), false);
 });
 
@@ -145,4 +160,33 @@ test("scripts/setup --agent all validates Codex without host-mode instructions",
   assert.equal(result.code, 0, result.stderr);
   assert.match(result.stdout, /codex CLI: codex-cli 9\.9\.9/);
   assert.doesNotMatch(result.stdout, /PAI_DEFAULT_AGENT_ID=codex \.\/scripts\/start\.sh/);
+});
+
+test("a missing default agent CLI names both ways forward, not just one", async (t) => {
+  // Codex became the default, so this message is now reached by people who
+  // never asked for Codex — it ran that way because they typed nothing. The
+  // old text said only "install Codex CLI", which is a dead end for somebody
+  // who deliberately uses Claude and was handed Codex by a default.
+  const home = await tempHome(t);
+  const result = await runSetup([], { home, path: "/bin:/usr/bin" });
+
+  assert.equal(result.code, 1);
+  assert.match(result.stderr, /codex CLI not found on PATH/);
+  assert.match(result.stderr, /--agent claude/, "must offer the other agent");
+  assert.match(
+    result.stderr,
+    /PAI_DEFAULT_AGENT_ID=claude/,
+    "offering the other agent is useless without the flag that makes it stick",
+  );
+});
+
+test("naming the agent explicitly keeps the single-road message", async (t) => {
+  // Someone who typed `--agent codex` wants Codex. Offering them Claude would
+  // be answering a question they did not ask.
+  const home = await tempHome(t);
+  const result = await runSetup(["--agent", "codex"], { home, path: "/bin:/usr/bin" });
+
+  assert.equal(result.code, 1);
+  assert.match(result.stderr, /codex CLI not found on PATH/);
+  assert.doesNotMatch(result.stderr, /--agent claude/);
 });

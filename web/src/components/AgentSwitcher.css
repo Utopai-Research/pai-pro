@@ -1,0 +1,162 @@
+/* AgentSwitcher — the agent control in the terminal panel's header.
+ *
+ * These colours are literals, not canvas tokens, and that is deliberate: the
+ * terminal panel is a fixed #0a0a0a surface that does not follow the canvas
+ * theme, so a token here would drift away from the ground it sits on.
+ *
+ * The trigger deliberately does NOT say "Agent". The menu says it at the top,
+ * and the header used to print the word next to the provider — which is what
+ * made a second strip underneath read as a duplicate. What is left is the part
+ * that varies. */
+
+.agent-trigger-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.agent-trigger {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid #2e2e2e;
+  border-radius: 999px;
+  background: #141414;
+  color: #ededed;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.agent-trigger:hover:not(:disabled) { border-color: #454545; }
+.agent-trigger:disabled { opacity: 0.5; cursor: default; }
+.agent-trigger:focus-visible { outline: 2px solid #5a9cf8; outline-offset: 2px; }
+
+/* The same glyph the menu rows carry, so the trigger and the list read as one
+   control rather than two unrelated things. */
+.agent-bolt { display: flex; flex: 0 0 auto; color: #d9a44a; }
+.agent-chev { font-size: 9px; opacity: 0.5; }
+
+.agent-error {
+  font-size: 10px;
+  color: #c9705f;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+/* ── menu ─────────────────────────────────────────────────────────────── */
+.agent-catcher { position: absolute; inset: 0; z-index: 10; }
+
+.agent-menu {
+  position: absolute;
+  left: 8px;
+  top: 52px;
+  z-index: 20;
+  width: 216px;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  border: 1px solid #2c2c2c;
+  border-radius: 14px;
+  background: #141414;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.6), 0 2px 6px rgba(0, 0, 0, 0.4);
+  outline: none;
+}
+
+.agent-menu-label {
+  padding: 4px 8px 5px;
+  font-size: 11.5px;
+  color: #6f6f6f;
+  font-family: system-ui, -apple-system, sans-serif;
+}
+
+.agent-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: #d6d6d6;
+  text-align: left;
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+/* Hover and the keyboard cursor must not share a fill. With one value the
+   keyboard position vanishes the moment the pointer is anywhere over the
+   menu — which is exactly when you need to see it. */
+.agent-row:hover:not(:disabled) { background: rgba(255, 255, 255, 0.05); }
+.agent-row.at-cursor:not(:disabled) { background: rgba(255, 255, 255, 0.11); }
+.agent-row:disabled { opacity: 0.4; cursor: not-allowed; }
+.agent-row:focus-visible { outline: 2px solid #5a9cf8; outline-offset: -2px; }
+
+.agent-row-icon { display: flex; flex: 0 0 auto; color: #9a9a9a; }
+.agent-row-label { flex: 1; min-width: 0; }
+.agent-row-right { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; color: #8a8a8a; }
+
+.agent-pill {
+  padding: 0 5px;
+  line-height: 15px;
+  font-size: 9.5px;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  border: 1px solid rgba(217, 164, 74, 0.55);
+  border-radius: 999px;
+  color: #d9a44a;
+}
+.agent-pill.warn { border-color: rgba(201, 112, 95, 0.55); color: #c9705f; }
+
+/* ── confirm ──────────────────────────────────────────────────────────── */
+.agent-confirm {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  background: rgba(6, 6, 6, 0.82);
+}
+
+.agent-confirm-box {
+  width: 100%;
+  max-width: 330px;
+  padding: 14px 15px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border: 1px solid #2c2c2c;
+  border-radius: 10px;
+  background: #141414;
+  font-family: system-ui, -apple-system, sans-serif;
+}
+.agent-confirm-box h4 { margin: 0; font-size: 12.5px; font-weight: 600; color: #ededed; }
+.agent-confirm-box p { margin: 0; font-size: 11.5px; line-height: 1.5; color: #9a9a9a; }
+
+.agent-confirm-actions { display: flex; gap: 8px; justify-content: flex-end; }
+.agent-confirm-actions button {
+  padding: 5px 11px;
+  border: 1px solid #333;
+  border-radius: 5px;
+  background: #1d1d1d;
+  color: #ddd;
+  font: inherit;
+  font-size: 11.5px;
+  cursor: pointer;
+}
+.agent-confirm-actions button.go { background: #b4482f; border-color: #c2543a; color: #fff; }
+.agent-confirm-actions button:focus-visible { outline: 2px solid #5a9cf8; outline-offset: 1px; }

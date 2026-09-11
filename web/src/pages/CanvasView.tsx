@@ -31,6 +31,7 @@ import { UndoToast } from './CanvasPage/UndoToast'
 import { createUndoStack, type UndoStack } from './CanvasPage/undoStack'
 import { AssetBrowser, type AssetRevealRequest } from '@/components/AssetBrowser'
 import { CanvasRail } from '@/components/CanvasRail'
+import { AgentSwitcher } from '@/components/AgentSwitcher'
 import { TerminalPanel } from '@/components/TerminalPanel'
 import { TimelinePanel } from '@/components/TimelinePanel'
 import { CanvasFocusProvider } from '@/contexts/CanvasFocusContext'
@@ -778,7 +779,6 @@ export default function CanvasView(): JSX.Element {
           <AgentPanel
             projectId={projectId}
             agentId={bundle?.agent_id ?? null}
-            agentLabel={bundle?.agent_label ?? null}
             activated={activated}
             autoRun={bundle?.auto_run ?? null}
           />
@@ -800,13 +800,11 @@ export default function CanvasView(): JSX.Element {
 function AgentPanel({
   projectId,
   agentId,
-  agentLabel,
   activated,
   autoRun,
 }: {
   projectId: string | null
   agentId: string | null
-  agentLabel: string | null
   activated: boolean
   autoRun: AutoRun | null
 }): JSX.Element {
@@ -846,9 +844,14 @@ function AgentPanel({
   }, [composer])
 
   return (
-    <div className="flex h-full w-full flex-col bg-[#0a0a0a]">
+    // `relative` is load-bearing, not cosmetic: the agent menu and its confirm
+    // are absolutely positioned and must anchor to THIS panel. Without it they
+    // resolve against a page-level ancestor and the menu opens over the canvas
+    // on the far side of the window, nowhere near the trigger that opened it.
+    <div className="relative flex h-full w-full flex-col bg-[#0a0a0a]">
       <AgentHeader
-        agentLabel={agentLabel}
+        projectId={projectId}
+        agentId={agentId}
         autoActive={autoPhase !== 'idle'}
         onAutoClick={armAuto}
       />
@@ -865,8 +868,10 @@ function AgentPanel({
       ) : null}
       <div className="relative flex-1 overflow-hidden">
         <div className="absolute inset-0">
+          {/* Keyed on the agent: a switch kills the pty server-side, so the
+              panel must remount rather than re-attach to a dead one. */}
           {activated ? (
-            <TerminalPanel projectId={projectId} agentId={agentId} />
+            <TerminalPanel key={agentId ?? 'none'} projectId={projectId} agentId={agentId} />
           ) : (
             <div className="h-full w-full bg-[#0a0a0a]" />
           )}
@@ -1263,29 +1268,27 @@ function CanvasTabs({
 }
 
 function AgentHeader({
-  agentLabel,
+  projectId,
+  agentId,
   autoActive,
   onAutoClick,
 }: {
-  agentLabel: string | null
+  projectId: string | null
+  agentId: string | null
   autoActive: boolean
   onAutoClick: () => void
 }): JSX.Element {
+  // The centre track used to hold a static "AGENT" pill with the provider
+  // beside it. It named the agent and could not change it, so a second strip
+  // had to be added below to do that — and printed the same word twice. The
+  // label is now the control and sits in the left track; the centre is gone.
+  //
+  // The switcher's menu and confirm are absolutely positioned against the
+  // PANEL, not this header, so they can hang below 48px and cover the
+  // terminal. This element must therefore NOT be a positioned ancestor.
   return (
-    <div className="grid h-12 shrink-0 grid-cols-[1fr_auto_1fr] items-center gap-2 border-b border-neutral-800 bg-[#0a0a0a] px-2">
-      <div />
-      <div className="flex min-w-0 items-center justify-center gap-2">
-        <div className="flex items-center rounded-full border border-border bg-card p-0.5">
-          <div className="relative rounded-full bg-foreground px-4 py-1 text-xs font-medium uppercase tracking-wider text-background">
-            Agent
-          </div>
-        </div>
-        {agentLabel ? (
-          <span className="text-[11px] font-medium uppercase tracking-wider text-neutral-500">
-            {agentLabel}
-          </span>
-        ) : null}
-      </div>
+    <div className="grid h-12 shrink-0 grid-cols-[auto_1fr] items-center gap-2 border-b border-neutral-800 bg-[#0a0a0a] px-2">
+      <AgentSwitcher projectId={projectId} agentId={agentId} autoActive={autoActive} />
       <div className="flex justify-end">
         <button
           type="button"

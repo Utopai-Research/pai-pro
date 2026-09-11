@@ -1,9 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { access, lstat, mkdtemp, readFile, readdir, readlink, rm } from "node:fs/promises";
+import { access, chmod, lstat, mkdtemp, readFile, readdir, readlink, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve, dirname } from "node:path";
+import { delimiter, join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -15,7 +15,25 @@ async function freePort() {
   return 17800 + Math.floor(Math.random() * 1000);
 }
 
-async function startViewer({ paiDefaultAgentId, paiAgent } = {}) {
+/**
+ * A stand-in for an agent CLI on PATH.
+ *
+ * The switch route probes the target binary and refuses with 409 when it is
+ * missing — deliberately, so a one-click switch cannot strand a project on an
+ * agent this machine cannot launch. That probe is real, so a test that wants
+ * the switch to SUCCEED has to supply the binary. CI has neither CLI, which is
+ * what turned these green locally and red there.
+ */
+async function makeFakeAgentBin(t, name) {
+  const dir = await mkdtemp(join(tmpdir(), `pai-fake-${name}-`));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const bin = join(dir, name);
+  await writeFile(bin, `#!/bin/sh\necho '${name} 9.9.9'\n`);
+  await chmod(bin, 0o755);
+  return dir;
+}
+
+async function startViewer({ paiDefaultAgentId, paiAgent, extraPath } = {}) {
   const projectsDir = await mkdtemp(join(tmpdir(), "project-create-agent-"));
   const port = await freePort();
   const baseUrl = `http://127.0.0.1:${port}`;
@@ -27,6 +45,7 @@ async function startViewer({ paiDefaultAgentId, paiAgent } = {}) {
     PAI_ROOT_LINK: join(projectsDir, "workflow.json"),
     WEB_ORIGIN: "http://localhost:0",
   };
+  if (extraPath) env.PATH = `${extraPath}${delimiter}${process.env.PATH ?? ""}`;
   // Use "" (not delete) for the unset case. The spawned viewer reloads the
   // repo .env on boot, and dotenv only fills *absent* keys — so deleting a
   // var lets a developer's local .env (e.g. PAI_DEFAULT_AGENT_ID=codex)
@@ -109,24 +128,23 @@ async function assertProjectSkillLinks(dir) {
   }
 }
 
-test("POST /projects stores claude agent_id when PAI_DEFAULT_AGENT_ID is unset", async () => {
+test("POST /projects stores codex agent_id when PAI_DEFAULT_AGENT_ID is unset", async () => {
+  // The scaffolding assertions are the point, not the label: a project created
+  // on the default must come out with the files THAT agent actually reads.
+  // Getting the id right while writing the other agent's files is the failure
+  // this guards.
   const handle = await startViewer();
   try {
     const { meta, dir, row } = await createProject(handle, "Agent Default");
-    assert.equal(meta.agent_id, "claude");
-    assert.equal(row.agent_id, "claude");
-    assert.equal(row.agent_label, "Claude");
+    assert.equal(meta.agent_id, "codex");
+    assert.equal(row.agent_id, "codex");
+    assert.equal(row.agent_label, "Codex");
     const bundle = await (await fetch(`${handle.baseUrl}/projects/${row.id}`)).json();
-    assert.equal(bundle.agent_id, "claude");
-    assert.equal(bundle.agent_label, "Claude");
+    assert.equal(bundle.agent_id, "codex");
+    assert.equal(bundle.agent_label, "Codex");
     assert.equal(await pathExists(join(dir, "PROJECT_AGENT.md")), true);
-    assert.equal(await pathExists(join(dir, "CLAUDE.md")), true);
-    const claudeMd = await readFile(join(dir, "CLAUDE.md"), "utf8");
-    assert.match(claudeMd, /--stage/);
-    assert.match(claudeMd, /generate_image_pro\.js/);
-    assert.match(claudeMd, /run_in_background: true/);
-    assert.match(claudeMd, /BashOutput/);
-    assert.equal(await pathExists(join(dir, ".claude", "settings.local.json")), true);
+    assert.equal(await pathExists(join(dir, "AGENTS.md")), true);
+    assert.equal(await pathExists(join(dir, "CLAUDE.md")), false);
     await assertProjectSkillLinks(dir);
   } finally {
     await stopViewer(handle);
@@ -134,12 +152,15 @@ test("POST /projects stores claude agent_id when PAI_DEFAULT_AGENT_ID is unset",
 });
 
 test("POST /projects ignores unsupported PAI_AGENT alias", async () => {
+  // PAI_AGENT was never the variable this reads. Setting it must change
+  // nothing, which now means landing on the new-project default rather than
+  // on the value it names.
   const handle = await startViewer({ paiAgent: "codex" });
   try {
     const { meta, row } = await createProject(handle, "Agent Legacy Alias");
-    assert.equal(meta.agent_id, "claude");
-    assert.equal(row.agent_id, "claude");
-    assert.equal(row.agent_label, "Claude");
+    assert.equal(meta.agent_id, "codex");
+    assert.equal(row.agent_id, "codex");
+    assert.equal(row.agent_label, "Codex");
   } finally {
     await stopViewer(handle);
   }
@@ -170,6 +191,93 @@ test("POST /projects stores codex agent_id when PAI_DEFAULT_AGENT_ID=codex", asy
     assert.equal(await pathExists(join(dir, "CLAUDE.md")), false);
     assert.equal(await pathExists(join(dir, ".claude")), false);
     await assertProjectSkillLinks(dir);
+  } finally {
+    await stopViewer(handle);
+  }
+});
+
+// ── switching an existing project ──────────────────────────────────────
+//
+// The agent used to be fixed at creation, readable only by editing meta.json
+// and restarting the viewer. PATCH makes it a runtime choice, which means the
+// project has to end up with the incoming agent's scaffolding AND lose the
+// outgoing agent's session pointer — a stale pointer makes the Home list claim
+// a saved conversation the new agent has never seen.
+
+async function patchAgent(handle, projectId, agentId) {
+  const res = await fetch(`${handle.baseUrl}/projects/${projectId}`, {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ agent_id: agentId }),
+  });
+  return { status: res.status, body: await res.json().catch(() => null) };
+}
+
+test("PATCH agent_id moves the project and lays down the new agent's files", async (t) => {
+  const handle = await startViewer({ extraPath: await makeFakeAgentBin(t, "claude") });
+  try {
+    const { meta, dir, row } = await createProject(handle, "Agent Switch");
+    assert.equal(meta.agent_id, "codex");
+    assert.equal(await pathExists(join(dir, "AGENTS.md")), true);
+    assert.equal(await pathExists(join(dir, "CLAUDE.md")), false);
+
+    const { status } = await patchAgent(handle, row.id, "claude");
+    assert.equal(status, 200);
+
+    const bundle = await (await fetch(`${handle.baseUrl}/projects/${row.id}`)).json();
+    assert.equal(bundle.agent_id, "claude");
+    assert.equal(bundle.agent_label, "Claude");
+    // The incoming agent can only run if its own files are there.
+    assert.equal(await pathExists(join(dir, "CLAUDE.md")), true);
+    assert.equal(await pathExists(join(dir, ".claude", "settings.local.json")), true);
+    // The outgoing agent's files are left alone: switching back must not have
+    // to rebuild them, and a customized copy is the user's.
+    assert.equal(await pathExists(join(dir, "AGENTS.md")), true);
+    await assertProjectSkillLinks(dir);
+  } finally {
+    await stopViewer(handle);
+  }
+});
+
+test("PATCH agent_id drops the previous agent's session pointer", async (t) => {
+  const handle = await startViewer({ extraPath: await makeFakeAgentBin(t, "claude") });
+  try {
+    const { dir, row } = await createProject(handle, "Agent Switch Session");
+    // Stand in for a session the departing agent had discovered and persisted.
+    const metaPath = join(dir, "meta.json");
+    const before = JSON.parse(await readFile(metaPath, "utf8"));
+    before.agent_session_id = "0199c4f2-aaaa-bbbb-cccc-ddddeeeeffff";
+    await writeFile(metaPath, JSON.stringify(before, null, 2));
+
+    await patchAgent(handle, row.id, "claude");
+
+    const after = JSON.parse(await readFile(metaPath, "utf8"));
+    assert.equal(after.agent_id, "claude");
+    assert.equal(
+      Object.hasOwn(after, "agent_session_id"),
+      false,
+      "the pointer belongs to the agent that just stopped — carrying it over " +
+        "makes the project list advertise a conversation the new agent has never seen",
+    );
+  } finally {
+    await stopViewer(handle);
+  }
+});
+
+test("PATCH agent_id rejects an id we do not ship, and is a no-op for the current one", async () => {
+  const handle = await startViewer();
+  try {
+    const { row } = await createProject(handle, "Agent Switch Guards");
+
+    const bad = await patchAgent(handle, row.id, "gemini");
+    assert.equal(bad.status, 400);
+    assert.match(bad.body.error, /agent_id must be one of/);
+
+    // Re-selecting the current agent must not kill the pty or rewrite meta.
+    const same = await patchAgent(handle, row.id, "codex");
+    assert.equal(same.status, 200);
+    const bundle = await (await fetch(`${handle.baseUrl}/projects/${row.id}`)).json();
+    assert.equal(bundle.agent_id, "codex");
   } finally {
     await stopViewer(handle);
   }

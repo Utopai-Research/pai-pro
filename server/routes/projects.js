@@ -14,7 +14,12 @@ import {
   publicAutoRun,
   reserveAutoRunBudget,
 } from "../lib/auto_runs.js";
-import { resolveAgentIdForNewProject } from "../agents/index.js";
+import {
+  getProvider,
+  listProviders,
+  resolveAgentIdForMeta,
+  resolveAgentIdForNewProject,
+} from "../agents/index.js";
 import { mutate } from "../canvas_mutator.js";
 import {
   ACTIVE_FILE,
@@ -41,11 +46,16 @@ import { rowFor } from "./system.js";
 const ALLOWED_ASSET_KINDS = new Set(["images", "videos", "audios", "refs", "notes"]);
 
 function emitMetaSlice(io, id, meta) {
+  const agentId = resolveAgentIdForMeta(meta);
   io.to(id).emit("title", {
     projectId: id,
     title: meta.title,
     dangerously_skip_draft_gate: !!meta.dangerously_skip_draft_gate,
     auto_run: publicAutoRun(meta.auto_run),
+    // Carried so a switch reaches every open tab. CanvasView keys the terminal
+    // panel on this, so the new value is what remounts it against the new pty.
+    agent_id: agentId,
+    agent_label: getProvider(agentId)?.label ?? agentId,
   });
 }
 
@@ -131,10 +141,15 @@ export function registerProjectsRoutes({ app, io, projects, mutatorHooks }) {
     const body = req.body ?? {};
     const titleIn = body.title;
     const flagIn = body.dangerously_skip_draft_gate;
+    const agentIn = body.agent_id;
     const hasTitle = titleIn !== undefined;
     const hasFlag = flagIn !== undefined;
-    if (!hasTitle && !hasFlag) {
+    const hasAgent = agentIn !== undefined;
+    if (!hasTitle && !hasFlag && !hasAgent) {
       return res.status(400).json({ error: "no patchable fields in body" });
+    }
+    if (hasAgent && typeof agentIn !== "string") {
+      return res.status(400).json({ error: "agent_id must be a string" });
     }
     if (hasTitle && typeof titleIn !== "string") {
       return res.status(400).json({ error: "title must be a string" });
@@ -175,7 +190,48 @@ export function registerProjectsRoutes({ app, io, projects, mutatorHooks }) {
           else delete meta.dangerously_skip_draft_gate;
         });
       }
-      if (hasFlag || !p.canvasState || typeof p.canvasState !== "object") {
+      if (hasAgent) {
+        const nextAgent = agentIn.trim().toLowerCase();
+        const prevAgent = resolveAgentIdForMeta(p.meta);
+        const provider = getProvider(nextAgent);
+        if (!provider) {
+          const ids = listProviders().map((x) => x.id).join(", ");
+          return res.status(400).json({ error: `agent_id must be one of: ${ids}` });
+        }
+        if (nextAgent !== prevAgent) {
+          // Refuse rather than strand the project on a binary this machine does
+          // not have. The switch is one click and the failure would surface
+          // minutes later as a terminal that never prints anything.
+          const ok = await provider.healthCheck().catch(() => false);
+          if (!ok) {
+            console.warn(`[projects] agent switch ${id}: '${nextAgent}' CLI not on PATH — refused`);
+            return res.status(409).json({ error: `'${nextAgent}' CLI not found on PATH` });
+          }
+
+          // 🔴 ORDER MATTERS, and this is the order.
+          //
+          // Meta is written BEFORE the pty is killed. A second tab can be
+          // subscribing at this exact moment, and the spawn path resolves the
+          // owning agent from meta — so a kill-first ordering has a window
+          // where the respawn reads the OLD agent and relaunches the one we
+          // just switched away from.
+          await updateProjectMeta(id, p, (meta) => {
+            meta.agent_id = nextAgent;
+            // The recorded session belongs to the agent that just stopped.
+            // Nothing reads it for resume (each provider rediscovers its own
+            // sessions by cwd), but leaving it makes the Home list claim a
+            // saved conversation the new agent has never seen.
+            delete meta.agent_session_id;
+            delete meta.claude_session_id;
+          });
+          // Lay down the incoming agent's scaffolding before anything can
+          // launch into a project that has none. Write-if-missing, so a
+          // customized file from an earlier stint on this agent survives.
+          await ensureProjectStructure(id, { agentId: nextAgent });
+          killPty(id);
+        }
+      }
+      if (hasFlag || hasAgent || !p.canvasState || typeof p.canvasState !== "object") {
         emitMetaSlice(io, id, p.meta);
       }
       res.json({ ok: true, row: rowFor(p.meta, p) });

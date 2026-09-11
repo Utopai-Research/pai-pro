@@ -34,8 +34,10 @@ PAI-Pro 是一个本地部署的 AI 电影制作工作区，围绕四件事构�
 
 | 选择 | 命令 |
 | --- | --- |
-| **[Claude Code][claude-code-url]** | Docker: `./scripts/docker-start.sh`<br />本地开发：如果端口被占用，先运行 `./scripts/stop.sh`；然后运行 `./scripts/setup --agent claude` 和 `./scripts/start.sh` |
-| **[Codex][codex-url]** | Docker: `PAI_DEFAULT_AGENT_ID=codex ./scripts/docker-start.sh`<br />本地开发：如果端口被占用，先运行 `./scripts/stop.sh`；然后运行 `./scripts/setup --agent codex` 和 `PAI_DEFAULT_AGENT_ID=codex ./scripts/start.sh` |
+| **[Codex][codex-url]**（默认） | Docker: `./scripts/docker-start.sh`<br />本地开发：如果端口被占用，先运行 `./scripts/stop.sh`；然后运行 `./scripts/setup` 和 `./scripts/start.sh` |
+| **[Claude Code][claude-code-url]** | Docker: `PAI_DEFAULT_AGENT_ID=claude ./scripts/docker-start.sh`<br />本地开发：如果端口被占用，先运行 `./scripts/stop.sh`；然后运行 `./scripts/setup --agent claude` 和 `PAI_DEFAULT_AGENT_ID=claude ./scripts/start.sh` |
+
+无论选哪个，项目的 agent 随时可以在终端面板顶部的控件里切换——上面的选择只决定**新建**项目从哪个开始。
 
 Docker 模式打开 <http://localhost:7588>，本地模式打开 <http://localhost:7443>。
 

@@ -8,6 +8,7 @@ import { promises as fsp } from "node:fs";
 import { promisify } from "node:util";
 
 import {
+  defaultAgentIdForNewProject,
   getProvider,
   listProviders,
   resolveAgentIdForMeta,
@@ -112,6 +113,29 @@ export function registerSystemRoutes({ app, projects, nodePty, healthChecks = {}
   // null so the field is always present. Internal-only models (hidden:
   // true — e.g. the asset-upload row) are filtered out: they have no
   // canvas card or cost chip.
+  // The roster the switcher renders. `installed` is the same PATH probe
+  // /healthz runs, because a provider the machine cannot launch has to be
+  // visible-but-disabled rather than hidden: a missing row turns "why can't I
+  // pick Codex" into a question with no answer on screen.
+  app.get("/agents", async (_req, res) => {
+    const fallback = defaultAgentIdForNewProject();
+    const rows = await Promise.all(
+      listProviders().map(async (provider) => {
+        const override = healthChecks[`${provider.id}Cli`];
+        const installed = await safeCheck(() =>
+          override ? override() : provider.healthCheck(),
+        );
+        return {
+          id: provider.id,
+          label: provider.label ?? provider.id,
+          installed,
+          is_default: provider.id === resolveAgentIdForNewProject(env),
+        };
+      }),
+    );
+    res.json({ agents: rows, default_agent_id: fallback });
+  });
+
   app.get("/models", (_req, res) => {
     res.json(
       MODELS

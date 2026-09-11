@@ -12,12 +12,26 @@ import { resolveAgentBypass } from "../agents/bypass.js";
 // model/effort/sandbox mapping in isolation.
 const NO_BYPASS = { PAI_AGENT_BYPASS: "0" };
 
-test("resolveAgentIdForNewProject defaults to claude", () => {
-  assert.equal(resolveAgentIdForNewProject({}), "claude");
-  assert.equal(resolveAgentIdForNewProject({ PAI_DEFAULT_AGENT_ID: undefined }), "claude");
-  assert.equal(resolveAgentIdForNewProject({ PAI_DEFAULT_AGENT_ID: "" }), "claude");
-  assert.equal(resolveAgentIdForNewProject({ PAI_DEFAULT_AGENT_ID: "gemini" }), "claude");
-  assert.equal(resolveAgentIdForNewProject({ PAI_AGENT: "codex" }), "claude");
+test("resolveAgentIdForNewProject defaults to codex", () => {
+  // Unset, blank, an id we do not ship, and a variable name that was never
+  // read all land on the same answer: the new-project default. What this
+  // pins is that no input silently produces a THIRD outcome.
+  assert.equal(resolveAgentIdForNewProject({}), "codex");
+  assert.equal(resolveAgentIdForNewProject({ PAI_DEFAULT_AGENT_ID: undefined }), "codex");
+  assert.equal(resolveAgentIdForNewProject({ PAI_DEFAULT_AGENT_ID: "" }), "codex");
+  assert.equal(resolveAgentIdForNewProject({ PAI_DEFAULT_AGENT_ID: "gemini" }), "codex");
+  assert.equal(resolveAgentIdForNewProject({ PAI_AGENT: "codex" }), "codex");
+});
+
+test("a project whose meta names no agent stays on claude", () => {
+  // 🔴 The two defaults are deliberately different and this is the test that
+  // says so. Projects with no agent_id predate the field: they were created
+  // when Claude was the only option and have CLAUDE.md and .claude/ on disk.
+  // Moving the NEW-project default must not reassign them to scaffolding they
+  // do not have.
+  assert.equal(resolveAgentIdForMeta({}), "claude");
+  assert.equal(resolveAgentIdForMeta({ agent_id: undefined }), "claude");
+  assert.equal(resolveAgentIdForMeta(null), "claude");
 });
 
 test("resolveAgentIdForNewProject accepts codex case-insensitively", () => {

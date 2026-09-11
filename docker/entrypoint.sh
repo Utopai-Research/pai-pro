@@ -49,17 +49,25 @@ if [ -f "${CODEX_HOST_DIR}/auth.json" ] && [ ! -f "${CODEX_DIR}/auth.json" ]; th
   fi
 fi
 
+# 🔴 This mirrors server/agents/registry.js's new-project default and has to
+# move with it. The entrypoint does not just read the variable — it EXPORTS a
+# resolved value, so whatever it decides here overrides what the server would
+# otherwise have chosen. A stale answer does not merely fail to follow the
+# default; it silently replaces it, and Docker quietly disagrees with every
+# install doc.
+DEFAULT_AGENT_ID="codex"
+
 PAI_DEFAULT_AGENT_ID_RAW="${PAI_DEFAULT_AGENT_ID:-}"
 SELECTED_AGENT="$(normalize_agent_id "${PAI_DEFAULT_AGENT_ID_RAW}")"
 case "${SELECTED_AGENT}" in
-  ""|claude)
-    SELECTED_AGENT="claude"
+  "")
+    SELECTED_AGENT="${DEFAULT_AGENT_ID}"
     ;;
-  codex)
+  claude|codex)
     ;;
   *)
-    echo "[entrypoint] warning: unsupported PAI_DEFAULT_AGENT_ID='${PAI_DEFAULT_AGENT_ID_RAW}'; defaulting new projects to claude" >&2
-    SELECTED_AGENT="claude"
+    echo "[entrypoint] warning: unsupported PAI_DEFAULT_AGENT_ID='${PAI_DEFAULT_AGENT_ID_RAW}'; defaulting new projects to ${DEFAULT_AGENT_ID}" >&2
+    SELECTED_AGENT="${DEFAULT_AGENT_ID}"
     ;;
 esac
 export PAI_DEFAULT_AGENT_ID="${SELECTED_AGENT}"

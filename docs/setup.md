@@ -8,10 +8,10 @@ Codex CLI can run inside the embedded browser terminal.
 
 | Goal | Mode | Agent | Use |
 |---|---|---|---|
-| Try PAI-Pro or use it for daily filmmaking | Docker | Claude Code default | `./scripts/docker-start.sh` |
-| Try PAI-Pro or use it for daily filmmaking | Docker | Codex CLI | `PAI_DEFAULT_AGENT_ID=codex ./scripts/docker-start.sh` |
-| Hack on the web or server source | Host mode | Claude Code default | `./scripts/setup --agent claude` then `./scripts/start.sh` |
-| Hack on the web or server source | Host mode | Codex CLI | `./scripts/setup --agent codex` then `PAI_DEFAULT_AGENT_ID=codex ./scripts/start.sh` |
+| Try PAI-Pro or use it for daily filmmaking | Docker | Codex CLI (default) | `./scripts/docker-start.sh` |
+| Try PAI-Pro or use it for daily filmmaking | Docker | Claude Code | `PAI_DEFAULT_AGENT_ID=claude ./scripts/docker-start.sh` |
+| Hack on the web or server source | Host mode | Codex CLI (default) | `./scripts/setup` then `./scripts/start.sh` |
+| Hack on the web or server source | Host mode | Claude Code | `./scripts/setup --agent claude` then `PAI_DEFAULT_AGENT_ID=claude ./scripts/start.sh` |
 
 Generation behavior differs slightly by agent. Claude Code uses backgrounded
 staged Bash calls and reads each final JSON result with `BashOutput`; Codex uses
@@ -44,8 +44,8 @@ printf "Paste your PAI_KEY: " && read -r key && sed -i.bak "s|^PAI_KEY=.*|PAI_KE
 
 | Mode | Claude Code | Codex CLI | Open |
 |---|---|---|---|
-| Docker | `./scripts/docker-start.sh` | `PAI_DEFAULT_AGENT_ID=codex ./scripts/docker-start.sh` | <http://localhost:7588> |
-| Host | `./scripts/setup --agent claude && npm --prefix server install && npm --prefix web install && ./scripts/start.sh` | `./scripts/setup --agent codex && npm --prefix server install && npm --prefix web install && PAI_DEFAULT_AGENT_ID=codex ./scripts/start.sh` | <http://localhost:7443> |
+| Docker | `PAI_DEFAULT_AGENT_ID=claude ./scripts/docker-start.sh` | `./scripts/docker-start.sh` | <http://localhost:7588> |
+| Host | `./scripts/setup --agent claude && npm --prefix server install && npm --prefix web install && PAI_DEFAULT_AGENT_ID=claude ./scripts/start.sh` | `./scripts/setup && npm --prefix server install && npm --prefix web install && ./scripts/start.sh` | <http://localhost:7443> |
 
 In the embedded terminal, sign in to the selected CLI if prompted. Claude users
 can run `/login`; Codex users can complete the Codex login prompt. In Docker,
@@ -123,8 +123,8 @@ Host mode is for hacking on PAI-Pro source itself. It gives you Vite HMR for
 Prerequisites:
 
 - Node.js 20 or newer and npm.
-- A supported embedded agent CLI installed and logged in: `claude` by default,
-  or `codex` when starting with `PAI_DEFAULT_AGENT_ID=codex`.
+- A supported embedded agent CLI installed and logged in: `codex` by default,
+  or `claude` when starting with `PAI_DEFAULT_AGENT_ID=claude`.
 - tmux for `./scripts/start.sh` sessions.
 - cloudflared so PAI can fetch local refs for video generation and image pro
   edits.
@@ -177,8 +177,20 @@ proprietary-skills carve-out, and the CLA flow.
 
 - Missing `PAI_KEY`: canvas, terminal, and notes work, but media generation
   fails until `.env` has a key.
-- Missing Codex CLI: Claude-default starts warn only; Codex-default starts fail
-  during preflight.
+- Missing agent CLI: where this is caught depends on how you start.
+  - **Docker** refuses to boot: the entrypoint checks the selected agent's CLI
+    and exits rather than hand you a terminal that cannot launch. The image
+    ships both CLIs, so this only bites a custom build.
+  - **`./scripts/setup`** refuses too, and names both ways forward: install
+    that agent, or use the other one.
+  - **`./scripts/start.sh`** does NOT check. It starts normally and the missing
+    binary shows up when the embedded terminal tries to launch it.
+  `/healthz` reports the gap either way, gating `ok` on the default agent only,
+  so a deployment does not fail merely because the agent it is not using is
+  absent.
+- Switching a project to an agent whose CLI is absent is refused with a 409
+  rather than leaving the project stranded on a binary this machine cannot
+  launch.
 - Local refs fail: restart with `./scripts/start.sh` or Docker so cloudflared
   writes a tunnel URL.
 - Port conflicts in host mode: run `./scripts/stop.sh`, then start again.

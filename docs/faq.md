@@ -40,7 +40,9 @@ Per call: image ~$0.11–0.23 / voice $0.01 per 500 chars / asset upload $0.01 p
 
 ## Can I use a different AI coding agent?
 
-Claude Code and Codex CLI are wired with the embedded terminal. New projects default to Claude; start host mode with `PAI_DEFAULT_AGENT_ID=codex ./scripts/start.sh` or Docker with `PAI_DEFAULT_AGENT_ID=codex ./scripts/docker-start.sh` to create Codex-owned projects. See [docs/setup.md](setup.md#agent-support).
+Claude Code and Codex CLI are wired with the embedded terminal. New projects default to Codex; start host mode with `PAI_DEFAULT_AGENT_ID=claude ./scripts/start.sh` or Docker with `PAI_DEFAULT_AGENT_ID=claude ./scripts/docker-start.sh` to create Claude-owned projects.
+
+An existing project is not stuck with what it was created on: the control in the terminal panel's header switches it at any time. Switching stops the running agent and starts the other one, so the canvas is kept and the conversation is not. See [docs/setup.md](setup.md#agent-support).
 
 ## Why does `/healthz` not require both agents?
 

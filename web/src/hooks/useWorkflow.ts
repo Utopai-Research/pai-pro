@@ -170,6 +170,8 @@ export function useWorkflow(projectId: string | null): UseWorkflowResult {
       title?: string
       dangerously_skip_draft_gate?: boolean
       auto_run?: ProjectBundle['auto_run']
+      agent_id?: string
+      agent_label?: string
     }) => {
       if (msg.projectId !== projectId) return
       setBundle((prev) => {
@@ -181,6 +183,11 @@ export function useWorkflow(projectId: string | null): UseWorkflowResult {
             ? { dangerously_skip_draft_gate: msg.dangerously_skip_draft_gate }
             : {}),
           ...(msg.auto_run !== undefined ? { auto_run: msg.auto_run } : {}),
+          // An agent switch arrives here. CanvasView keys the terminal panel on
+          // this value, so applying it is what remounts the panel against the
+          // agent the server just started.
+          ...(typeof msg.agent_id === 'string' ? { agent_id: msg.agent_id } : {}),
+          ...(typeof msg.agent_label === 'string' ? { agent_label: msg.agent_label } : {}),
         }
       })
     }

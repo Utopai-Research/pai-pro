@@ -80,3 +80,33 @@ test("Docker entrypoint exports the normalized selected agent", async () => {
   assert.match(entrypoint, /normalize_agent_id/);
   assert.match(entrypoint, /export PAI_DEFAULT_AGENT_ID="\$\{SELECTED_AGENT\}"/);
 });
+
+test("the Docker entrypoint's default agent matches the registry's", async () => {
+  // The entrypoint does not merely read PAI_DEFAULT_AGENT_ID — it resolves a
+  // value and EXPORTS it, so whatever it decides overrides what the server
+  // would have chosen. When the registry's default moved to codex this file
+  // still answered "claude", which did not fail to follow the new default so
+  // much as silently replace it: `./scripts/docker-start.sh` kept handing out
+  // Claude projects while every install doc said Codex.
+  //
+  // Pinning the literal is the point. There is no way to import a shell
+  // constant into the server, so the two are kept honest by this test rather
+  // than by a shared source.
+  const { defaultAgentIdForNewProject } = await import("../agents/index.js");
+  const expected = defaultAgentIdForNewProject();
+  const entrypoint = await readFile(join(REPO_ROOT, "docker", "entrypoint.sh"), "utf8");
+
+  const match = entrypoint.match(/^DEFAULT_AGENT_ID="([a-z]+)"/m);
+  assert.ok(
+    match,
+    'docker/entrypoint.sh must declare DEFAULT_AGENT_ID="<id>" at the start of a ' +
+      "line so this check can find it",
+  );
+  assert.equal(
+    match[1],
+    expected,
+    `docker/entrypoint.sh defaults new projects to '${match[1]}' but the registry ` +
+      `says '${expected}'. Docker exports its answer, so it wins — and the install ` +
+      "docs would be describing an agent Docker users never get.",
+  );
+});

@@ -280,3 +280,49 @@ test("skill metadata and body stay within provider-neutral skill limits", async 
   }
   assert.equal(sawStoryToVideo, true, "skills/story-to-video-workflow/SKILL.md is required");
 });
+
+test("the docs name the same default agent the registry actually returns", async () => {
+  // The default agent is stated in seven places a user reads before the app
+  // ever runs: both READMEs' install tables, the setup guide's two tables and
+  // its prerequisites, the FAQ, and .env.example. They were all written when
+  // the answer was the other agent, and nothing checked them against the code.
+  //
+  // Getting this wrong is not cosmetic. The install tables tell a reader which
+  // command needs no environment variable — follow a stale one and you land on
+  // an agent whose CLI you were never told to install, and the terminal opens
+  // onto a binary that is not there.
+  const { defaultAgentIdForNewProject, listProviders } = await import("../agents/index.js");
+  const expected = defaultAgentIdForNewProject();
+  const other = listProviders().map((p) => p.id).find((id) => id !== expected);
+  assert.ok(other, "expected at least two providers for this check to mean anything");
+
+  // The tell is `PAI_DEFAULT_AGENT_ID=<id>`: a doc only spells that out for the
+  // agent you have to ASK for. Seeing it on the default means the file still
+  // describes the old arrangement.
+  const files = [
+    "README.md",
+    "README.zh-CN.md",
+    "docs/setup.md",
+    "docs/faq.md",
+    ".env.example",
+  ];
+  const stale = [];
+  for (const rel of files) {
+    const text = await readFile(join(REPO_ROOT, rel), "utf8");
+    for (const [i, line] of text.split("\n").entries()) {
+      // .env.example legitimately documents the variable's own name and values;
+      // only a line that hands the reader a command is making the claim.
+      if (!line.includes(`PAI_DEFAULT_AGENT_ID=${expected}`)) continue;
+      if (!/\.\/scripts\/(start|docker-start)\.sh/.test(line)) continue;
+      stale.push(`${rel}:${i + 1}  ${line.trim().slice(0, 100)}`);
+    }
+  }
+  assert.deepEqual(
+    stale,
+    [],
+    `These tell the reader to set PAI_DEFAULT_AGENT_ID=${expected}, but ${expected} IS ` +
+      `the default — the variable is only needed for ${other}. The docs still describe ` +
+      "the previous arrangement:\n  " +
+      stale.join("\n  "),
+  );
+});

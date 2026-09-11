@@ -66,25 +66,9 @@ test("rowFor includes agent metadata and preserves saved semantics", () => {
   assert.equal(legacyClaudeProject.saved, true);
 });
 
-test("/healthz default mode requires Claude CLI", async (t) => {
-  const baseUrl = await startSystemRoutes(t, mockHealthChecks({
-    claudeCli: false,
-    codexCli: true,
-  }));
-
-  const res = await fetch(`${baseUrl}/healthz`);
-  const body = await res.json();
-  assert.equal(res.status, 503);
-  assert.equal(body.ok, false);
-  assert.equal(body.default_agent, "claude");
-  assert.equal(body.checks.agent_cli, false);
-  assert.equal(Object.hasOwn(body.checks, "claude_cli"), false);
-  assert.equal(body.agents.claude.binary, false);
-  assert.equal(body.agents.codex.binary, true);
-  assert.equal(Object.hasOwn(body.checks, "agents"), false);
-});
-
-test("/healthz default mode reports Codex availability without gating ok", async (t) => {
+test("/healthz default mode requires the default agent's CLI", async (t) => {
+  // `ok` gates on whichever agent a NEW project would get, not on a named
+  // one — the two moved together when the default did.
   const baseUrl = await startSystemRoutes(t, mockHealthChecks({
     claudeCli: true,
     codexCli: false,
@@ -92,11 +76,31 @@ test("/healthz default mode reports Codex availability without gating ok", async
 
   const res = await fetch(`${baseUrl}/healthz`);
   const body = await res.json();
+  assert.equal(res.status, 503);
+  assert.equal(body.ok, false);
+  assert.equal(body.default_agent, "codex");
+  assert.equal(body.checks.agent_cli, false);
+  assert.equal(Object.hasOwn(body.checks, "claude_cli"), false);
+  assert.equal(body.agents.codex.binary, false);
+  assert.equal(body.agents.claude.binary, true);
+  assert.equal(Object.hasOwn(body.checks, "agents"), false);
+});
+
+test("/healthz default mode reports the other agent without gating ok", async (t) => {
+  // A missing non-default CLI is reported and does not fail the check: it only
+  // means that one cannot be switched to on this machine.
+  const baseUrl = await startSystemRoutes(t, mockHealthChecks({
+    claudeCli: false,
+    codexCli: true,
+  }));
+
+  const res = await fetch(`${baseUrl}/healthz`);
+  const body = await res.json();
   assert.equal(res.status, 200);
   assert.equal(body.ok, true);
-  assert.equal(body.default_agent, "claude");
+  assert.equal(body.default_agent, "codex");
   assert.equal(body.checks.agent_cli, true);
-  assert.equal(body.agents.codex.binary, false);
+  assert.equal(body.agents.claude.binary, false);
   assert.equal(Object.hasOwn(body.checks, "agents"), false);
 });
 

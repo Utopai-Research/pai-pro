@@ -41,8 +41,10 @@ Use Claude Code or Codex to install PAI-Pro for you. Paste this into your agent:
 
 | Choose | Commands |
 | --- | --- |
-| <img src="https://cdn.jsdelivr.net/npm/simple-icons/icons/anthropic.svg" alt="Anthropic" width="16" height="16" /> **[Claude Code][claude-code-url]** | Docker: `./scripts/docker-start.sh`<br />Local: if ports are busy, run `./scripts/stop.sh` first; then `./scripts/setup --agent claude` and `./scripts/start.sh` |
-| <img src="https://cdn.jsdelivr.net/gh/glincker/thesvg@main/public/icons/openai/light.svg" alt="OpenAI" width="16" height="16" /> **[Codex][codex-url]** | Docker: `PAI_DEFAULT_AGENT_ID=codex ./scripts/docker-start.sh`<br />Local: if ports are busy, run `./scripts/stop.sh` first; then `./scripts/setup --agent codex` and `PAI_DEFAULT_AGENT_ID=codex ./scripts/start.sh` |
+| <img src="https://cdn.jsdelivr.net/gh/glincker/thesvg@main/public/icons/openai/light.svg" alt="OpenAI" width="16" height="16" /> **[Codex][codex-url]** (default) | Docker: `./scripts/docker-start.sh`<br />Local: if ports are busy, run `./scripts/stop.sh` first; then `./scripts/setup` and `./scripts/start.sh` |
+| <img src="https://cdn.jsdelivr.net/npm/simple-icons/icons/anthropic.svg" alt="Anthropic" width="16" height="16" /> **[Claude Code][claude-code-url]** | Docker: `PAI_DEFAULT_AGENT_ID=claude ./scripts/docker-start.sh`<br />Local: if ports are busy, run `./scripts/stop.sh` first; then `./scripts/setup --agent claude` and `PAI_DEFAULT_AGENT_ID=claude ./scripts/start.sh` |
+
+Either way, a project's agent can be changed at any time from the control in the terminal panel's header — the choice above only sets what a *new* project starts with.
 
 Open Docker at <http://localhost:7588> or local at <http://localhost:7443>.
 
