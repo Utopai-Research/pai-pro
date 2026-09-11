@@ -235,12 +235,38 @@ export function tunnelUrlForLocalPath({ localPath, projectId }) {
   return `${origin}/projects/${encodeURIComponent(projectId)}/${rel}`;
 }
 
+/**
+ * On-disk path for a node's project-relative `local_path`.
+ *
+ * Same base as readNodeFromWorkflow below, deliberately: anything read off a
+ * node resolves against the same tree that node was read from. cli/
+ * _video_billing.js needs it to hand a real file to ffprobe when it measures
+ * a reference clip's billed seconds.
+ */
+export function absPathForLocalPath({ localPath, projectId }) {
+  if (!localPath || !projectId) return null;
+  const rel = String(localPath).replace(/^\/+/, "");
+  return path.join(PROJECTS_DIR, projectId, rel);
+}
+
 // Best-effort read of a single node from the project's workflow.json.
-// Returns null on any miss (no nodeId, unreadable / unparsable file,
-// no nodes array, no matching id). Readers below funnel through this.
+// Returns null on any miss (no nodeId, no project resolvable, unreadable /
+// unparsable file, no nodes array, no matching id). Readers below funnel
+// through this.
+//
+// The no-project miss is caught rather than propagated: readActiveProject()
+// THROWS ENOENT on a checkout with no `.active_project` (fresh clone, CI), and
+// letting that escape breaks the null-on-any-miss contract the three readers
+// below are documented against — a caller asking "what type is this node"
+// would get a raw filesystem error instead of "no such node". Every caller
+// that must not proceed without a project resolves one itself and throws
+// there; buildProviderRefs (:320) is the pattern.
 async function readNodeFromWorkflow({ nodeId, projectId }) {
   if (!nodeId) return null;
-  const proj = projectId || await readActiveProject();
+  let proj = projectId;
+  if (!proj) {
+    try { proj = await readActiveProject(); } catch { return null; }
+  }
   const wfPath = path.join(PAI_REPO_ROOT, "projects", proj, "workflow.json");
   let raw;
   try { raw = await fs.readFile(wfPath, "utf8"); } catch { return null; }

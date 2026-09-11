@@ -30,7 +30,7 @@ export function selectReel(state) {
 // VideoToolbox silently refuse to decode (>~5.1): the <video> stalls at
 // readyState 0 with NO error event (curl/ffprobe still pass). Pin pix_fmt +
 // a <=5.1 level so the re-encoded master always plays in the browser.
-// Matches pai-pro-desktop (commit 537cc92) and pai-next clean_video.py.
+// Matches the settings our other renderers use.
 const H264_WEB_SAFE = [
   "-c:v", "libx264",
   "-pix_fmt", "yuv420p",

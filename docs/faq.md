@@ -32,7 +32,7 @@ Generation continues server-side; the sidecar in `projects/<id>/.pending/` track
 
 ## How much do generations cost?
 
-Per call: image ~$0.07–0.15 / voice $0.01 per 500 chars / asset upload $0.01 per ref / video several dollars depending on duration + resolution. CLIs only fire when you explicitly ask for media; chat suggestions don't burn credits. Watch your live balance at <https://pai-pro.utopaistudios.com/>.
+Per call: image ~$0.11–0.23 / voice $0.01 per 500 chars / asset upload $0.01 per ref / video several dollars depending on duration + resolution. CLIs only fire when you explicitly ask for media; chat suggestions don't burn credits. Watch your live balance at <https://pai-pro.utopaistudios.com/>.
 
 ## Docker vs host mode — which do I want?
 

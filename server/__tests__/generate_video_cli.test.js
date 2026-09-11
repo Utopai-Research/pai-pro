@@ -320,6 +320,95 @@ test("generate_video.js direct fire with image ref uploads asset and lands node 
   assert.deepEqual(await readdir(join(dir, ".pending")), []);
 });
 
+// Out-of-range --duration must fail at arg parsing, before any network call.
+test("generate_video.js rejects out-of-range --duration before any network call", async (t) => {
+  const pai = await makePaiServer();
+  t.after(() => new Promise((resolve) => pai.server.close(resolve)));
+
+  for (const duration of ["30", "3", "7.5", "abc"]) {
+    const { code, stdout } = await runCli({
+      script: "generate_video.js",
+      args: ["--prompt", "too long a clip", "--duration", duration],
+      cwd: __dirname,
+      env: { PAI_KEY: "PAI_test", PAI_API_BASE: pai.url },
+    });
+    assert.equal(code, 2, `--duration ${duration} should exit 2`);
+    const reply = parseReply(stdout);
+    assert.equal(reply.ok, false);
+    assert.equal(reply.klass, "bad_args");
+    assert.match(reply.message, /--duration must be an integer between 4 and 15 seconds/);
+    assert.match(reply.message, new RegExp(`got "${duration.replace(".", "\\.")}"`));
+    assert.equal(reply.limits.min_output_sec, 4);
+    assert.equal(reply.limits.max_output_sec, 15);
+  }
+
+  // Nothing left the process: no asset upload, no submit, no poll.
+  assert.equal(pai.captures.assetActions.length, 0);
+  assert.equal(pai.captures.submitBodies.length, 0);
+  assert.equal(pai.captures.statusPolls, 0);
+});
+
+test("generate_video.js --stage rejects over-cap --duration before writing a draft", async (t) => {
+  const { projectId, dir } = await setupProject(t);
+  const pai = await makePaiServer();
+  t.after(() => new Promise((resolve) => pai.server.close(resolve)));
+
+  const { code, stdout } = await runCli({
+    script: "generate_video.js",
+    args: [
+      "--prompt", "a 30s epic",
+      "--duration", "30",
+      "--stage", "--draft-only",
+      "--project-id", projectId,
+    ],
+    cwd: dir,
+    env: { PAI_KEY: "PAI_test", PAI_API_BASE: pai.url },
+  });
+
+  assert.equal(code, 2);
+  const reply = parseReply(stdout);
+  assert.equal(reply.ok, false);
+  assert.equal(reply.klass, "bad_args");
+  assert.equal(reply.sent.duration, 30);
+  // No draft sidecar was staged and no network call was made.
+  const pending = await readdir(join(dir, ".pending")).catch(() => []);
+  assert.deepEqual(pending, []);
+  assert.equal(pai.captures.submitBodies.length, 0);
+  assert.equal(pai.captures.assetActions.length, 0);
+});
+
+test("generate_video.js accepts boundary --duration 15 end-to-end", async (t) => {
+  await ensureTunnelUrl(t);
+  const { projectId, dir } = await setupProject(t);
+  const pai = await makePaiServer();
+  t.after(() => new Promise((resolve) => pai.server.close(resolve)));
+  const viewer = await makeViewerServer({ dir, projectId });
+  t.after(() => new Promise((resolve) => viewer.server.close(resolve)));
+
+  const { code, stdout, stderr } = await runCli({
+    script: "generate_video.js",
+    args: [
+      "--prompt", "boundary duration clip",
+      "--duration", "15",
+      "--project-id", projectId,
+    ],
+    cwd: dir,
+    env: {
+      PAI_KEY: "PAI_test",
+      PAI_API_BASE: pai.url,
+      VIEWER_HOST: "127.0.0.1",
+      VIEWER_PORT: String(viewer.port),
+    },
+  });
+
+  assert.equal(code, 0, `stderr:\n${stderr}`);
+  const reply = parseReply(stdout);
+  assert.equal(reply.ok, true);
+  assert.equal(reply.duration, 15);
+  assert.equal(pai.captures.submitBodies.length, 1);
+  assert.equal(pai.captures.submitBodies[0].payload.duration, 15);
+});
+
 test("generate_video.js PAI 422 on submit exits 1 with bad_args and no retry", async (t) => {
   const { projectId, dir } = await setupProject(t);
   const pai = await makePaiServer({ submitStatus: 422 });
@@ -353,13 +442,19 @@ test("generate_video.js PAI 422 on submit exits 1 with bad_args and no retry", a
     ref_source_ids: [],
     audio_source_ids: [],
     source_node_id: null,
+    // The limits blob above is model-scoped now (4..15 here, 5..30 on 2.5),
+    // so the recovery data names the version and model it belongs to.
+    version: "2.0",
+    model: "video-generation",
     duration: 15,
     aspect_ratio: "16:9",
     resolution: "720p",
     generate_audio: true,
   });
   // bad_args fails fast — exactly one submit attempt, no asset calls.
+  // Also covers the duration default: no --duration passed the gate as 15.
   assert.equal(pai.captures.submitBodies.length, 1);
+  assert.equal(pai.captures.submitBodies[0].payload.duration, 15);
   assert.equal(pai.captures.assetActions.length, 0);
   assert.equal(pai.captures.statusPolls, 0);
 

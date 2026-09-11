@@ -58,7 +58,7 @@ Reply `1` to proceed, or describe what you want.
 
 Before the first image or video generation in this project/session, ask once per capability with the structured question shape above, then remember the answer in session. Put the price in each option label.
 
-Image choices: `Standard 2K ~$0.10` recommended, `Pro 2K ~$0.45`, `Max quality ~$0.77`. Video choices: `720p Preview ~$0.20/s` recommended, `480p Draft ~$0.08/s`, `1080p Final ~$0.44/s`. If the user already specified quality/resolution, or says "just do it", don't ask; default to `Standard 2K` and `720p Preview`. Recipes that require the pro image tier (storyboard mosaics, video-bound character sheets) override the chosen image mode.
+Image choices: `Standard 2K ~$0.16` recommended, `Pro 2K ~$0.45`, `Max quality ~$0.77`. Video choices: `720p Preview ~$0.23/s` recommended, `480p Draft ~$0.11/s`, `1080p Final ~$0.57/s`. If the user already specified quality/resolution, or says "just do it", don't ask; default to `Standard 2K` and `720p Preview`. Recipes that require the pro image tier (storyboard mosaics, video-bound character sheets) override the chosen image mode.
 
 ## Choosing context
 
@@ -115,7 +115,7 @@ Do not use `node server/cli/...` from a project cwd or hardcode relative repo pa
 |---|---|---|
 | `generate_image.js` | `image-compose` | Standard image generation. Staged by default. |
 | `generate_image_pro.js` | `image-compose` | Pro image generation for exact `--size`, storyboards, and video-bound character sheets. |
-| `generate_video.js` | `video-compose` | Paid video generation. Only stage after explicit user ask. |
+| `generate_video.js` | `video-compose` | Paid video generation. Only stage after explicit user ask. `--version 2.5` renders PAI Video 2.5 (output 5-30s; `--resolution` must be `480p`, `720p`, or `1080p`); the default `--version 2.0` keeps today's model (output 4-15s). 2.5 is one flat price per billed-duration tier, where billed = output seconds + every reference-video second (measured locally, rounded up per clip, hard cap 60s). At 720p: `<=20s` $6.95, `<=35s` $10.42, `<=60s` $12.46. At 480p: $3.10 / $4.64 / $5.54. At 1080p: $17.10 / $25.63 / $30.64. Both versions add ~$0.01 per reference. 2.5 is refused inside an Auto run, whose budget estimate is computed from 2.0 rates. |
 | `generate_voice.js` | `voice-compose` | Creates `audio_result` voice nodes, optionally derived from a character or shot note. |
 | `upscaler.js` | none | Paid 4K video upscaling from an existing canvas source. Uses provider estimate from `upscale-create`. |
 | `mirror_url.js` | none | Mirrors an external image/audio/video URL into a canvas reference node. Flags: `--url`, optional `--kind <image|audio|video>`, `--label`. |

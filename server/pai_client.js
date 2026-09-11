@@ -124,7 +124,8 @@ function classifyHttpFailure(status, errMsg, retryAfterSec) {
   return err("transient", `PAI ${status}: ${errMsg}`);
 }
 
-// Body-code mapping for /api/v1/submit (async path). PAI mirrors Cue's
+// Body-code mapping for /api/v1/submit (async path). PAI mirrors the
+// dispatcher's
 // business codes on the submit envelope: code 0 = success, non-zero =
 // rejected. Status endpoint uses error_category instead — see
 // classifyTerminalStatus.

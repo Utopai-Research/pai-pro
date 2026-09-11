@@ -87,6 +87,12 @@ export async function readPendingEntry(id, jobId) {
     if (typeof parsed.image_size === "string" && parsed.image_size !== "") out.image_size = parsed.image_size;
     if (typeof parsed.resolution === "string" && parsed.resolution !== "") out.resolution = parsed.resolution;
     if (typeof parsed.duration === "number" && Number.isFinite(parsed.duration)) out.duration = parsed.duration;
+    // 2.5 only: measured reference-video seconds, the half of its billed
+    // duration that is not the output clip. The PATCH route needs it to know
+    // whether a duration edit pushes the job past the top pricing tier.
+    if (typeof parsed.ref_video_seconds === "number" && Number.isFinite(parsed.ref_video_seconds)) {
+      out.ref_video_seconds = parsed.ref_video_seconds;
+    }
     // `script` + `argv` let the viewer's POST /generate route replay
     // drafts. The remaining fields enrich pending/result cards.
     if (typeof parsed.cost_usd === "number" && Number.isFinite(parsed.cost_usd)) out.cost_usd = parsed.cost_usd;

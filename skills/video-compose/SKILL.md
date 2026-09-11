@@ -19,8 +19,8 @@ For the ask-once flow and per-mode prices, see the project `PROJECT_AGENT.md` §
 ## CLI shape
 
 ```
-node "$PAI_REPO_ROOT/server/cli/generate_video.js" --prompt "..." [--duration <seconds>] [--aspect-ratio 16:9]
-  [--resolution <480p|1080p>] [--no-audio]
+node "$PAI_REPO_ROOT/server/cli/generate_video.js" --prompt "..." [--version <2.0|2.5>] [--duration <seconds>]
+  [--aspect-ratio 16:9] [--resolution <480p|720p|1080p>] [--no-audio]
   [--label "..."] [--ref-source-id <id> ...] [--ref-audio-source-id <audio_id> ...]
   [--source-node-id <id>] [--shot-id <N>]
 ```
@@ -33,9 +33,35 @@ Match stated single-clip duration with `--duration`; omit for 15s default. Split
 
 Each clip costs real money even after staging — only stage after the user has explicitly asked for a video.
 
-## Reference caps (video-generation)
+## Model version (`--version`)
 
-≤9 image refs, ≤3 audio refs, ≤3 video refs. Audio/video refs must be **1.8s-15.2s each**; video refs also cap at **15s aggregate**. Audio refs need image/video anchor. Read durations from `workflow.json`; on failure, use returned `limits` + `sent`.
+Omit it for `2.0` (today's model): output 4-15s, priced per output second by resolution.
+
+`--version 2.5` renders PAI Video 2.5. Differences that change how you call it:
+
+- `--duration` is 5-30 (not 4-15). `-1` (follow-the-input edit mode) is rejected.
+- `--resolution` must be `480p`, `720p`, or `1080p`; `--aspect-ratio` must be one of
+  `16:9 | 9:16 | 4:3 | 3:4 | 1:1 | 21:9 | adaptive`.
+- One flat price per **billed-duration tier**, where billed = output seconds + every
+  reference-video second (each clip measured locally with ffprobe and rounded up).
+  Hard cap 60 billed seconds; over that the CLI refuses before staging and names both
+  halves. Tier prices are in the project `PROJECT_AGENT.md` § "Media CLIs (`server/cli/`)"
+  — quote them from there, never from memory.
+- Refused inside an Auto run (the run's budget estimate is computed from 2.0 rates).
+  Stage 2.5 clips outside Auto.
+- A 2.5 job carrying video references needs `ffprobe` on the host; without it the CLI
+  fails with `infra` rather than guessing a price.
+
+On failure the `limits` blob is model-scoped: read `min_output_sec` / `max_output_sec`
+and `max_billed_sec` off the returned JSON rather than assuming 2.0's numbers.
+
+## Reference caps
+
+**2.0 (`video-generation`)** — ≤9 image refs, ≤3 audio refs, ≤3 video refs; video refs cap at **15s aggregate**.
+
+**2.5** — ≤30 image refs, ≤10 audio refs, ≤10 video refs; reference video caps at **30s aggregate**, and every reference second also counts toward the 60s billed-duration cap.
+
+Both: audio/video refs must be **1.8s-15.2s each** (the shared reference-upload step's window), and audio refs need an image or video anchor — on 2.5 that one is checked only after credits are frozen, so the CLI refuses it locally. Read durations from `workflow.json`; on failure use the returned `limits` + `sent`, which are model-scoped.
 
 ## Reference roles — vocabulary
 

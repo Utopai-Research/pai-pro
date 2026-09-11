@@ -45,9 +45,9 @@ Docker 模式打开 <http://localhost:7588>，本地模式打开 <http://localho
 
 | 能力 | 质量 | 时间 | 参考素材数量 | 预估价格 |
 |---|---|---|---|---|
-| [`generate_image`](server/cli/generate_image.js) | Great | ~10-30s | 16 imgs | $0.07 / $0.10 / $0.15 for 1K / 2K / 4K |
+| [`generate_image`](server/cli/generate_image.js) | Great | ~10-30s | 16 imgs | $0.11 / $0.16 / $0.23 for 1K / 2K / 4K |
 | [`generate_image_pro`](server/cli/generate_image_pro.js) | Best | ~3-6 min | 32 imgs | $0.26 / $0.45 / $0.77 for 1K / 2K / 4K |
-| [`generate_video`](server/cli/generate_video.js) | Best | ~3-6 min | 9 imgs / 3 vids / 3 auds | $0.08/s / $0.20/s / $0.44/s for 480p / 720p / 1080p |
+| [`generate_video`](server/cli/generate_video.js) | Best | ~3-6 min | 9 imgs / 3 vids / 3 auds | $0.11/s / $0.23/s / $0.57/s for 480p / 720p / 1080p |
 | [`upscaler`](server/cli/upscaler.js) | Best | 1 分钟示例：约 4-8 min 落盘 | 1 video | 1 分钟示例：1080p->4K $1.35，720p->4K $2.35 |
 | [`generate_voice`](server/cli/generate_voice.js) | Good | ~5-15s | N/A | $0.01 per 500 input characters, rounded up |
 

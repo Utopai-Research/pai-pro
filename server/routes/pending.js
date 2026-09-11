@@ -15,7 +15,8 @@ import { spawn } from "node:child_process";
 import fsp from "node:fs/promises";
 import path from "node:path";
 
-import { getCost, stagedCostUsd } from "../model_registry.js";
+import { VIDEO_25_RESOLUTIONS, getCost, stagedCostUsd } from "../model_registry.js";
+import { videoLimitsFor, videoOutputDurationBounds } from "../cli/_limits.js";
 import { isActiveAutoRun } from "../lib/auto_runs.js";
 import { PAI_REPO_ROOT, PENDING_STALE_MS, pendingDir, projectDir } from "../lib/paths.js";
 import {
@@ -263,6 +264,53 @@ export function registerPendingRoutes({ app, projects, broadcasters }) {
     if (positionPatch === null && !hasContentEdit) {
       return res.status(400).json({ error: "no editable fields in body" });
     }
+    // A duration edit obeys the same gate as generate_video.js — an
+    // out-of-range value would persist a quote the CLI rejects at fire time.
+    if (patch.duration !== undefined && entry.script === "generate_video.js") {
+      const bounds = videoOutputDurationBounds(entry.model);
+      const dur = Number(patch.duration);
+      if (!Number.isInteger(dur) || dur < bounds.min || dur > bounds.max) {
+        return res.status(400).json({
+          error: `--duration must be an integer between ${bounds.min} and ${bounds.max} seconds (model ${entry.model}); got "${patch.duration}"`,
+        });
+      }
+      // 2.5 is priced per call inside a billed-seconds tier — the output clip
+      // plus the reference video the vendor has to read — and there is no
+      // pricing row past the top tier. Without this, an edit over the cap is
+      // accepted, the re-quote below returns null, the `Number.isFinite`
+      // guard (:317) leaves the OLD cost_usd in place, and the Generate button
+      // shows a price for a job the CLI will refuse to fire. The message names
+      // both components because the reference half is the half the user cannot
+      // see.
+      const limits = videoLimitsFor(entry.model);
+      const refSec = Number.isFinite(entry.ref_video_seconds) ? entry.ref_video_seconds : 0;
+      if (limits.max_billed_sec && dur + refSec > limits.max_billed_sec) {
+        return res.status(400).json({
+          error: `billed duration ${dur + refSec}s exceeds the ${limits.max_billed_sec}s maximum (model ${entry.model}): ${dur}s of output plus ${refSec}s of reference video. Shorten the clip or drop a video reference.`,
+        });
+      }
+      patch.duration = dur;
+    }
+    // PATCH_FLAGS lets `resolution` be edited (:42, :52) and nothing validated
+    // it. On 2.5 that is a display bug with money attached: the tier table keys
+    // the composite rows on the exact string, so a "1080P" re-quotes the bare
+    // tier onto the Generate button and is only caught by the CLI at fire.
+    // Normalise and refuse here so the number shown is the number charged.
+    //
+    // 🔴 `resNorm`, NOT `res` — `res` is the Express response object in this
+    // handler's scope.
+    if (patch.resolution !== undefined && entry.script === "generate_video.js") {
+      const resNorm = String(patch.resolution).toLowerCase();
+      // `max_billed_sec` is only set for the 2.5 model — see _limits.js's
+      // videoLimitsFor. 2.0 keeps its existing unvalidated behaviour.
+      const allowed = videoLimitsFor(entry.model).max_billed_sec ? VIDEO_25_RESOLUTIONS : null;
+      if (allowed && !allowed.includes(resNorm)) {
+        return res.status(400).json({
+          error: `--resolution must be one of ${allowed.join(" | ")} (model ${entry.model}); got "${patch.resolution}"`,
+        });
+      }
+      if (allowed) patch.resolution = resNorm;
+    }
     try {
       await withProjectMutationLock(id, async () => {
         const raw = await fsp.readFile(pendingPath(id, jobId), "utf8");
@@ -298,6 +346,13 @@ export function registerPendingRoutes({ app, projects, broadcasters }) {
               image_size: sidecar.image_size,
               resolution: sidecar.resolution,
               duration: sidecar.duration,
+              // 2.5's tier is keyed on output + reference-video seconds.
+              // Without the reference half, a duration edit re-quotes a tier
+              // below the one that will actually be charged — and this number
+              // is the one on the Generate button, which is the one the user
+              // is being asked to approve. Read off the raw sidecar (not the
+              // whitelisted entry), so no extra readers.js field is needed here.
+              ref_video_seconds: sidecar.ref_video_seconds,
               text: sidecar.text,
             }, refs);
             if (typeof next === "number" && Number.isFinite(next)) {

@@ -40,6 +40,17 @@ function pendingPath(jobId) {
   return path.join(pendingDir(), `${jobId}.json`);
 }
 
+// Read the sidecar back. Used by generate_video.js's fire path to prove the
+// re-measured billed duration still lands in the tier the user approved.
+// Returns null on any miss — the caller treats "no prior" as "no drift".
+export async function readPendingSidecar(jobId) {
+  try {
+    return JSON.parse(await fsp.readFile(pendingPath(jobId), "utf8"));
+  } catch {
+    return null;
+  }
+}
+
 function resultPath(jobId, cwd = process.cwd()) {
   return path.join(cwd, RESULTS_DIR_NAME, `${jobId}.json`);
 }
@@ -436,7 +447,7 @@ export async function writeResultSidecar(jobId, result, { cwd = process.cwd() } 
 // lineage, and display details survive if the caller doesn't pass them.
 export async function writePending({
   jobId, kind, prompt, aspectRatio,
-  model, size, imageSize, resolution, duration,
+  model, size, imageSize, resolution, duration, refVideoSeconds,
   stage = "running",
   costUsd,
   mode,
@@ -464,6 +475,12 @@ export async function writePending({
   if (typeof imageSize === "string" && imageSize !== "") payload.image_size = imageSize;
   if (typeof resolution === "string" && resolution !== "") payload.resolution = resolution;
   if (typeof duration === "number" && Number.isFinite(duration)) payload.duration = duration;
+  // 2.5 prices on output + reference-video seconds. Persisting the measured
+  // reference half lets the PATCH route re-quote a duration edit against the
+  // same tier the CLI will bill, instead of tiering on the output alone.
+  if (typeof refVideoSeconds === "number" && Number.isFinite(refVideoSeconds)) {
+    payload.ref_video_seconds = refVideoSeconds;
+  }
   if (typeof costUsd === "number" && Number.isFinite(costUsd)) payload.cost_usd = costUsd;
   if (typeof mode === "string" && mode !== "") payload.mode = mode;
   if (typeof sourceResolution === "string" && sourceResolution !== "") payload.source_resolution = sourceResolution;

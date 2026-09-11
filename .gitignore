@@ -74,6 +74,8 @@ docs/roadmaps/
 docs/plans/*
 !docs/plans/.gitkeep
 docs/research/
+docs/DEPLOYMENT.md
+docs/DEV_DEPLOY_RISK.md
 
 # Local-only tech debt audits.
 TECH_DEBT_AUDIT.md

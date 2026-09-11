@@ -1,5 +1,5 @@
 // Exact-size contract for PAI raw image-generation-pro / image-edit-pro.
-// Source: open-pai raw-models.md sections "image-generation-pro" and
+// Source: the backend's raw-model reference for "image-generation-pro" and
 // "image-edit-pro". The provider accepts `size` only; aspect_ratio and
 // image_size below are derived display metadata for pai-pro.
 

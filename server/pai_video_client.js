@@ -1,4 +1,11 @@
-// PAI raw passthrough → video-generation.
+// PAI raw passthrough → video-generation (2.0) / video-generation-25
+// (2.5, dispatched asynchronously by the backend).
+//
+// Which of the two a call submits against is decided by ONE thing: the
+// `modelId` the caller hands in, which generate_video.js resolves from its
+// --version flag through the model registry. There is no second string in
+// this file to keep in sync — that split is what used to make it possible to
+// price one version and render the other.
 //
 // The wire payload is forwarded byte-for-byte to the upstream model, so
 // the `content[]` parts (with role: reference_image / reference_audio /
@@ -19,15 +26,24 @@
 // disk instead of buffering tens of MB per clip in RAM.
 
 import { callSubmit, pollStatus, err } from "./pai_client.js";
+import { getDefault, getModel } from "./model_registry.js";
 
-const MODEL = "video-generation";
 const SUBMIT_TIMEOUT_MS = 30_000;
 const POLL_INTERVAL_MS = 5_000;
 const POLL_TIMEOUT_MS = 30 * 60_000; // 30 min per PAI docs recommendation
 
-// Video model endpoint id forwarded inside payload.model. PAI never
-// remaps this. Endpoint rotations are rare; a code edit + one-line PR
-// is the right cadence.
+// Video model endpoint alias forwarded inside payload.model — 2.0 only.
+//
+// 2.5 must NOT carry it. That route reaches the provider through a dispatcher whose adapter
+// rejects a payload.model outright ("payload.model is not accepted; the
+// dispatcher
+// selects the vendor model") — and rejects it AFTER every reference has been
+// uploaded and the credits frozen, arriving as an async FAILED minutes later
+// rather than as a submit error.
+//
+// The comment that used to sit here said "PAI never remaps this". That was
+// already untrue for 2.0: the backend rewrites this alias to a vendor endpoint
+// id in its preprocess hook, so it is not carried forward.
 const PAI_VIDEO_ENDPOINT_ID = "pai-pro-video-endpoint-01";
 
 function buildContent({ prompt, imageAssetIds, audioAssetIds, videoAssetIds }) {
@@ -61,10 +77,16 @@ function buildContent({ prompt, imageAssetIds, audioAssetIds, videoAssetIds }) {
  *
  * @param {Object}    opts
  * @param {string}    opts.prompt
+ * @param {string}    [opts.modelId]           registry id; decides the wire
+ *                                             model AND the payload shape.
+ *                                             Defaults to the 2.0 entry.
  * @param {number}    [opts.duration=15]
  * @param {string}    [opts.aspectRatio="16:9"]
  * @param {string}    [opts.resolution="720p"]
  * @param {boolean}   [opts.generateAudio=true]
+ * @param {number}    [opts.billedDurationSec] required on 2.5: output seconds
+ *                                             + reference-video seconds, the
+ *                                             dimension its price is keyed on
  * @param {string[]}  [opts.imageAssetIds=[]]   from prior uploadReferences()
  * @param {string[]}  [opts.audioAssetIds=[]]
  * @param {string[]}  [opts.videoAssetIds=[]]
@@ -76,10 +98,12 @@ function buildContent({ prompt, imageAssetIds, audioAssetIds, videoAssetIds }) {
  */
 export async function submitVideo({
   prompt,
+  modelId = getDefault("video").id,
   duration = 15,
   aspectRatio = "16:9",
   resolution = "720p",
   generateAudio = true,
+  billedDurationSec = null,
   imageAssetIds = [],
   audioAssetIds = [],
   videoAssetIds = [],
@@ -87,21 +111,41 @@ export async function submitVideo({
   if (typeof prompt !== "string" || !prompt.trim()) {
     throw err("bad_args", "submitVideo: empty prompt");
   }
+  const model = getModel(modelId);
+  if (!model) throw err("bad_args", `submitVideo: unknown model "${modelId}"`);
+  const isV25 = model.api_version === "2.5";
+
+  // 2.5 has SIX pricing rows and no fallback row, by design: a submit with no
+  // billed duration has no price at all and 400s server-side. Refusing here
+  // makes that a local failure instead of a round trip, and it is also the
+  // only guard against sending 2.5 a number nobody measured.
+  if (isV25 && !Number.isInteger(billedDurationSec)) {
+    throw err(
+      "bad_args",
+      "submitVideo: 2.5 requires an integer billedDurationSec (output seconds + reference-video seconds)",
+    );
+  }
+
   const payload = {
-    model: PAI_VIDEO_ENDPOINT_ID,
+    // 2.0 only — see PAI_VIDEO_ENDPOINT_ID above.
+    ...(isV25 ? {} : { model: PAI_VIDEO_ENDPOINT_ID }),
     content: buildContent({ prompt, imageAssetIds, audioAssetIds, videoAssetIds }),
     generate_audio: !!generateAudio,
     ratio: aspectRatio,
     duration: Number(duration),
     resolution,
     watermark: false,
+    // Read by the backend's preprocess hook, which lifts it OUT of the
+    // payload and onto the dispatch params wrapper before submit, so it never
+    // reaches the vendor. It stays on the stored task for audit either way.
+    ...(isV25 ? { billed_duration_sec: billedDurationSec } : {}),
   };
 
   const env = await callSubmit({
-    model: MODEL,
+    model: model.id,
     payload,
     timeoutMs: SUBMIT_TIMEOUT_MS,
-    logTag: "pai-video",
+    logTag: isV25 ? "pai-video-25" : "pai-video",
   });
   return { taskId: env.job_id, raw: env };
 }

@@ -15,7 +15,15 @@ import path from "node:path";
 import fs from "node:fs/promises";
 import { parseArgs, emitSuccess, emitFailure, classify, isoNow, truncateLabel } from "./_cli.js";
 import { submitVideo, pollVideo } from "../pai_video_client.js";
-import { getDefault, getCost } from "../model_registry.js";
+import {
+  DEFAULT_VIDEO_API_VERSION,
+  VIDEO_25_RESOLUTIONS,
+  getCost,
+  stagedCostUsd,
+  videoBilledDurationSec,
+  videoApiVersions,
+  videoModelForApiVersion,
+} from "../model_registry.js";
 import { uploadReferences } from "../pai_assets_client.js";
 import { kickPreupload } from "./_preupload_hook.js";
 import {
@@ -31,6 +39,7 @@ import {
   fireAndWait,
   isBypassEnabled,
   newJobId,
+  readPendingSidecar,
   reserveAutoBudget,
   waitForReviewResult,
   writePending,
@@ -38,18 +47,30 @@ import {
   removePending,
   removePendingSync,
 } from "./_pending.js";
-import { VIDEO_LIMITS } from "./_limits.js";
+import { videoLimitsFor, videoOutputDurationBounds } from "./_limits.js";
 import { checkPromptRefsWired } from "./_ref_guard.js";
+import { sumRefVideoSeconds } from "./_video_billing.js";
 
 const rawArgv = process.argv.slice(2);
-const defaultVideoModel = getDefault("video");
-const defaultVideoParams = defaultVideoModel.default_params ?? {};
 
 const args = parseArgs({
   prompt:                  { type: "string", short: "p" },
   duration:                { type: "string", default: "15" },
+  // Which PAI video model this call prices AND submits against. "2.0" is the
+  // long-standing route; "2.5" is PAI Video 2.5.
+  //
+  // A flag, never a canvas control: version selection is an agent decision,
+  // and this repo adds no new manual node UI.
+  //
+  // A flag on THIS script rather than a second generate_video_25.js, because
+  // the viewer's PATCH-side duration guard keys on the literal string
+  // entry.script === "generate_video.js" — a new script name would take a
+  // duration edit with no bounds check at all, and would need its own
+  // ALLOWED_SCRIPTS entry besides.
+  version:                 { type: "string", default: DEFAULT_VIDEO_API_VERSION },
   "aspect-ratio":          { type: "string", default: "16:9" },
-  resolution:              { type: "string", default: defaultVideoParams.resolution ?? "720p" },
+  // Default filled in below, from whichever model --version resolved.
+  resolution:              { type: "string" },
   // Audio defaults ON (generate_audio: true). Pass --no-audio ONLY when
   // the user has explicitly asked for a silent clip. Trailer framing,
   // "I'll add SFX in post", or detail-SFX skepticism are NOT triggers —
@@ -72,6 +93,35 @@ const args = parseArgs({
   "auto-run-id":           { type: "string" },
 });
 
+// One lookup, from one flag, feeding every downstream use: the price quoted
+// at the draft gate, the model written into the sidecar and the canvas node,
+// and the id submitted to PAI. Those last two used to be separate strings —
+// getDefault("video") here, a module constant in pai_video_client.js — so a
+// half-finished version switch could price 2.5 and render 2.0.
+let videoModel;
+try {
+  videoModel = videoModelForApiVersion(args.version);
+} catch {
+  emitFailure(
+    "bad_args",
+    `--version must be one of ${videoApiVersions().join(" | ")}; got "${args.version}"`,
+  );
+  process.exit(2);
+}
+const plannedModel = videoModel.id;
+const isV25 = videoModel.api_version === "2.5";
+const videoLimits = videoLimitsFor(plannedModel);
+if (args.resolution === undefined) {
+  args.resolution = videoModel.default_params?.resolution ?? "720p";
+}
+
+// Measured below, before staging, on BOTH version paths. Declared here because
+// buildSent() reports them and fail() can fire before the measurement runs —
+// the first fail() is the missing-prompt gate, which would otherwise hit a
+// temporal-dead-zone ReferenceError instead of printing clean bad_args JSON.
+let refVideoSeconds = 0;
+let billedDurationSec = null;
+
 const audSrcIds = Array.isArray(args["ref-audio-source-id"]) ? args["ref-audio-source-id"] : [];
 const refSourcesArg = Array.isArray(args["ref-source-id"]) ? args["ref-source-id"] : [];
 
@@ -81,10 +131,15 @@ function buildSent() {
     ref_source_ids: refSourcesArg,
     audio_source_ids: audSrcIds,
     source_node_id: args["source-node-id"] || null,
+    version: args.version,
+    model: plannedModel,
     duration: Number(args.duration) || 15,
     aspect_ratio: args["aspect-ratio"],
     resolution: args.resolution,
     generate_audio: !args["no-audio"],
+    ...(isV25 || refVideoSeconds > 0
+      ? { billed_duration_sec: billedDurationSec, ref_video_seconds: refVideoSeconds }
+      : {}),
   };
 }
 
@@ -94,7 +149,10 @@ function buildSent() {
 let emitted = null;
 
 function fail(klass, message, extra = {}) {
-  emitted = emitFailure(klass, message, { limits: VIDEO_LIMITS, sent: buildSent(), ...extra });
+  // Model-scoped, not the static 2.0 blob: a 2.5 failure that advertised
+  // 4..15 as its output-duration range would send the agent to a second
+  // failure.
+  emitted = emitFailure(klass, message, { limits: videoLimits, sent: buildSent(), ...extra });
   return emitted;
 }
 
@@ -103,8 +161,65 @@ if (!args.prompt) {
   process.exit(2);
 }
 
-if (audSrcIds.length > VIDEO_LIMITS.max_audio_refs) {
-  fail("bad_args", `reference cap exceeded: audio_refs ${audSrcIds.length} > ${VIDEO_LIMITS.max_audio_refs}`);
+// Reject out-of-range output durations before staging, pricing, or submit.
+const durationBounds = videoOutputDurationBounds(plannedModel);
+const durationParsed = Number(args.duration);
+if (
+  !Number.isInteger(durationParsed) ||
+  durationParsed < durationBounds.min ||
+  durationParsed > durationBounds.max
+) {
+  fail(
+    "bad_args",
+    `--duration must be an integer between ${durationBounds.min} and ${durationBounds.max} seconds ` +
+    `(model ${plannedModel}); got "${args.duration}"`,
+  );
+  process.exit(2);
+}
+
+// 2.5's price rows are keyed on the EXACT resolution string: only "1080p"
+// reads the composite 1080p tiers, and the backend exact-matches it too.
+// Normalising here means the agent may type any casing while the wire carries
+// only the three exact strings the backend accepts.
+if (isV25) {
+  args.resolution = String(args.resolution || "").toLowerCase();
+  if (!VIDEO_25_RESOLUTIONS.includes(args.resolution)) {
+    fail(
+      "bad_args",
+      `--resolution must be one of ${VIDEO_25_RESOLUTIONS.join(" | ")} for --version 2.5; ` +
+      `got "${args.resolution}"`,
+    );
+    process.exit(2);
+  }
+}
+
+// 2.5's backend extractor rejects any other ratio pre-freeze. Refusing here
+// keeps the failure ahead of the draft gate instead of behind it.
+const VIDEO_25_RATIOS = ["16:9", "9:16", "4:3", "3:4", "1:1", "21:9", "adaptive"];
+if (isV25 && !VIDEO_25_RATIOS.includes(args["aspect-ratio"])) {
+  fail(
+    "bad_args",
+    `--aspect-ratio must be one of ${VIDEO_25_RATIOS.join(" | ")} for --version 2.5; ` +
+    `got "${args["aspect-ratio"]}"`,
+  );
+  process.exit(2);
+}
+
+// The provider requires an image_url or video_url item to accompany any audio_url item
+// (enforced by the provider adapter on that route). On 2.0 PAI rejects this
+// synchronously and free; on the 2.5 route it is checked AFTER the freeze and
+// AFTER every reference is uploaded upstream, so it arrives as an async FAILED
+// minutes later with a refund only via Pub/Sub or reconcile.
+if (isV25 && audSrcIds.length > 0 && refSourcesArg.length === 0) {
+  fail(
+    "bad_args",
+    "--version 2.5 rejects an audio-only reference set: every --ref-audio-source-id needs at least one image or video reference (--ref-source-id) to anchor it. On the 2.5 route this is only caught after credits are frozen, so it is refused here.",
+  );
+  process.exit(2);
+}
+
+if (audSrcIds.length > videoLimits.max_audio_refs) {
+  fail("bad_args", `reference cap exceeded: audio_refs ${audSrcIds.length} > ${videoLimits.max_audio_refs}`);
   process.exit(2);
 }
 
@@ -123,8 +238,7 @@ if (refGuardMsg) {
 
 const jobId = args["existing-job-id"] || newJobId();
 const routeOwnedPending = !!args["existing-job-id"];
-const durationPlanned = Number(args.duration) || 15;
-const plannedModel = defaultVideoModel.id;
+const durationPlanned = durationParsed; // gate above guarantees a valid integer
 
 if (args["auto-run-id"] !== undefined) {
   if (args["auto-run-id"] === "") {
@@ -133,6 +247,20 @@ if (args["auto-run-id"] !== undefined) {
   }
   if (!args.stage && !routeOwnedPending) {
     fail("bad_args", "--auto-run-id requires --stage so the run's budget is reserved before spending");
+    process.exit(2);
+  }
+  // Auto's approval gate is a RUN-level estimate the viewer computes up front
+  // from 2.0's per-second rates (web/src/pages/CanvasView.tsx:195-196 quotes
+  // "video-generation" and rescales linearly). A 2.5 job inside that run
+  // spends against a number that was never quoted for it, and a tiered price
+  // cannot be rescaled — the same approved-one-number-charged-another failure
+  // the rest of this file guards against. Refuse until that estimator is
+  // version-aware.
+  if (isV25) {
+    fail(
+      "bad_args",
+      "--version 2.5 is not supported inside an Auto run: the run's budget estimate is computed from 2.0 per-second rates. Stage the 2.5 clip outside Auto.",
+    );
     process.exit(2);
   }
 }
@@ -144,11 +272,111 @@ function countUniqueRefs() {
   return sids.size;
 }
 
+// BOTH versions are priced on BILLED seconds: the clip asked for plus every
+// second of reference video the vendor has to read. Nobody upstream can
+// compute that — the reference bytes are on this machine, and the backend
+// freezes the money before the vendor ever fetches them — so it is measured
+// here, with ffprobe, before anything is staged or submitted. Free, local, and
+// on BOTH paths: the draft gate needs it to quote, and the --existing-job-id
+// fire needs it to submit.
+//
+// 2.0 used to skip this and price output seconds alone, which rendered every
+// reference second for free. It now reads the same dimension 2.5 does, and the
+// backend refuses a 2.0 job carrying video references without the number.
+{
+  const projectIdForRefs = args["project-id"] || (await readActiveProject().catch(() => null));
+  try {
+    const measured = await sumRefVideoSeconds({
+      sourceIds: refSourcesArg,
+      projectId: projectIdForRefs,
+    });
+    refVideoSeconds = measured.seconds;
+  } catch (e) {
+    fail(classify(e), e.message);
+    process.exit(e.klass === "bad_args" ? 2 : 1);
+  }
+  billedDurationSec = videoBilledDurationSec({
+    duration: durationPlanned,
+    refVideoSeconds,
+  });
+
+  // The price on the Generate button is a snapshot taken at stage time and
+  // never recomputed when the job fires — the fire route replays the stored
+  // argv and re-runs the measurement above from scratch. This is the one
+  // place a re-measure can disagree with the approved number: a reference
+  // clip regenerated, re-mirrored, or upscaled over the same local_path
+  // between approval and fire. Refuse rather than submit a tier nobody
+  // approved. (The sidecar survives the claim intact: routes/pending.js's
+  // claimDraftForGenerate does a whole-JSON read-modify-write, so
+  // ref_video_seconds is still there.)
+  if (routeOwnedPending) {
+    const prev = await readPendingSidecar(jobId);
+    const prevBilled = prev
+      ? videoBilledDurationSec({
+          duration: prev.duration,
+          refVideoSeconds: prev.ref_video_seconds,
+        })
+      : null;
+    if (prevBilled && prevBilled !== billedDurationSec) {
+      const approved = getCost(plannedModel, {
+        resolution: prev.resolution,
+        billed_duration_sec: prevBilled,
+      });
+      const now = getCost(plannedModel, {
+        resolution: args.resolution,
+        billed_duration_sec: billedDurationSec,
+      });
+      if (approved !== now) {
+        fail(
+          "bad_args",
+          `reference video changed since this draft was approved: billed duration is now ` +
+          `${billedDurationSec}s (was ${prevBilled}s), which is a different price tier. ` +
+          "Cancel this draft and stage a new one.",
+        );
+        process.exit(2);
+      }
+    }
+  }
+
+  // Past the top tier there is no pricing row at all, so the backend refuses
+  // before the credit freeze. Refusing here refuses it earlier and says which
+  // knob to turn — the reference seconds are the half the user cannot see.
+  //
+  // 2.5 only: `max_billed_sec` is a PRICING cap, and 2.0 has no tiers to run
+  // out of — it is priced per billed second at any length. Reading the ceiling
+  // unconditionally would hand a 2.0 job a "--version 2.5" refusal. Same test
+  // routes/pending.js:288 uses to tell the two apart.
+  if (videoLimits.max_billed_sec && billedDurationSec > videoLimits.max_billed_sec) {
+    fail(
+      "bad_args",
+      `billed duration ${billedDurationSec}s exceeds the ${videoLimits.max_billed_sec}s maximum for ` +
+      `--version 2.5: ${durationPlanned}s of output plus ${refVideoSeconds}s of reference video. ` +
+      "Shorten the clip or drop/trim a video reference.",
+    );
+    process.exit(2);
+  }
+}
+
 if (args.stage && !routeOwnedPending) {
   const videoCost = getCost(plannedModel, {
     resolution: args.resolution,
     duration: durationPlanned,
+    // 2.0 sends it only when there ARE video references: with none the backend
+    // requires billed === duration and treats a mismatch as a caller error, so
+    // the field would be noise at best.
+    ...(isV25 || refVideoSeconds > 0 ? { billed_duration_sec: billedDurationSec } : {}),
   });
+  // A null price on 2.5 means no tier matched. The guard above should have
+  // caught that already; if it ever does not, staging anyway would put a
+  // reference-only price on the Generate button and call it the cost of a
+  // render.
+  if (isV25 && typeof videoCost !== "number") {
+    fail(
+      "infra",
+      `no 2.5 price for ${billedDurationSec}s billed at ${args.resolution}; refusing to stage a draft the gate cannot quote`,
+    );
+    process.exit(1);
+  }
   const refCount = countUniqueRefs();
   const assetCost = refCount * (getCost("video-generation-assets") ?? 0.01);
   const costUsd = +(Number(videoCost ?? 0) + assetCost).toFixed(3);
@@ -187,6 +415,9 @@ if (args.stage && !routeOwnedPending) {
     model: plannedModel,
     resolution: args.resolution,
     duration: durationPlanned,
+    // Persisted so the PATCH re-quote can re-tier a duration edit against the
+    // same billed seconds this price was computed from.
+    refVideoSeconds,
     costUsd,
     script: "generate_video.js",
     argv: replayArgv,
@@ -243,6 +474,7 @@ await writePending({
   model: plannedModel,
   resolution: args.resolution,
   duration: durationPlanned,
+  refVideoSeconds,
   autoRunId: args["auto-run-id"] || null,
 });
 
@@ -276,8 +508,8 @@ try {
 
   // Fast-fail per-kind cap violations now that types are known.
   const overCaps = [];
-  if (imgSrcIds.length > VIDEO_LIMITS.max_image_refs) overCaps.push(`image_refs ${imgSrcIds.length} > ${VIDEO_LIMITS.max_image_refs}`);
-  if (vidSrcIds.length > VIDEO_LIMITS.max_video_refs) overCaps.push(`video_refs ${vidSrcIds.length} > ${VIDEO_LIMITS.max_video_refs}`);
+  if (imgSrcIds.length > videoLimits.max_image_refs) overCaps.push(`image_refs ${imgSrcIds.length} > ${videoLimits.max_image_refs}`);
+  if (vidSrcIds.length > videoLimits.max_video_refs) overCaps.push(`video_refs ${vidSrcIds.length} > ${videoLimits.max_video_refs}`);
   if (overCaps.length) {
     fail("bad_args", `reference cap exceeded: ${overCaps.join("; ")}`);
     exitCode = 2;
@@ -308,10 +540,16 @@ try {
 
   const { taskId } = await submitVideo({
     prompt: args.prompt,
+    // Same entry that priced the job, staged the sidecar and stamps the node.
+    // submitVideo derives the wire model and the payload shape from it, so
+    // there is no second place a version can be set independently.
+    modelId: plannedModel,
     duration: durationInt,
     aspectRatio: args["aspect-ratio"],
     resolution: args.resolution,
     generateAudio: !args["no-audio"],
+    // null on 2.0; required and validated on 2.5.
+    billedDurationSec,
     imageAssetIds: assetIds.images,
     audioAssetIds: assetIds.audios,
     videoAssetIds: assetIds.videos,
@@ -330,6 +568,22 @@ try {
   const ext = path.extname(tmpAbsPath);
 
   const generatedAt = isoNow();
+  // The number the draft gate showed, recomputed from the same inputs and
+  // stamped onto the node. web/src/pages/CanvasPage/MediaExpandOverlay.tsx
+  // prefers a stamped estimated_cost_usd over re-quoting the registry
+  // (:180-195), and its re-quote sends only resolution + duration — which on
+  // 2.5 tiers on the output clip alone and reads a tier too low.
+  const estimatedCostUsd = isV25
+    ? stagedCostUsd(
+        plannedModel,
+        {
+          resolution: args.resolution,
+          duration: durationInt,
+          billed_duration_sec: billedDurationSec,
+        },
+        countUniqueRefs(),
+      )
+    : null;
   const shotIdRaw = args["shot-id"];
   const shotId = shotIdRaw === undefined ? null : Number(shotIdRaw);
   const data = {
@@ -346,6 +600,15 @@ try {
       aspect_ratio: args["aspect-ratio"],
       resolution: args.resolution,
       generate_audio: !args["no-audio"],
+      ...(isV25
+        ? {
+            billed_duration_sec: billedDurationSec,
+            ref_video_seconds: refVideoSeconds,
+            ...(typeof estimatedCostUsd === "number"
+              ? { estimated_cost_usd: estimatedCostUsd }
+              : {}),
+          }
+        : {}),
       generated_at: generatedAt,
       // PAI's signed GCS URL (~24h TTL). Surfaced for future re-download
       // paths; the canvas URL itself is always derived from local_path.
@@ -393,10 +656,14 @@ try {
     local_path: localPath,
     provider_output_url: videoUrl,
     model: plannedModel,
+    version: args.version,
     duration: durationInt,
     aspect_ratio: args["aspect-ratio"],
     resolution: args.resolution,
     generate_audio: !args["no-audio"],
+    ...(isV25 || refVideoSeconds > 0
+      ? { billed_duration_sec: billedDurationSec, ref_video_seconds: refVideoSeconds }
+      : {}),
     poll_seconds: durationSeconds,
     generated_at: generatedAt,
   };

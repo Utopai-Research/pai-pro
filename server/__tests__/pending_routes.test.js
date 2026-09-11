@@ -148,7 +148,7 @@ async function seedDraft({ jobId, overrides = {} } = {}) {
     created_at: new Date().toISOString(),
     model: "image-generation",
     image_size: "1K",
-    cost_usd: 0.07,
+    cost_usd: 0.11,
     script: "generate_image.js",
     argv: [
       "--prompt", "a test cat",
@@ -265,7 +265,7 @@ test("PATCH prompt-only updates sidecar + argv; cost_usd untouched", async () =>
   assert.deepEqual(await r.json(), { ok: true });
   const after = await readSidecar(jobId);
   assert.equal(after.prompt, "a different cat");
-  assert.equal(after.cost_usd, 0.07, "prompt edits must not move the price");
+  assert.equal(after.cost_usd, 0.11, "prompt edits must not move the price");
   const idx = after.argv.indexOf("--prompt");
   assert.ok(idx >= 0);
   assert.equal(after.argv[idx + 1], "a different cat");
@@ -348,15 +348,17 @@ test("PATCH on a running entry → 409", async () => {
 });
 
 test("PATCH cannot raise the cost of a reserved Auto draft", async () => {
+  // Durations stay inside the CLI gate bounds (4-15) so this test keeps
+  // exercising the Auto cost rule, not the duration-bounds 400.
   const { jobId } = await seedDraft({
     overrides: {
       kind: "video",
       model: "video-generation",
       resolution: "480p",
-      duration: 15,
-      cost_usd: 1.2,
+      duration: 8,
+      cost_usd: 0.64,
       script: "generate_video.js",
-      argv: ["--prompt", "a test cat", "--resolution", "480p", "--duration", "15"],
+      argv: ["--prompt", "a test cat", "--resolution", "480p", "--duration", "8"],
       auto_run_id: "auto_recost_test",
     },
   });
@@ -364,12 +366,12 @@ test("PATCH cannot raise the cost of a reserved Auto draft", async () => {
   const up = await fetch(`${baseUrl}/projects/${TEST_PROJECT_ID}/pending/${jobId}`, {
     method: "PATCH",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ duration: 60 }),
+    body: JSON.stringify({ duration: 15 }),
   });
   assert.equal(up.status, 409, "cost-raising edit must be rejected");
   const after = await readSidecar(jobId);
-  assert.equal(after.duration, 15, "rejected patch must not persist");
-  assert.equal(after.cost_usd, 1.2);
+  assert.equal(after.duration, 8, "rejected patch must not persist");
+  assert.equal(after.cost_usd, 0.64);
 
   const down = await fetch(`${baseUrl}/projects/${TEST_PROJECT_ID}/pending/${jobId}`, {
     method: "PATCH",
@@ -379,7 +381,63 @@ test("PATCH cannot raise the cost of a reserved Auto draft", async () => {
   assert.equal(down.status, 200, "cost-lowering edit stays allowed");
   const lowered = await readSidecar(jobId);
   assert.equal(lowered.duration, 5);
-  assert.ok(lowered.cost_usd <= 1.2);
+  assert.ok(lowered.cost_usd <= 0.64);
+  await rm(sidecarPath(jobId), { force: true });
+});
+
+test("PATCH duration outside the CLI gate bounds → 400, sidecar unchanged", async () => {
+  const { jobId } = await seedDraft({
+    overrides: {
+      kind: "video",
+      model: "video-generation",
+      resolution: "1080p",
+      duration: 15,
+      cost_usd: 6.6,
+      script: "generate_video.js",
+      argv: ["--prompt", "a test cat", "--resolution", "1080p", "--duration", "15"],
+    },
+  });
+  for (const bad of [30, 3, "abc"]) {
+    const r = await fetch(`${baseUrl}/projects/${TEST_PROJECT_ID}/pending/${jobId}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ duration: bad }),
+    });
+    assert.equal(r.status, 400, `duration ${bad} must be rejected`);
+    const body = await r.json();
+    assert.match(body.error, /integer between 4 and 15 seconds/);
+  }
+  const after = await readSidecar(jobId);
+  assert.equal(after.duration, 15);
+  assert.equal(after.cost_usd, 6.6);
+  assert.deepEqual(after.argv, ["--prompt", "a test cat", "--resolution", "1080p", "--duration", "15"]);
+  await rm(sidecarPath(jobId), { force: true });
+});
+
+test("PATCH duration within bounds → 200, coerced to integer, re-priced", async () => {
+  const { jobId } = await seedDraft({
+    overrides: {
+      kind: "video",
+      model: "video-generation",
+      resolution: "480p",
+      duration: 8,
+      cost_usd: 0.64,
+      script: "generate_video.js",
+      argv: ["--prompt", "a test cat", "--resolution", "480p", "--duration", "8"],
+    },
+  });
+  // String on purpose — the route must coerce before persisting or pricing.
+  const r = await fetch(`${baseUrl}/projects/${TEST_PROJECT_ID}/pending/${jobId}`, {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ duration: "12" }),
+  });
+  assert.equal(r.status, 200);
+  const after = await readSidecar(jobId);
+  assert.equal(after.duration, 12, "stored as a number, not a string");
+  assert.equal(after.cost_usd, 1.32); // 12s x $0.11/s (480p, no refs)
+  const idx = after.argv.indexOf("--duration");
+  assert.equal(after.argv[idx + 1], "12");
   await rm(sidecarPath(jobId), { force: true });
 });
 
@@ -726,10 +784,11 @@ test("5x concurrent position PATCHes serialize cleanly under the project lock", 
 });
 
 test("PATCH re-pricing keeps a video draft's reference surcharge", async () => {
-  // Every video reference is pre-uploaded at ~$0.01, and generate_video.js
-  // books that on top of the model price. Re-pricing on the model alone would
-  // hand back a cheaper number than the job will actually spend — the one
-  // thing the draft gate exists to prevent.
+  // The per-reference cent is friction, not cost recovery — it puts a floor on
+  // attaching references for free, and nothing else in the pipeline does. So a
+  // re-quote has to carry it: re-pricing on the model alone would hand back a
+  // cheaper number than the job will spend, which is the one thing the draft
+  // gate exists to prevent.
   const { jobId } = await seedDraft({
     overrides: {
       kind: "video",
@@ -749,6 +808,7 @@ test("PATCH re-pricing keeps a video draft's reference surcharge", async () => {
   });
   assert.equal(r.status, 200);
   const after = await readSidecar(jobId);
-  // 5s x $0.08 = $0.40 for the clip, plus 2 x $0.01 of preupload.
-  assert.equal(after.cost_usd, 0.42);
+  // 5s x $0.11 = $0.55 for the clip (480p, no video refs), plus 2 x $0.01
+  // of preupload — the two references here are images, which add no seconds.
+  assert.equal(after.cost_usd, 0.57);
 });

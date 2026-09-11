@@ -173,6 +173,60 @@ test("dollar prices live only in PROJECT_AGENT.md, not in skills", async () => {
   }
 });
 
+test("every dollar price in PROJECT_AGENT.md is one the registry can actually produce", async () => {
+  // The gate above pushes prices OUT of skills/ and single-sources them here.
+  // Nothing checked the source itself, so PROJECT_AGENT.md drifted from
+  // server/model_registry.js and the agent read stale numbers aloud to the
+  // user before spending their money. On 2026-09-11 it was quoting 2.5 tiers
+  // that matched no row — the agent would have said $5.99 for a clip the CLI
+  // charges $6.95 for — and pre-repricing per-second video rates, while
+  // omitting the 480p tier column entirely.
+  //
+  // Single-sourcing only works if the source is checked. Every decimal dollar
+  // amount in the template must be a price the registry can return.
+  const registry = await import("../model_registry.js");
+  const { imageProCostBySize, IMAGE_PRO_SIZE_TIERS } = await import("../image_pro_sizes.js");
+
+  const valid = new Set();
+  const add = (n) => {
+    if (typeof n === "number" && Number.isFinite(n)) valid.add(n.toFixed(2));
+  };
+  for (const size of ["1K", "2K", "4K"]) {
+    add(registry.getCost("image-generation", { image_size: size }));
+  }
+  // Derive the pro tiers from the tier map rather than naming sizes here, so a
+  // new supported size cannot silently take this check out of the picture.
+  for (const sizes of Object.values(IMAGE_PRO_SIZE_TIERS)) {
+    add(imageProCostBySize({ size: sizes[0] }));
+  }
+  // Video 2.0 is quoted per second, so a 1-second job IS the per-second rate.
+  for (const resolution of ["480p", "720p", "1080p"]) {
+    add(registry.getCost("video-generation", { resolution, duration: 1 }));
+  }
+  for (const tier of registry.VIDEO_25_TIERS) {
+    add(tier.usd_480p);
+    add(tier.usd);
+    add(tier.usd_1080p);
+  }
+  add(registry.getCost("tts", { text: "x" })); // per-block voice minimum
+  add(registry.getCost("video-generation-assets")); // per-reference surcharge
+
+  const template = await readFile(join(REPO_ROOT, "agent-templates", "PROJECT_AGENT.md"), "utf8");
+  const quoted = [...template.matchAll(/\$(\d+\.\d{1,2})\b/g)].map((m) => m[1]);
+  assert.notEqual(quoted.length, 0, "no prices found in PROJECT_AGENT.md — did the format change?");
+
+  const stale = [...new Set(quoted)].filter((q) => !valid.has(Number(q).toFixed(2)));
+  assert.deepEqual(
+    stale,
+    [],
+    `PROJECT_AGENT.md quotes ${JSON.stringify(stale)}, which server/model_registry.js ` +
+      "cannot produce. The agent reads these to the user before spending their money, " +
+      "so a stale one means they approve a number they are not charged. Update the " +
+      "template in the same commit as the price, or not at all.\n" +
+      `Prices the registry can return: ${[...valid].sort().join(", ")}`,
+  );
+});
+
 test("skill frontmatter avoids unquoted YAML colon traps", async () => {
   for (const file of await sharedInstructionFiles()) {
     if (!file.endsWith("/SKILL.md")) continue;
