@@ -17,6 +17,7 @@ There are two skill types:
 | `video-compose` | "Animate this", "Continue the clip", "Restyle the shot" | Wraps `generate_video.js`. Handles I2V, V2V continuation, voice-locked dubs, narrative sequencing. |
 | `voice-compose` | "Give the detective a voice" | Wraps `generate_voice.js`. Attaches to the character node in place. |
 | `groups-compose` | "Group these as Scene 2", "Frame the character refs" | Arranges related nodes and wraps them in visible canvas frames. |
+| `cawcut-vn` | "Cut these clips into a rough cut", "Assemble the shots in VN", "Edit this in VN" | Vendored CawCut VN skill. Hands generated local media to the `cawcut vn` CLI to build, validate, and open an editable VN draft. Fully local; no CawCut account required. |
 
 Two more primitives — taking a note ("take a note", "jot down", "remember that") and summarizing the canvas ("what do we have?", "show the graph") — are tiny enough that they live inline in `agent-templates/PROJECT_AGENT.md` instead of as separate skill folders.
 
@@ -30,6 +31,7 @@ The reference table above is the at-a-glance view. Each skill's full recipe — 
 - [`skills/video-compose/SKILL.md`](../skills/video-compose/SKILL.md)
 - [`skills/voice-compose/SKILL.md`](../skills/voice-compose/SKILL.md)
 - [`skills/groups-compose/SKILL.md`](../skills/groups-compose/SKILL.md)
+- [`skills/cawcut-vn/SKILL.md`](../skills/cawcut-vn/SKILL.md)
 
 The SKILL.md files are also the source of truth your AI agent reads — keep them updated, not this doc.
 
@@ -45,7 +47,7 @@ In a new project, drop these into the terminal:
 >
 > *"Take a note: morgue scene opens with cold blue light."*
 
-Each generation lands as a node, edges show provenance, assets mirror into `projects/<slug>/assets/`. Open the **Timeline** tab to play clips back as a reel.
+Each generation lands as a node, edges show provenance, assets mirror into `projects/<slug>/assets/`. Open the **Timeline** tab to play clips back as a reel, or hand the landed files to `cawcut-vn` to build a rough cut you can open and edit in the VN app. See [Editing in VN](vn-editing.md) for the full flow, including the Docker handoff.
 
 ## Adding a new skill
 

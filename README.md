@@ -65,6 +65,7 @@ Open Docker at <http://localhost:7588> or local at <http://localhost:7443>.
 - 💬 [Discord][discord-url] — questions, ideas, support, and show & tell
 - ⚙️ [API Service](docs/api_service.md) — developer platform notes, BYOK counterparts, and exact media JSON payloads
 - 🎬 [Skills reference](docs/skills.md) — how filmmaking skills route agent requests
+- ✂️ [Editing in VN](docs/vn-editing.md) — build a rough cut and open it in the VN app
 - 🚀 [Setup and agents](docs/setup.md) — choose Docker or host mode, configure Claude/Codex, and understand ports, auth, and permissions
 - 🏗 [Architecture](docs/architecture.md) — viewer, CLI, canvas, and project-file layout
 - ❓ [FAQ](docs/faq.md) — common setup and generation issues

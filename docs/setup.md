@@ -83,13 +83,19 @@ should clone into the WSL2 home directory for better file-system performance.
 
 The image includes:
 
-- ffmpeg, poppler, cloudflared, Claude Code, and Codex CLI.
+- ffmpeg, poppler, zip, cloudflared, Claude Code, Codex CLI, and the CawCut CLI
+  (`cawcut`, driven by the bundled `cawcut-vn` skill to build and pack VN
+  drafts).
 - Native Node modules rebuilt for Linux.
 - Bubblewrap for Codex's normal Linux sandbox path.
 - `/healthz` checks for media tools, volume writability, and the selected
   default agent CLI.
 - A Cloudflare quick tunnel so PAI can fetch local image/video references for
   server-side provider calls.
+
+The CawCut CLI can build and pack VN drafts in the container, but VN itself is a
+macOS/Windows app the Linux container cannot open — see
+[Editing in VN](vn-editing.md) for the host handoff.
 
 Docker stores project files in the `pai_projects` named volume. Docker-created
 Codex auth/config/session state lives in the `pai_codex` named volume; host

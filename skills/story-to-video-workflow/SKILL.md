@@ -30,7 +30,7 @@ Use this ladder unless the user skips, reorders, supplies refs, or asks for a ro
 6. Confirm shot count, durations, continuity needs, and first blocker.
 7. Default render path: straight-to-video from refs. Storyboard only if requested, hard to control, or needed for diagnosis.
 8. Default dispatch: hybrid. Chain continuous dependent shots; render independent scenes/shots in parallel.
-9. Render clips, assign Timeline `shot_id` when sequence order is unambiguous, then hand off to Timeline.
+9. Render clips and assign Timeline `shot_id` when sequence order is unambiguous. Then hand off to Timeline inspection, and to `cawcut-vn` when the user wants an editable cut.
 
 Plan ahead internally, but only ask the next meaningful user-facing choice; the Consent and gates ladder fixes when render path and dispatch become askable.
 
@@ -43,6 +43,7 @@ Plan ahead internally, but only ask the next meaningful user-facing choice; the 
 | Narration, dialogue read, character voice, or audio node | `voice-compose` |
 | Clip render, continuation, audio refs, storyboard animation, or video prompt | `video-compose` |
 | Scene/ref grouping or canvas layout frames | `groups-compose` |
+| Assemble the landed media into an edited cut in the VN app | `cawcut-vn` |
 
 Capability skills own CLI flags, node grammar, refs, and recovery hints. `PROJECT_AGENT.md` owns shared failure handling.
 
@@ -126,6 +127,7 @@ Typical priority:
 - Voice landed -> recommend using it with the matching visual ref in the next dialogue/narration clip.
 - Storyboard landed -> recommend review or animating the matching clip.
 - Video clip landed -> recommend the next clip, or Timeline handoff when all planned clips are ready.
+- All planned clips landed and the user wants a finished cut -> recommend `cawcut-vn` (VN editing) with the landed `local_path`s.
 
 ## Final handoff
 
@@ -137,4 +139,13 @@ node "$PAI_REPO_ROOT/server/cli/canvas_mutate.js" \
   --payload-json '{"updates":[{"id":"<video_1>","patch":{"shot_id":1}},{"id":"<video_2>","patch":{"shot_id":2}}]}'
 ```
 
-Do not use `generate_video.js --shot-id` for speculative/partial ordering. Assign after clips land. Local export uses `reel_stitch.js` only on explicit request. Then tell the user to open Timeline to inspect and preview.
+Do not use `generate_video.js --shot-id` for speculative/partial ordering. Assign after clips land. Local export uses `reel_stitch.js` only on explicit request.
+
+When the run is complete — every planned clip landed and Timeline order set — run `cawcut vn status` before offering VN, then close with one next step using the project choice shape (§ "Recommendation and choice shape"):
+
+- **Open in VN** — hand the landed clip `local_path`s to `cawcut-vn` to build, validate, and open an editable VN draft. Offer it only when VN is usable (`installed` and `meetsMinVersion`); when the app is missing or too old, still offer it as "build a draft" but say the app must be installed or updated before it can open.
+- **Inspect Timeline** — review and preview the reel order on the canvas first.
+
+When `cawcut vn status` reports `platform` as `"unsupported"` (Linux, e.g. Docker), drop **Open in VN** entirely — VN cannot open there. Offer **Inspect Timeline**, or building a draft to move to a macOS/Windows host.
+
+`cawcut-vn` owns the VN conversation from there (draft assembly, validation, opening the app), so stop the story orchestration once the user picks it. VN editing is a separate handoff, not another generation; never route it back through `video-compose`.

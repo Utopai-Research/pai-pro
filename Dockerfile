@@ -50,6 +50,7 @@ ARG CLAUDE_VERSION
 # Runtime system binaries.
 #   ffmpeg          reel stitching (reel_stitch.js)
 #   poppler-utils   pdftotext for script-compose skill
+#   zip             packages a VN draft into .vn (cawcut vn project pack)
 #   tini            PID 1, signal forwarding
 #   curl            healthcheck + cloudflared install
 #   bubblewrap      Codex sandboxing on Linux
@@ -57,6 +58,7 @@ ARG CLAUDE_VERSION
 RUN apt-get update && apt-get install -y --no-install-recommends \
       ffmpeg \
       poppler-utils \
+      zip \
       tini \
       curl \
       bubblewrap \
@@ -139,6 +141,13 @@ RUN echo "[build] codex install refresh ${CODEX_INSTALL_REFRESH}" >/dev/null && 
     (npm install -g "@openai/codex@${CODEX_VERSION}" --no-audit --no-fund && \
      codex --version || \
      echo "[build] codex CLI install failed - Codex PTY will be degraded")
+
+# CawCut CLI — the bundled skills/cawcut-vn skill drives it to build VN
+# drafts. `--ignore-scripts` keeps the package postinstall from writing its
+# own skill set into ~/.claude/skills, which would shadow the bundled
+# cawcut-vn the entrypoint links there.
+RUN npm config set prefix /home/node/.local && \
+    npm install -g @ubnt/cawcut --ignore-scripts
 
 # tini → entrypoint → node. Three layers but each does one thing.
 ENTRYPOINT ["tini", "--", "/usr/local/bin/pai-entrypoint.sh"]

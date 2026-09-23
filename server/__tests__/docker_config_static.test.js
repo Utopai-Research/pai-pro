@@ -49,6 +49,14 @@ test("Docker launcher refreshes the Claude install layer", async () => {
   assert.match(script, /build_args\+=\(--build-arg CLAUDE_INSTALL_REFRESH="\$claude_install_refresh"\)/);
 });
 
+test("Docker image installs the CawCut CLI without running its postinstall", async () => {
+  const dockerfile = await readFile(join(REPO_ROOT, "Dockerfile"), "utf8");
+  assert.match(dockerfile, /npm install -g @ubnt\/cawcut --ignore-scripts/);
+  // `cawcut vn project pack` shells out to `zip` on Linux, so the container
+  // needs it to produce a deliverable .vn.
+  assert.match(dockerfile, /^\s+zip \\$/m);
+});
+
 test("Docker launcher builds the current checkout and recreates the container", async () => {
   const compose = await readFile(join(REPO_ROOT, "docker-compose.yml"), "utf8");
   const script = await readFile(join(REPO_ROOT, "scripts", "docker-start.sh"), "utf8");
