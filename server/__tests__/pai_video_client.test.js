@@ -7,6 +7,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import { submitVideo, pollVideo } from "../pai_video_client.js";
+import { VIDEO_25_MODEL_ID } from "../model_registry.js";
 
 function jsonResponse(body, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -103,9 +104,9 @@ test("submitVideo orders reference parts after the prompt with the right roles",
     aspectRatio: "9:16",
     resolution: "1080p",
     generateAudio: false,
-    imageAssetIds: ["img-1", "img-2"],
-    audioAssetIds: ["aud-1"],
-    videoAssetIds: ["vid-1"],
+    imageRefs: ["img-1", "img-2"],
+    audioRefs: ["aud-1"],
+    videoRefs: ["vid-1"],
   });
 
   const payload = calls[0].body.payload;
@@ -119,6 +120,46 @@ test("submitVideo orders reference parts after the prompt with the right roles",
     { type: "image_url", image_url: { url: "asset://img-2" }, role: "reference_image" },
     { type: "audio_url", audio_url: { url: "asset://aud-1" }, role: "reference_audio" },
     { type: "video_url", video_url: { url: "asset://vid-1" }, role: "reference_video" },
+  ]);
+});
+
+// A reference reaches the upstream either as an `asset://<id>` this client
+// pre-uploaded, or as a public URL the upstream fetches itself. The second
+// shape exists because an asset id lives in ONE vendor's namespace: on a route
+// that picks among several vendors, a pre-minted id resolves only if the
+// render happens to land on the minting vendor, and fails terminally
+// otherwise. Handing over the URL lets the side that chooses the vendor do
+// the upload, which is the only arrangement where the two cannot disagree.
+//
+// So the discriminator is the value itself, not a flag — and that is what
+// this pins. A regression here is silent: the body still submits, the render
+// still starts, and it dies minutes later as someone else's bad input.
+test("submitVideo passes a public reference URL through instead of minting asset://", async (t) => {
+  const calls = installPaiFetch(t, () => jsonResponse(SUBMIT_OK));
+
+  await submitVideo({
+    prompt: "animate it",
+    billedDurationSec: 12,
+    modelId: VIDEO_25_MODEL_ID,
+    imageRefs: ["https://tunnel.example/p/img_1.png"],
+    videoRefs: ["https://tunnel.example/p/vid_1.mp4"],
+    audioRefs: ["aud-kept-as-id"],
+  });
+
+  assert.deepEqual(calls[0].body.payload.content, [
+    { type: "text", text: "animate it" },
+    {
+      type: "image_url",
+      image_url: { url: "https://tunnel.example/p/img_1.png" },
+      role: "reference_image",
+    },
+    // Mixed shapes in one body stay independent: the id is still wrapped.
+    { type: "audio_url", audio_url: { url: "asset://aud-kept-as-id" }, role: "reference_audio" },
+    {
+      type: "video_url",
+      video_url: { url: "https://tunnel.example/p/vid_1.mp4" },
+      role: "reference_video",
+    },
   ]);
 });
 

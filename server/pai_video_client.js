@@ -46,29 +46,36 @@ const POLL_TIMEOUT_MS = 30 * 60_000; // 30 min per PAI docs recommendation
 // id in its preprocess hook, so it is not carried forward.
 const PAI_VIDEO_ENDPOINT_ID = "pai-pro-video-endpoint-01";
 
-function buildContent({ prompt, imageAssetIds, audioAssetIds, videoAssetIds }) {
+// A reference reaches the upstream as either an `asset://<id>` — an id minted
+// by a PRE-UPLOAD this client did — or as a plain public URL the upstream
+// fetches itself.
+//
+// 🔴 WHICH ONE IS NOT COSMETIC: AN ASSET ID BELONGS TO ONE VENDOR.
+//
+// A pre-uploaded id is minted in one vendor's asset namespace and is
+// meaningless in any other. The upstream routes a render across more than one
+// vendor, and it forwards an `asset://` through untouched — it only uploads
+// references that arrive as public URLs, and only then to the vendor it
+// actually picked. So a pre-uploaded id is correct exactly when the render
+// happens to land on the vendor that minted it, and is an unresolvable
+// reference otherwise. That failure is classified as bad caller input, which
+// does not rotate vendors: it is terminal, not retried elsewhere.
+//
+// Passing the public URL hands the vendor choice back to the side that makes
+// it, which is the only arrangement where references and render cannot
+// disagree. So: 2.5 ships URLs, and 2.0 still ships ids because its route
+// does not upload for us — see the call site in cli/generate_video.js.
+function buildContent({ prompt, imageRefs, audioRefs, videoRefs }) {
   const content = [{ type: "text", text: String(prompt) }];
-  for (const id of imageAssetIds) {
-    content.push({
-      type: "image_url",
-      image_url: { url: `asset://${id}` },
-      role: "reference_image",
-    });
-  }
-  for (const id of audioAssetIds) {
-    content.push({
-      type: "audio_url",
-      audio_url: { url: `asset://${id}` },
-      role: "reference_audio",
-    });
-  }
-  for (const id of videoAssetIds) {
-    content.push({
-      type: "video_url",
-      video_url: { url: `asset://${id}` },
-      role: "reference_video",
-    });
-  }
+  const push = (refs, type, role) => {
+    for (const ref of refs) {
+      const url = typeof ref === "string" && ref.startsWith("http") ? ref : `asset://${ref}`;
+      content.push({ type, [type]: { url }, role });
+    }
+  };
+  push(imageRefs, "image_url", "reference_image");
+  push(audioRefs, "audio_url", "reference_audio");
+  push(videoRefs, "video_url", "reference_video");
   return content;
 }
 
@@ -87,9 +94,12 @@ function buildContent({ prompt, imageAssetIds, audioAssetIds, videoAssetIds }) {
  * @param {number}    [opts.billedDurationSec] required on 2.5: output seconds
  *                                             + reference-video seconds, the
  *                                             dimension its price is keyed on
- * @param {string[]}  [opts.imageAssetIds=[]]   from prior uploadReferences()
- * @param {string[]}  [opts.audioAssetIds=[]]
- * @param {string[]}  [opts.videoAssetIds=[]]
+ * @param {string[]}  [opts.imageRefs=[]]       asset ids from a prior
+ *                                             uploadReferences(), or public
+ *                                             URLs for the upstream to fetch
+ *                                             itself — see buildContent
+ * @param {string[]}  [opts.audioRefs=[]]
+ * @param {string[]}  [opts.videoRefs=[]]
  *
  * @returns {Promise<{ taskId: string, raw: object }>}
  *
@@ -104,9 +114,9 @@ export async function submitVideo({
   resolution = "720p",
   generateAudio = true,
   billedDurationSec = null,
-  imageAssetIds = [],
-  audioAssetIds = [],
-  videoAssetIds = [],
+  imageRefs = [],
+  audioRefs = [],
+  videoRefs = [],
 } = {}) {
   if (typeof prompt !== "string" || !prompt.trim()) {
     throw err("bad_args", "submitVideo: empty prompt");
@@ -129,7 +139,7 @@ export async function submitVideo({
   const payload = {
     // 2.0 only — see PAI_VIDEO_ENDPOINT_ID above.
     ...(isV25 ? {} : { model: PAI_VIDEO_ENDPOINT_ID }),
-    content: buildContent({ prompt, imageAssetIds, audioAssetIds, videoAssetIds }),
+    content: buildContent({ prompt, imageRefs, audioRefs, videoRefs }),
     generate_audio: !!generateAudio,
     ratio: aspectRatio,
     duration: Number(duration),

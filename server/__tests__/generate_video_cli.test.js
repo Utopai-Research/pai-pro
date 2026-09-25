@@ -31,6 +31,7 @@ import http from "node:http";
 
 import { PAI_REPO_ROOT } from "../lib/paths.js";
 import { mutate, initProjectMutatorState } from "../canvas_mutator.js";
+import { stagedCostUsd, VIDEO_25_MODEL_ID } from "../model_registry.js";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 const CLI_DIR = join(__dirname, "..", "cli");
@@ -318,6 +319,99 @@ test("generate_video.js direct fire with image ref uploads asset and lands node 
   assert.equal(sidecar.ok, true);
   assert.equal(sidecar.job_id, jobId);
   assert.deepEqual(await readdir(join(dir, ".pending")), []);
+});
+
+// 🔴 THE ASSERTION THAT MATTERS HERE IS AN ABSENCE.
+//
+// The test above pins 2.0: it pre-uploads, and the submit carries
+// `asset://asset_1`. This one pins the opposite for 2.5, and the reason is not
+// symmetry — it is that an asset id belongs to ONE vendor's namespace.
+//
+// 2.5's route spreads across more than one vendor and picks per task. An id
+// minted here resolves only if the render happens to land on the vendor that
+// minted it; otherwise the reference is unresolvable, and because that reads
+// as bad caller input it is TERMINAL — bad input does not rotate vendors, so
+// there is no second vendor to catch it. Handing over the public URL instead
+// lets the side that picks the vendor do the upload, and the two can no
+// longer disagree.
+//
+// Checking only that the URL appears would not catch the regression: a build
+// that uploads AND sends the URL looks right in the body and still burns a
+// cent per reference on an asset nobody reads. So the upload leg must be
+// empty, and the quote must not carry the per-reference surcharge.
+test("generate_video.js --version 2.5 ships the reference URL and never pre-uploads", async (t) => {
+  await ensureTunnelUrl(t);
+  const { projectId, dir } = await setupProject(t);
+  const pai = await makePaiServer();
+  t.after(() => new Promise((resolve) => pai.server.close(resolve)));
+  const viewer = await makeViewerServer({ dir, projectId });
+  t.after(() => new Promise((resolve) => viewer.server.close(resolve)));
+
+  const prompt = "Slow dolly-in on @Image1 at dusk";
+  const { code, stdout, stderr } = await runCli({
+    script: "generate_video.js",
+    args: [
+      "--prompt", prompt,
+      "--version", "2.5",
+      "--duration", "8",
+      "--resolution", "720p",
+      "--label", "dusk clip",
+      "--ref-source-id", "image_1",
+      "--project-id", projectId,
+    ],
+    cwd: dir,
+    env: {
+      PAI_KEY: "PAI_test",
+      PAI_API_BASE: pai.url,
+      VIEWER_HOST: "127.0.0.1",
+      VIEWER_PORT: String(viewer.port),
+    },
+  });
+
+  assert.equal(code, 0, `stderr:\n${stderr}`);
+  const reply = parseReply(stdout);
+  assert.equal(reply.ok, true);
+
+  // The absence. Not one asset action of any kind.
+  assert.deepEqual(
+    pai.captures.assetActions.map((a) => a.action),
+    [],
+    "2.5 must not pre-upload: an id minted here is scoped to one vendor, and " +
+      "the render may be dispatched to another",
+  );
+
+  // And the reference travels as the tunnel URL the pre-upload used to read
+  // FROM, so the upstream can fetch it into whichever vendor it selects.
+  const submit = pai.captures.submitBodies[0];
+  assert.equal(submit.model, "video-generation-25");
+  const imagePart = submit.payload.content.find((c) => c.type === "image_url");
+  assert.ok(imagePart, "the image reference must still reach the payload");
+  assert.match(
+    imagePart.image_url.url,
+    /^https?:\/\/.+\/projects\/.+\/assets\/images\/image_1\.png$/,
+    `expected a fetchable URL, got: ${imagePart.image_url.url}`,
+  );
+  assert.equal(imagePart.role, "reference_image");
+
+  // The money half: with no upload there is no per-reference charge to quote.
+  // This number's only job is to equal the charge, and the draft gate never
+  // re-quotes, so a stale cent here would stay wrong for the life of the job.
+  const wf = JSON.parse(await readFile(join(dir, "workflow.json"), "utf8"));
+  const node = wf.nodes.find((n) => n.id === "video_1");
+  const quoted = node.data.metadata?.estimated_cost_usd;
+  if (typeof quoted === "number") {
+    // refCount 0 is the claim: same model, same dimensions, no surcharge.
+    const bare = stagedCostUsd(
+      VIDEO_25_MODEL_ID,
+      { resolution: "720p", duration: 8, billed_duration_sec: 8 },
+      0,
+    );
+    assert.equal(
+      quoted,
+      bare,
+      "the 2.5 quote must carry no per-reference asset surcharge",
+    );
+  }
 });
 
 // Out-of-range --duration must fail at arg parsing, before any network call.

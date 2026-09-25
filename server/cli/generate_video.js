@@ -377,7 +377,12 @@ if (args.stage && !routeOwnedPending) {
     );
     process.exit(1);
   }
-  const refCount = countUniqueRefs();
+  // Only 2.0 pays this. 2.5 stopped pre-uploading (see the ref block below),
+  // so there are no asset calls to charge for — and this number's only job is
+  // to equal the charge. Leaving it in would quote every 2.5 reference at a
+  // cent nobody spends, and the draft gate never re-quotes, so the gap would
+  // be permanent for that job rather than corrected at fire time.
+  const refCount = isV25 ? 0 : countUniqueRefs();
   const assetCost = refCount * (getCost("video-generation-assets") ?? 0.01);
   const costUsd = +(Number(videoCost ?? 0) + assetCost).toFixed(3);
   const autoRunId = args["auto-run-id"] || null;
@@ -520,10 +525,37 @@ try {
   const resolvedAudios = await buildProviderRefs({ sourceIds: audSrcIds, projectId });
   const resolvedVideos = await buildProviderRefs({ sourceIds: vidSrcIds, projectId });
 
-  let assetIds = { images: [], audios: [], videos: [] };
-  if (resolvedImages.length || resolvedAudios.length || resolvedVideos.length) {
+  // 🔴 ONLY 2.0 PRE-UPLOADS, AND THAT ASYMMETRY IS THE WHOLE POINT.
+  //
+  // An asset id is minted inside ONE vendor's namespace. 2.5's route spreads
+  // across more than one vendor and picks per task, so an id minted here is
+  // correct only when the render happens to land on the vendor that minted
+  // it, and is an unresolvable reference otherwise — terminally, because that
+  // failure reads as bad caller input and bad input does not rotate vendors.
+  //
+  // That route already solves this: hand it a public URL and it uploads to
+  // the vendor it actually selected, so references and render cannot
+  // disagree. Pre-uploading here is what took that mechanism away.
+  //
+  // 2.0 keeps pre-uploading because its route does NOT upload for us — it
+  // forwards the body to one fixed vendor and expects ids to already exist.
+  // Sending it a URL would hand the vendor a reference it was never asked to
+  // fetch. The two halves move together or not at all.
+  //
+  // `tunnelUrl` is what the pre-upload was uploading FROM (see
+  // buildProviderRefs), so the URL path needs nothing new — it stops doing
+  // the step instead of doing a different one.
+  let refs = { images: [], audios: [], videos: [] };
+  const hasRefs = resolvedImages.length || resolvedAudios.length || resolvedVideos.length;
+  if (hasRefs && isV25) {
+    refs = {
+      images: resolvedImages.map((r) => r.tunnelUrl),
+      audios: resolvedAudios.map((r) => r.tunnelUrl),
+      videos: resolvedVideos.map((r) => r.tunnelUrl),
+    };
+  } else if (hasRefs) {
     try {
-      assetIds = await uploadReferences({
+      refs = await uploadReferences({
         images: resolvedImages,
         audios: resolvedAudios,
         videos: resolvedVideos,
@@ -550,9 +582,9 @@ try {
     generateAudio: !args["no-audio"],
     // null on 2.0; required and validated on 2.5.
     billedDurationSec,
-    imageAssetIds: assetIds.images,
-    audioAssetIds: assetIds.audios,
-    videoAssetIds: assetIds.videos,
+    imageRefs: refs.images,
+    audioRefs: refs.audios,
+    videoRefs: refs.videos,
   });
 
   const { videoUrl, durationSeconds } = await pollVideo(taskId);
@@ -581,7 +613,11 @@ try {
           duration: durationInt,
           billed_duration_sec: billedDurationSec,
         },
-        countUniqueRefs(),
+        // 0, not countUniqueRefs(): this branch is 2.5, which no longer
+        // pre-uploads, so its references cost nothing. Same reason the quote
+        // above zeroes them — and this number is the one the canvas shows,
+        // so a stale cent here contradicts the gate the user already saw.
+        0,
       )
     : null;
   const shotIdRaw = args["shot-id"];
