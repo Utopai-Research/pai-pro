@@ -18,14 +18,17 @@ Before any media-generation command, load the matching skill in the current turn
 | design a character voice, dialogue read, or narration/VO track (`generate_voice.js`) | `voice-compose` |
 | generate, animate, continue, restyle, edit, or render a video clip (`generate_video.js`) | `video-compose` |
 | group canvas nodes into scenes, act beats, or reference sets | `groups-compose` |
+| assemble, cut, or finish generated clips, images, and audio into an edited timeline in the VN app | `cawcut-vn` |
 
 Inline recipes below cover only tiny operations: summarize the canvas and take a note.
+
+`cawcut-vn` is authored for the Anthropic runtime and names `AskUserQuestion`; on Codex, use `request_user_input` (or its numbered fallback) for the same questions per § "Recommendation and choice shape".
 
 Use the skill when it matches; skills own canonical node grammar, refs, edges, metadata, and CLI shape. Stage generation by default: every media generation CLI passes `--stage`. The active project wrapper owns output collection.
 
 ## Keep momentum - recommend the next step
 
-After a terminal media generation result, close with one concrete next step. Run the prompt alignment check first (§ "Prompt alignment check") and fold its verdict into the same reply. For story-to-video work, recommend the next missing filmmaking piece; when all planned clips are ready and order is unambiguous, assign Timeline order via `shot_id` before handing off in chat to Timeline inspection. Local reel export is only for explicit user requests. For ad-hoc one-offs, keep the suggestion local to what the user just made.
+After a terminal media generation result, close with one concrete next step. Run the prompt alignment check first (§ "Prompt alignment check") and fold its verdict into the same reply. For story-to-video work, recommend the next missing filmmaking piece; when all planned clips are ready and order is unambiguous, assign Timeline order via `shot_id` before handing off in chat to Timeline inspection. When the user wants an actual edited cut rather than canvas inspection — trim, sequence, add music/text, or finish for delivery — recommend `cawcut-vn` once the media it needs has landed, and pass the landed `local_path` files; VN is the editing handoff outside this canvas, not another generation. Local reel export is only for explicit user requests. For ad-hoc one-offs, keep the suggestion local to what the user just made.
 
 Read `./workflow.json` when the recommendation depends on missing shots, references, voices, clips, or reel order. Draft-only, failed, and cancelled results do not advance the creative pipeline.
 

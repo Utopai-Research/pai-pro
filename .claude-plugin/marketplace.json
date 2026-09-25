@@ -13,6 +13,7 @@
       "skills": [
         { "name": "add-note",       "path": "skills/add-note",       "invoke": "/pai-pro:add-note" },
         { "name": "groups-compose", "path": "skills/groups-compose", "invoke": "/pai-pro:groups-compose" },
+        { "name": "cawcut-vn",      "path": "skills/cawcut-vn",      "invoke": "/pai-pro:cawcut-vn" },
         { "name": "image-compose",  "path": "skills/image-compose",  "invoke": "/pai-pro:image-compose" },
         { "name": "script-compose", "path": "skills/script-compose", "invoke": "/pai-pro:script-compose" },
         { "name": "show-dag",       "path": "skills/show-dag",       "invoke": "/pai-pro:show-dag" },

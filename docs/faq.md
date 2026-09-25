@@ -38,6 +38,8 @@ Per call: image ~$0.11–0.23 / voice $0.01 per 500 chars / asset upload $0.01 p
 
 [docs/setup.md](setup.md) has the full comparison. Short answer: Docker for trying it / daily filmmaking; host mode for hacking on pai-pro source itself.
 
+One thing that differs: VN editing. The VN app runs on macOS/Windows only, so a Docker (Linux) container can build and pack a draft but cannot open it — you copy the `.vn` out to the host and open it there, or run host mode on macOS/Windows. See [Editing in VN](vn-editing.md).
+
 ## Can I use a different AI coding agent?
 
 Claude Code and Codex CLI are wired with the embedded terminal. New projects default to Codex; start host mode with `PAI_DEFAULT_AGENT_ID=claude ./scripts/start.sh` or Docker with `PAI_DEFAULT_AGENT_ID=claude ./scripts/docker-start.sh` to create Claude-owned projects.
